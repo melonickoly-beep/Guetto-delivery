@@ -580,6 +580,22 @@ export default function AdminPage() {
                         <option key={status.valor} value={status.valor}>{status.rotulo}</option>
                       ))}
                     </select>
+                    {pedido.status !== "saiu_para_entrega" &&
+                      pedido.status !== "concluido" &&
+                      pedido.status !== "cancelado" && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            atualizarStatusPedido(
+                              pedido.id,
+                              "saiu_para_entrega"
+                            )
+                          }
+                          className="mt-2 block w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-bold text-white hover:bg-blue-500"
+                        >
+                          Marcar como saiu para entrega
+                        </button>
+                      )}
                   </div>
                 </div>
                 <ul className="mt-4 space-y-1 border-t border-zinc-800 pt-4 text-sm text-zinc-300">
