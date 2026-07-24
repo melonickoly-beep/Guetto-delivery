@@ -2,6 +2,8 @@ import Image from "next/image";
 import Catalogo from "@/components/Catalogo";
 import { supabase } from "@/lib/supabase";
 
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const { data: categorias } = await supabase
     .from("categorias")
