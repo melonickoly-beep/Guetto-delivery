@@ -51,6 +51,12 @@ const statusPedido = [
 ];
 
 export default function AdminPage() {
+  const [painelDesbloqueado, setPainelDesbloqueado] = useState(false);
+  const [verificandoAcesso, setVerificandoAcesso] = useState(true);
+  const [emailAdmin, setEmailAdmin] = useState("");
+  const [senhaAcesso, setSenhaAcesso] = useState("");
+  const [erroAcesso, setErroAcesso] = useState("");
+  const [validandoAcesso, setValidandoAcesso] = useState(false);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
@@ -79,6 +85,24 @@ export default function AdminPage() {
   const [salvandoHorario, setSalvandoHorario] = useState(false);
 
   useEffect(() => {
+    const desbloqueado =
+      window.sessionStorage.getItem("guetto_admin_desbloqueado") === "1";
+
+    if (desbloqueado) {
+      setPainelDesbloqueado(true);
+      setVerificandoAcesso(false);
+      return;
+    }
+
+    supabase.auth.getUser().then(({ data }) => {
+      setEmailAdmin(data.user?.email ?? "");
+      setVerificandoAcesso(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!painelDesbloqueado) return;
+
     carregarCategorias();
     carregarProdutos();
     carregarTempoEntrega();
@@ -87,7 +111,33 @@ export default function AdminPage() {
 
     const intervaloPedidos = window.setInterval(carregarPedidos, 30_000);
     return () => window.clearInterval(intervaloPedidos);
-  }, []);
+  }, [painelDesbloqueado]);
+
+  async function desbloquearPainel(event: FormEvent) {
+    event.preventDefault();
+    setErroAcesso("");
+
+    if (!emailAdmin) {
+      setErroAcesso("Sua sessão expirou. Saia e entre novamente.");
+      return;
+    }
+
+    setValidandoAcesso(true);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: emailAdmin,
+      password: senhaAcesso,
+    });
+    setValidandoAcesso(false);
+
+    if (error) {
+      setErroAcesso("Senha inválida.");
+      return;
+    }
+
+    window.sessionStorage.setItem("guetto_admin_desbloqueado", "1");
+    setSenhaAcesso("");
+    setPainelDesbloqueado(true);
+  }
 
   async function carregarCategorias() {
     const { data, error } = await supabase
@@ -162,6 +212,7 @@ export default function AdminPage() {
   }
 
   async function sair() {
+    window.sessionStorage.removeItem("guetto_admin_desbloqueado");
     await supabase.auth.signOut();
     window.location.href = "/login";
   }
@@ -400,6 +451,61 @@ export default function AdminPage() {
   const produtosVisiveis = categoriaFiltro === "todas"
     ? produtosDaAba
     : produtosDaAba.filter((produto) => produto.categoria_id === categoriaFiltro);
+
+  if (verificandoAcesso) {
+    return (
+      <main className="flex min-h-screen items-center justify-center p-6 text-white">
+        <p className="text-zinc-400">Verificando acesso...</p>
+      </main>
+    );
+  }
+
+  if (!painelDesbloqueado) {
+    return (
+      <main className="flex min-h-screen items-center justify-center p-6 text-white">
+        <form
+          onSubmit={desbloquearPainel}
+          className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900 p-8"
+        >
+          <h1 className="mb-3 text-center text-3xl font-bold text-yellow-400">
+            Painel protegido
+          </h1>
+          <p className="mb-6 text-center text-zinc-400">
+            Digite sua senha para abrir o painel administrativo.
+          </p>
+          <input
+            type="password"
+            placeholder="Senha"
+            value={senhaAcesso}
+            onChange={(event) => setSenhaAcesso(event.target.value)}
+            autoComplete="current-password"
+            autoFocus
+            className="mb-4 w-full rounded-lg bg-zinc-800 p-3 text-white outline-none"
+            required
+          />
+          {erroAcesso && (
+            <div className="mb-4 rounded-lg bg-red-900 p-3 text-red-200">
+              {erroAcesso}
+            </div>
+          )}
+          <button
+            type="submit"
+            disabled={validandoAcesso}
+            className="w-full rounded-lg bg-yellow-400 p-3 font-bold text-black disabled:opacity-60"
+          >
+            {validandoAcesso ? "Verificando..." : "Abrir painel"}
+          </button>
+          <button
+            type="button"
+            onClick={sair}
+            className="mt-3 w-full rounded-lg border border-zinc-700 p-3 font-semibold text-zinc-300"
+          >
+            Sair da conta
+          </button>
+        </form>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen text-white">

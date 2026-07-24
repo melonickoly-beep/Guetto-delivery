@@ -29,6 +29,7 @@ export default function LoginPage() {
       return;
     }
 
+    window.sessionStorage.setItem("guetto_admin_desbloqueado", "1");
     router.push("/admin");
     router.refresh();
   }
