@@ -24,13 +24,19 @@ export async function PATCH(
     return NextResponse.json({ error: "Status inválido." }, { status: 400 });
   }
 
-  const { error } = await supabaseAdmin
-    .from("pedidos")
-    .update({ status: body.status })
-    .eq("id", id);
+  const { error } = await supabaseAdmin.rpc(
+    "atualizar_status_pedido_seguro",
+    {
+      p_pedido_id: id,
+      p_status: body.status,
+    }
+  );
 
   if (error) {
-    return NextResponse.json({ error: "Não foi possível atualizar o pedido." }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message || "Não foi possível atualizar o pedido." },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({ sucesso: true });

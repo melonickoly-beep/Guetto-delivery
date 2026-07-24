@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { ShoppingBag, Minus, Plus, Trash2, X } from "lucide-react";
+import { Search, ShoppingBag, Minus, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 type Categoria = {
@@ -83,8 +83,16 @@ export default function Catalogo({
   horarioAbertura: string;
   horarioFechamento: string;
 }) {
-  const [categoriaAtiva, setCategoriaAtiva] = useState<string | null>(null);
+  const categoriaInicial =
+    categorias.find((categoria) => categoria.nome === "Combos")?.id ??
+    categorias[0]?.id ??
+    null;
+  const [categoriaAtiva, setCategoriaAtiva] = useState<string | null>(
+    categoriaInicial
+  );
+  const [busca, setBusca] = useState("");
   const [carrinhoAberto, setCarrinhoAberto] = useState(false);
+  const [revisaoAberta, setRevisaoAberta] = useState(false);
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
   const [nome, setNome] = useState("");
   const [sobrenome, setSobrenome] = useState("");
@@ -121,12 +129,23 @@ export default function Catalogo({
 
   const produtosFiltrados = useMemo(
     () => {
+      const termo = busca
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
       const disponiveis = produtos.filter((produto) => estoqueDisponivel(produto) > 0);
-      return categoriaAtiva
-        ? disponiveis.filter((produto) => produto.categoria_id === categoriaAtiva)
-        : disponiveis;
+      return disponiveis.filter((produto) => {
+        const correspondeCategoria =
+          termo.length > 0 || produto.categoria_id === categoriaAtiva;
+        const textoProduto = `${produto.nome} ${produto.descricao ?? ""}`
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase();
+        return correspondeCategoria && (!termo || textoProduto.includes(termo));
+      });
     },
-    [categoriaAtiva, produtos]
+    [busca, categoriaAtiva, produtos]
   );
 
   const quantidadeTotal = carrinho.reduce(
@@ -305,7 +324,7 @@ export default function Catalogo({
     return `${rotulo}: ${formatarPreco(valor)}${troco}`;
   }
 
-  async function finalizarPedido() {
+  async function finalizarPedido(confirmado = false) {
     if (!atendimentoAberto) {
       alert("A Guetto Delivery está fechada no momento.");
       return;
@@ -384,6 +403,11 @@ export default function Catalogo({
       return;
     }
 
+    if (!confirmado) {
+      setRevisaoAberta(true);
+      return;
+    }
+
     const linhas = carrinho.map(
       (item) =>
         `${item.quantidade}x ${item.nome} — ${formatarPreco(
@@ -446,14 +470,18 @@ export default function Catalogo({
       return;
     }
 
+    const pedidoRegistrado = await respostaPedido.json();
+    const linkAcompanhamento = `${window.location.origin}/acompanhar/${pedidoRegistrado.id}`;
+    const pedidoFinal = `${pedido}\n\nAcompanhe seu pedido:\n${linkAcompanhamento}`;
+
     try {
-      await navigator.clipboard.writeText(pedido);
+      await navigator.clipboard.writeText(pedidoFinal);
     } catch {
       // Copiar é apenas uma conveniência e não pode impedir a abertura do WhatsApp.
     }
 
     window.location.assign(
-      `https://wa.me/${WHATSAPP_GUETTO}?text=${encodeURIComponent(pedido)}`
+      `https://wa.me/${WHATSAPP_GUETTO}?text=${encodeURIComponent(pedidoFinal)}`
     );
   }
 
@@ -464,7 +492,9 @@ export default function Catalogo({
         <div>
           <p className="text-sm font-bold tracking-[0.24em] text-yellow-400">GUETTO DELIVERY</p>
           <h2 className="cardapio-title mt-2 text-3xl font-black uppercase sm:text-4xl">Cardápio</h2>
-          <p className="mt-1 text-sm text-zinc-400">Entrega em até {tempoEntrega} minutos</p>
+          <p className="mt-1 text-sm text-zinc-400">
+            {atendimentoAberto ? "Aberto agora" : "Fechado agora"} · Entrega em até {tempoEntrega} minutos
+          </p>
         </div>
         <button
           onClick={() => setCarrinhoAberto(true)}
@@ -480,7 +510,9 @@ export default function Catalogo({
         </button>
         </div>
         <div className="mt-6 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent" />
-        <p className="mt-4 text-sm text-zinc-300">Bebidas geladas, tabacaria e tudo para seu momento.</p>
+        <p className="mt-4 text-sm text-zinc-300">
+          Paranacity: pedido mínimo R$ 20 · Cruzeiro do Sul: pedido mínimo R$ 35
+        </p>
       </div>
 
       {!atendimentoAberto && (
@@ -494,30 +526,34 @@ export default function Catalogo({
         </div>
       )}
 
-      <div className="flex gap-3 overflow-x-auto pb-3">
-        <button
-          onClick={() => setCategoriaAtiva(null)}
-          className={`whitespace-nowrap rounded-full border px-4 py-2 font-semibold transition ${
-            categoriaAtiva === null
-              ? "border-yellow-400 bg-yellow-400 text-black"
-              : "border-zinc-700 bg-zinc-900 hover:border-yellow-400"
-          }`}
-        >
-          Todos
-        </button>
-        {categorias.map((categoria) => (
-          <button
-            key={categoria.id}
-            onClick={() => setCategoriaAtiva(categoria.id)}
-            className={`whitespace-nowrap rounded-full border px-4 py-2 font-semibold transition ${
-              categoriaAtiva === categoria.id
-                ? "border-yellow-400 bg-yellow-400 text-black"
-                : "border-zinc-700 bg-zinc-900 hover:border-yellow-400"
-            }`}
-          >
-            {categoria.icone} {categoria.nome}
-          </button>
-        ))}
+      <div className="sticky top-0 z-30 -mx-5 border-y border-white/10 bg-zinc-950/95 px-5 py-4 backdrop-blur">
+        <label className="relative block">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={20} />
+          <input
+            value={busca}
+            onChange={(event) => setBusca(event.target.value)}
+            placeholder="Pesquisar produto, marca ou sabor"
+            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 py-3 pl-12 pr-4 outline-none focus:border-yellow-400"
+          />
+        </label>
+        <div className="mt-3 flex gap-3 overflow-x-auto pb-1">
+          {categorias.map((categoria) => (
+            <button
+              key={categoria.id}
+              onClick={() => {
+                setBusca("");
+                setCategoriaAtiva(categoria.id);
+              }}
+              className={`whitespace-nowrap rounded-full border px-4 py-2 font-semibold transition ${
+                categoriaAtiva === categoria.id && !busca
+                  ? "border-yellow-400 bg-yellow-400 text-black"
+                  : "border-zinc-700 bg-zinc-900 hover:border-yellow-400"
+              }`}
+            >
+              {categoria.icone} {categoria.nome}
+            </button>
+          ))}
+        </div>
       </div>
 
       {produtosFiltrados.length === 0 ? (
@@ -544,13 +580,13 @@ export default function Catalogo({
                 key={produto.id}
                 className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/95 shadow-xl transition hover:-translate-y-1 hover:border-yellow-400/60"
               >
-                <div className="relative aspect-square bg-zinc-800">
+                <div className="relative aspect-square bg-white">
                   {produto.imagem ? (
                     <Image
                       src={produto.imagem}
                       alt={produto.nome}
                       fill
-                      className="object-cover"
+                      className="object-contain p-3"
                       sizes="(max-width: 768px) 100vw, 33vw"
                     />
                   ) : (
@@ -567,7 +603,7 @@ export default function Catalogo({
                 <div className="p-5">
                   <h3 className="text-xl font-bold">{produto.nome}</h3>
                   {produto.descricao && (
-                    <p className="mt-2 min-h-10 text-sm text-zinc-400">{produto.descricao}</p>
+                    <p className="mt-2 line-clamp-2 min-h-10 text-sm text-zinc-400">{produto.descricao}</p>
                   )}
                   <div className="mt-5 flex items-center justify-between gap-3">
                     <div>
@@ -722,6 +758,90 @@ export default function Catalogo({
         </div>
       )}
 
+      {quantidadeTotal > 0 && !carrinhoAberto && (
+        <button
+          type="button"
+          onClick={() => setCarrinhoAberto(true)}
+          className="fixed bottom-4 left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-center justify-between rounded-2xl bg-yellow-400 px-5 py-4 font-black text-black shadow-2xl hover:bg-yellow-300"
+        >
+          <span className="flex items-center gap-2">
+            <ShoppingBag size={20} />
+            Carrinho ({quantidadeTotal})
+          </span>
+          <span>{formatarPreco(valorTotal)}</span>
+        </button>
+      )}
+
+      {revisaoAberta && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-yellow-400/50 bg-zinc-950 p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-black text-yellow-400">Revise seu pedido</h2>
+                <p className="text-sm text-zinc-400">Confira tudo antes de abrir o WhatsApp.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRevisaoAberta(false)}
+                className="rounded-lg p-2 hover:bg-zinc-800"
+                aria-label="Fechar revisão"
+              >
+                <X />
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {carrinho.map((item) => (
+                <div key={chaveItem(item)} className="rounded-xl bg-zinc-900 p-4">
+                  <div className="flex justify-between gap-3">
+                    <p className="font-bold">{item.quantidade}x {item.nome}</p>
+                    <p className="font-bold text-yellow-400">
+                      {formatarPreco(item.preco * item.quantidade)}
+                    </p>
+                  </div>
+                  {item.sabor && <p className="mt-1 text-sm text-zinc-300">Sabor: {item.sabor}</p>}
+                  {item.escolhasCombo && (
+                    <p className="mt-1 text-sm text-zinc-300">
+                      {item.escolhasCombo.askov ? `Askov ${item.escolhasCombo.askov} · ` : ""}
+                      Energético {item.escolhasCombo.energetico} · 6 gelos
+                      {item.escolhasCombo.whisky ? ` · Jack Daniel’s ${item.escolhasCombo.whisky}` : ""}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 rounded-xl border border-zinc-800 p-4 text-sm text-zinc-300">
+              <p className="font-bold text-white">{nome.trim()} {sobrenome.trim()}</p>
+              <p>{telefone.trim()}</p>
+              <p>{rua.trim()}, {numeroEndereco.trim()} — {cidadeEntrega}</p>
+              {referencia.trim() && <p>Referência: {referencia.trim()}</p>}
+            </div>
+
+            <div className="mt-5 flex items-center justify-between text-xl font-black">
+              <span>Total</span>
+              <span className="text-yellow-400">{formatarPreco(valorTotal)}</span>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setRevisaoAberta(false)}
+                className="rounded-xl border border-zinc-700 px-4 py-3 font-bold hover:bg-zinc-900"
+              >
+                Corrigir
+              </button>
+              <button
+                type="button"
+                onClick={() => finalizarPedido(true)}
+                className="rounded-xl bg-green-500 px-4 py-3 font-bold text-black hover:bg-green-400"
+              >
+                Confirmar e abrir WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {carrinhoAberto && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/70" onClick={() => setCarrinhoAberto(false)}>
           <aside
@@ -830,8 +950,8 @@ export default function Catalogo({
             </div>
             <div className="border-t border-zinc-800 pt-5">
               <div className="mb-4 flex justify-between text-lg font-bold"><span>Total</span><span className="text-yellow-400">{formatarPreco(valorTotal)}</span></div>
-              <button onClick={finalizarPedido} disabled={carrinho.length === 0 || !atendimentoAberto} className="w-full rounded-lg bg-yellow-400 px-4 py-3 font-bold text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400">
-                Enviar pedido para WhatsApp
+              <button onClick={() => finalizarPedido()} disabled={carrinho.length === 0 || !atendimentoAberto} className="w-full rounded-lg bg-yellow-400 px-4 py-3 font-bold text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400">
+                Revisar pedido
               </button>
             </div>
           </aside>

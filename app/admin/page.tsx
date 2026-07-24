@@ -40,7 +40,7 @@ type Pedido = {
   status: string;
 };
 
-type AbaEstoque = "com-estoque" | "sem-estoque";
+type AbaEstoque = "com-estoque" | "baixo-estoque" | "sem-estoque";
 
 const statusPedido = [
   { valor: "novo", rotulo: "Novo" },
@@ -76,6 +76,7 @@ export default function AdminPage() {
   const [produtoEmEdicao, setProdutoEmEdicao] = useState<string | null>(null);
   const [abaEstoque, setAbaEstoque] = useState<AbaEstoque>("com-estoque");
   const [categoriaFiltro, setCategoriaFiltro] = useState("todas");
+  const [buscaEstoque, setBuscaEstoque] = useState("");
 
   const [salvando, setSalvando] = useState(false);
   const [tempoEntrega, setTempoEntrega] = useState("20");
@@ -446,17 +447,52 @@ export default function AdminPage() {
   const pedidosHoje = pedidos.filter((pedido) => new Date(pedido.created_at) >= inicioHoje);
   const pedidosNovos = pedidos.filter((pedido) => pedido.status === "novo");
   const produtosComEstoque = produtos.filter((produto) => produto.estoque > 0);
+  const produtosComEstoqueBaixo = produtos.filter(
+    (produto) => produto.estoque > 0 && produto.estoque <= 5
+  );
   const produtosSemEstoque = produtos.filter((produto) => produto.estoque <= 0);
-  const produtosDaAba = abaEstoque === "com-estoque" ? produtosComEstoque : produtosSemEstoque;
-  const produtosVisiveis = categoriaFiltro === "todas"
-    ? produtosDaAba
-    : produtosDaAba.filter((produto) => produto.categoria_id === categoriaFiltro);
+  const produtosDaAba =
+    abaEstoque === "com-estoque"
+      ? produtosComEstoque
+      : abaEstoque === "baixo-estoque"
+        ? produtosComEstoqueBaixo
+        : produtosSemEstoque;
+  const termoEstoque = buscaEstoque.trim().toLowerCase();
+  const produtosVisiveis = produtosDaAba.filter(
+    (produto) =>
+      (categoriaFiltro === "todas" || produto.categoria_id === categoriaFiltro) &&
+      (!termoEstoque ||
+        `${produto.nome} ${produto.descricao ?? ""}`
+          .toLowerCase()
+          .includes(termoEstoque))
+  );
 
   if (verificandoAcesso) {
     return (
       <main className="flex min-h-screen items-center justify-center p-6 text-white">
         <p className="text-zinc-400">Verificando acesso...</p>
       </main>
+    );
+  }
+
+  function abrirWhatsAppStatus(pedido: Pedido) {
+    const mensagens: Record<string, string> = {
+      novo: "Olá! Recebemos seu pedido na Guetto Delivery.",
+      em_preparo: "Seu pedido já está em preparo.",
+      saiu_para_entrega: "Seu pedido saiu para entrega!",
+      concluido: "Seu pedido foi entregue. Obrigado pela preferência!",
+      cancelado: "Seu pedido foi cancelado. Entre em contato conosco se precisar de ajuda.",
+    };
+    const telefoneLimpo = pedido.telefone.replace(/\D/g, "");
+    const telefoneWhatsApp = telefoneLimpo.startsWith("55")
+      ? telefoneLimpo
+      : `55${telefoneLimpo}`;
+    const acompanhamento = `${window.location.origin}/acompanhar/${pedido.id}`;
+    const mensagem = `${mensagens[pedido.status] ?? "Atualização do seu pedido:"}\n\nAcompanhe aqui:\n${acompanhamento}`;
+    window.open(
+      `https://wa.me/${telefoneWhatsApp}?text=${encodeURIComponent(mensagem)}`,
+      "_blank",
+      "noopener,noreferrer"
     );
   }
 
@@ -611,6 +647,23 @@ export default function AdminPage() {
                     {pedido.observacao && <p>{pedido.observacao}</p>}
                   </div>
                 )}
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-zinc-800 pt-4">
+                  <a
+                    href={`/acompanhar/${pedido.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-lg border border-zinc-700 px-3 py-2 text-sm font-bold hover:bg-zinc-800"
+                  >
+                    Ver acompanhamento
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => abrirWhatsAppStatus(pedido)}
+                    className="rounded-lg bg-green-600 px-3 py-2 text-sm font-bold text-white hover:bg-green-500"
+                  >
+                    Avisar cliente no WhatsApp
+                  </button>
+                </div>
               </article>
             ))}
           </div>
@@ -825,6 +878,19 @@ export default function AdminPage() {
           <button
             type="button"
             role="tab"
+            aria-selected={abaEstoque === "baixo-estoque"}
+            onClick={() => setAbaEstoque("baixo-estoque")}
+            className={`rounded-t-lg px-5 py-3 font-semibold transition ${
+              abaEstoque === "baixo-estoque"
+                ? "bg-orange-500 text-black"
+                : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+            }`}
+          >
+            Estoque baixo ({produtosComEstoqueBaixo.length})
+          </button>
+          <button
+            type="button"
+            role="tab"
             aria-selected={abaEstoque === "sem-estoque"}
             onClick={() => setAbaEstoque("sem-estoque")}
             className={`rounded-t-lg px-5 py-3 font-semibold transition ${
@@ -837,8 +903,17 @@ export default function AdminPage() {
           </button>
         </div>
 
-        <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-          <label className="flex flex-col gap-2 sm:max-w-md">
+        <div className="mb-6 grid gap-4 rounded-xl border border-zinc-800 bg-zinc-900 p-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-2">
+            <span className="font-semibold">Pesquisar produto</span>
+            <input
+              value={buscaEstoque}
+              onChange={(event) => setBuscaEstoque(event.target.value)}
+              placeholder="Nome, marca ou descrição"
+              className="rounded-lg bg-zinc-800 p-3"
+            />
+          </label>
+          <label className="flex flex-col gap-2">
             <span className="font-semibold">Categoria dos produtos</span>
             <select
               value={categoriaFiltro}
@@ -864,7 +939,7 @@ export default function AdminPage() {
         <div className="grid gap-4">
           {produtosVisiveis.length === 0 && (
             <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-zinc-400">
-              Nenhum produto {abaEstoque === "com-estoque" ? "com estoque" : "sem estoque"}.
+              Nenhum produto encontrado neste filtro.
             </div>
           )}
 
