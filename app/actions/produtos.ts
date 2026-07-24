@@ -1,6 +1,7 @@
 "use server";
 
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { obterAdministrador } from "@/lib/supabase-server";
 
 type NovoProduto = {
   categoria_id: string;
@@ -14,6 +15,7 @@ type NovoProduto = {
 };
 
 export async function cadastrarProduto(produto: NovoProduto) {
+  if (!(await obterAdministrador())) throw new Error("Não autorizado.");
   const { error } = await supabaseAdmin.from("produtos").insert({
     categoria_id: produto.categoria_id,
     nome: produto.nome,
@@ -36,6 +38,7 @@ export async function cadastrarProduto(produto: NovoProduto) {
 }
 
 export async function listarProdutos() {
+  if (!(await obterAdministrador())) throw new Error("Não autorizado.");
   const { data, error } = await supabaseAdmin
     .from("produtos")
     .select(`
