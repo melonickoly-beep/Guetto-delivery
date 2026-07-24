@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, ChangeEvent, FormEvent } from "react";
+import { useEffect, useRef, useState, ChangeEvent, ClipboardEvent, FormEvent } from "react";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 
@@ -19,11 +19,43 @@ type Produto = {
   estoque: number;
   imagem: string;
   destaque: boolean;
+  tipo_venda: "caixa" | "avulso" | null;
 };
+
+type Pedido = {
+  id: string;
+  created_at: string;
+  cliente_nome: string;
+  telefone: string;
+  endereco: string;
+  referencia: string | null;
+  itens: Array<{
+    nome: string;
+    quantidade: number;
+    preco_unitario: number;
+  }>;
+  total: number;
+  pagamento: string[];
+  observacao: string | null;
+  status: string;
+};
+
+type AbaEstoque = "com-estoque" | "sem-estoque";
+
+const statusPedido = [
+  { valor: "novo", rotulo: "Novo" },
+  { valor: "em_preparo", rotulo: "Em preparo" },
+  { valor: "saiu_para_entrega", rotulo: "Saiu para entrega" },
+  { valor: "concluido", rotulo: "Concluído" },
+  { valor: "cancelado", rotulo: "Cancelado" },
+];
 
 export default function AdminPage() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [pedidos, setPedidos] = useState<Pedido[]>([]);
+  const [notificacoesAtivadas, setNotificacoesAtivadas] = useState(false);
+  const quantidadeNovosAnterior = useRef<number | null>(null);
 
   const [categoriaId, setCategoriaId] = useState("");
   const [nome, setNome] = useState("");
@@ -31,15 +63,30 @@ export default function AdminPage() {
   const [preco, setPreco] = useState("");
   const [estoque, setEstoque] = useState("");
   const [destaque, setDestaque] = useState(false);
+  const [tipoVenda, setTipoVenda] = useState<"caixa" | "avulso">("caixa");
 
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
+  const [produtoEmEdicao, setProdutoEmEdicao] = useState<string | null>(null);
+  const [abaEstoque, setAbaEstoque] = useState<AbaEstoque>("com-estoque");
+  const [categoriaFiltro, setCategoriaFiltro] = useState("todas");
 
   const [salvando, setSalvando] = useState(false);
+  const [tempoEntrega, setTempoEntrega] = useState("20");
+  const [salvandoEntrega, setSalvandoEntrega] = useState(false);
+  const [horarioAbertura, setHorarioAbertura] = useState("");
+  const [horarioFechamento, setHorarioFechamento] = useState("");
+  const [salvandoHorario, setSalvandoHorario] = useState(false);
 
   useEffect(() => {
     carregarCategorias();
     carregarProdutos();
+    carregarTempoEntrega();
+    carregarHorarioAtendimento();
+    carregarPedidos();
+
+    const intervaloPedidos = window.setInterval(carregarPedidos, 30_000);
+    return () => window.clearInterval(intervaloPedidos);
   }, []);
 
   async function carregarCategorias() {
@@ -70,16 +117,158 @@ export default function AdminPage() {
     setProdutos(data ?? []);
   }
 
-  function selecionarImagem(
-    e: ChangeEvent<HTMLInputElement>
-  ) {
-    if (!e.target.files?.length) return;
+  async function carregarPedidos() {
+    const { data, error } = await supabase
+      .from("pedidos")
+      .select("id, created_at, cliente_nome, telefone, endereco, referencia, itens, total, pagamento, observacao, status")
+      .order("created_at", { ascending: false })
+      .limit(100);
 
-    const file = e.target.files[0];
+    if (error) return;
+
+    const lista = data ?? [];
+    const novos = lista.filter((pedido) => pedido.status === "novo").length;
+
+    if (
+      quantidadeNovosAnterior.current !== null &&
+      novos > quantidadeNovosAnterior.current &&
+      Notification.permission === "granted"
+    ) {
+      new Notification("Novo pedido na Guetto Delivery", {
+        body: "Você recebeu um novo pedido pelo site.",
+      });
+    }
+
+    quantidadeNovosAnterior.current = novos;
+    setPedidos(lista);
+  }
+
+  async function atualizarStatusPedido(id: string, status: string) {
+    const resposta = await fetch(`/api/admin/pedidos/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+
+    if (!resposta.ok) {
+      const erro = await resposta.json().catch(() => null);
+      alert(erro?.error ?? "Não foi possível atualizar o pedido.");
+      return;
+    }
+
+    setPedidos((atuais) =>
+      atuais.map((pedido) => (pedido.id === id ? { ...pedido, status } : pedido))
+    );
+  }
+
+  async function sair() {
+    await supabase.auth.signOut();
+    window.location.href = "/login";
+  }
+
+  async function ativarNotificacoes() {
+    if (!("Notification" in window)) {
+      alert("Este navegador não oferece notificações.");
+      return;
+    }
+
+    const permissao = await Notification.requestPermission();
+    setNotificacoesAtivadas(permissao === "granted");
+    if (permissao !== "granted") alert("Você pode liberar as notificações nas configurações do navegador depois.");
+  }
+
+  async function carregarTempoEntrega() {
+    const { data, error } = await supabase
+      .from("configuracoes")
+      .select("valor")
+      .eq("chave", "tempo_entrega")
+      .maybeSingle();
+
+    if (error) return;
+    if (data?.valor) setTempoEntrega(data.valor);
+  }
+
+  async function salvarTempoEntrega() {
+    const minutos = Number(tempoEntrega);
+
+    if (!Number.isInteger(minutos) || minutos < 1 || minutos > 90) {
+      alert("Informe um prazo entre 1 e 90 minutos.");
+      return;
+    }
+
+    setSalvandoEntrega(true);
+    const { error } = await supabase.from("configuracoes").upsert({
+      chave: "tempo_entrega",
+      valor: String(minutos),
+    });
+    setSalvandoEntrega(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    alert(`Prazo atualizado: até ${minutos} minutos.`);
+  }
+
+  async function carregarHorarioAtendimento() {
+    const { data, error } = await supabase
+      .from("configuracoes")
+      .select("chave, valor")
+      .in("chave", ["horario_abertura", "horario_fechamento"]);
+
+    if (error) return;
+    setHorarioAbertura(data?.find((configuracao) => configuracao.chave === "horario_abertura")?.valor ?? "");
+    setHorarioFechamento(data?.find((configuracao) => configuracao.chave === "horario_fechamento")?.valor ?? "");
+  }
+
+  async function salvarHorarioAtendimento() {
+    if (!horarioAbertura || !horarioFechamento) {
+      alert("Informe o horário de abertura e de encerramento.");
+      return;
+    }
+
+    setSalvandoHorario(true);
+    const { error } = await supabase.from("configuracoes").upsert([
+      { chave: "horario_abertura", valor: horarioAbertura },
+      { chave: "horario_fechamento", valor: horarioFechamento },
+    ]);
+    setSalvandoHorario(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    alert(`Atendimento definido: das ${horarioAbertura} às ${horarioFechamento}.`);
+  }
+
+  function definirImagem(file: File) {
+    if (!file.type.startsWith("image/")) {
+      alert("Cole ou selecione um arquivo de imagem.");
+      return;
+    }
 
     setArquivo(file);
+    setPreview((previewAnterior) => {
+      if (previewAnterior.startsWith("blob:")) URL.revokeObjectURL(previewAnterior);
+      return URL.createObjectURL(file);
+    });
+  }
 
-    setPreview(URL.createObjectURL(file));
+  function selecionarImagem(e: ChangeEvent<HTMLInputElement>) {
+    if (!e.target.files?.length) return;
+    definirImagem(e.target.files[0]);
+  }
+
+  function colarImagem(e: ClipboardEvent<HTMLDivElement>) {
+    const imagem = Array.from(e.clipboardData.items)
+      .find((item) => item.kind === "file" && item.type.startsWith("image/"))
+      ?.getAsFile();
+
+    if (!imagem) return;
+    e.preventDefault();
+    definirImagem(imagem);
   }
 
   async function uploadImagem() {
@@ -107,7 +296,38 @@ export default function AdminPage() {
 
     return publicUrl;
   }
-    async function salvarProduto(e: FormEvent) {
+
+  function limparFormulario() {
+    setCategoriaId("");
+    setNome("");
+    setDescricao("");
+    setPreco("");
+    setEstoque("");
+    setDestaque(false);
+    setTipoVenda("caixa");
+    setArquivo(null);
+    setPreview((previewAnterior) => {
+      if (previewAnterior.startsWith("blob:")) URL.revokeObjectURL(previewAnterior);
+      return "";
+    });
+    setProdutoEmEdicao(null);
+  }
+
+  function editarProduto(produto: Produto) {
+    setProdutoEmEdicao(produto.id);
+    setCategoriaId(produto.categoria_id);
+    setNome(produto.nome);
+    setDescricao(produto.descricao ?? "");
+    setPreco(String(produto.preco));
+    setEstoque(String(produto.estoque));
+    setDestaque(produto.destaque);
+    setTipoVenda(produto.tipo_venda ?? "caixa");
+    setArquivo(null);
+    setPreview(produto.imagem ?? "");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function salvarProduto(e: FormEvent) {
     e.preventDefault();
 
     if (!categoriaId) {
@@ -117,19 +337,25 @@ export default function AdminPage() {
 
     setSalvando(true);
 
-    const imagem = await uploadImagem();
+    const imagemNova = await uploadImagem();
+    const dadosProduto = {
+      categoria_id: categoriaId,
+      nome,
+      descricao,
+      preco: Number(preco),
+      estoque: Number(estoque),
+      destaque,
+      tipo_venda: tipoVenda,
+    };
 
-    const { error } = await supabase
-      .from("produtos")
-      .insert({
-        categoria_id: categoriaId,
-        nome,
-        descricao,
-        preco: Number(preco),
-        estoque: Number(estoque),
-        imagem,
-        destaque,
-      });
+    const { error } = produtoEmEdicao
+      ? await supabase
+          .from("produtos")
+          .update({ ...dadosProduto, ...(imagemNova ? { imagem: imagemNova } : {}) })
+          .eq("id", produtoEmEdicao)
+      : await supabase
+          .from("produtos")
+          .insert({ ...dadosProduto, imagem: imagemNova });
 
     setSalvando(false);
 
@@ -138,18 +364,12 @@ export default function AdminPage() {
       return;
     }
 
-    setCategoriaId("");
-    setNome("");
-    setDescricao("");
-    setPreco("");
-    setEstoque("");
-    setDestaque(false);
-    setArquivo(null);
-    setPreview("");
+    const estavaEditando = Boolean(produtoEmEdicao);
+    limparFormulario();
 
     carregarProdutos();
 
-    alert("Produto cadastrado com sucesso!");
+    alert(estavaEditando ? "Produto atualizado com sucesso!" : "Produto cadastrado com sucesso!");
   }
 
   async function excluirProduto(id: string) {
@@ -170,18 +390,169 @@ export default function AdminPage() {
     carregarProdutos();
   }
 
+  const inicioHoje = new Date();
+  inicioHoje.setHours(0, 0, 0, 0);
+  const pedidosHoje = pedidos.filter((pedido) => new Date(pedido.created_at) >= inicioHoje);
+  const pedidosNovos = pedidos.filter((pedido) => pedido.status === "novo");
+  const produtosComEstoque = produtos.filter((produto) => produto.estoque > 0);
+  const produtosSemEstoque = produtos.filter((produto) => produto.estoque <= 0);
+  const produtosDaAba = abaEstoque === "com-estoque" ? produtosComEstoque : produtosSemEstoque;
+  const produtosVisiveis = categoriaFiltro === "todas"
+    ? produtosDaAba
+    : produtosDaAba.filter((produto) => produto.categoria_id === categoriaFiltro);
+
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
+    <main className="min-h-screen text-white">
       <div className="max-w-7xl mx-auto p-8">
 
-        <h1 className="text-4xl font-bold text-yellow-400 mb-8">
-          Painel Administrativo
-        </h1>
+        <div className="mb-8 flex items-center justify-between gap-4">
+          <h1 className="text-4xl font-bold text-yellow-400">Painel Administrativo</h1>
+          <button type="button" onClick={sair} className="rounded-lg border border-zinc-700 px-4 py-2 font-semibold hover:bg-zinc-800">
+            Sair
+          </button>
+        </div>
+
+        <section className="mb-8 rounded-xl border border-yellow-400/50 bg-yellow-400/10 p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-bold">Pedidos de hoje: {pedidosHoje.length}</h2>
+              <p className="text-zinc-300">
+                {pedidosNovos.length > 0 ? `${pedidosNovos.length} novo(s) aguardando atendimento.` : "Nenhum pedido novo aguardando atendimento."}
+              </p>
+            </div>
+            <button type="button" onClick={ativarNotificacoes} className="rounded-lg bg-yellow-400 px-4 py-3 font-bold text-black hover:bg-yellow-300">
+              {notificacoesAtivadas ? "Notificações ativadas" : "Ativar notificações"}
+            </button>
+          </div>
+          {pedidosNovos.length > 0 && (
+            <div className="mt-4 rounded-lg bg-red-600 px-4 py-3 font-bold text-white">
+              🔔 Você tem {pedidosNovos.length} pedido(s) novo(s).
+            </div>
+          )}
+        </section>
+
+        <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+          <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-bold">Pedidos recentes</h2>
+              <p className="text-zinc-400">Acompanhe e atualize o andamento dos pedidos.</p>
+            </div>
+            <button type="button" onClick={carregarPedidos} className="rounded-lg border border-zinc-600 px-4 py-2 hover:bg-zinc-800">
+              Atualizar
+            </button>
+          </div>
+
+          <div className="grid gap-4">
+            {pedidos.length === 0 && <p className="text-zinc-400">Nenhum pedido registrado.</p>}
+            {pedidos.map((pedido) => (
+              <article key={pedido.id} className="rounded-xl border border-zinc-700 bg-zinc-950 p-5">
+                <div className="flex flex-col justify-between gap-4 md:flex-row">
+                  <div>
+                    <p className="text-sm text-zinc-500">
+                      {new Intl.DateTimeFormat("pt-BR", {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      }).format(new Date(pedido.created_at))}
+                    </p>
+                    <h3 className="text-xl font-bold">{pedido.cliente_nome}</h3>
+                    <p className="text-zinc-300">{pedido.telefone}</p>
+                    <p className="text-zinc-300">
+                      {pedido.endereco}{pedido.referencia ? ` — ${pedido.referencia}` : ""}
+                    </p>
+                  </div>
+                  <div className="md:text-right">
+                    <p className="text-2xl font-black text-yellow-400">
+                      {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(pedido.total))}
+                    </p>
+                    <select
+                      value={pedido.status}
+                      onChange={(event) => atualizarStatusPedido(pedido.id, event.target.value)}
+                      className="mt-2 rounded-lg bg-zinc-800 p-2"
+                      aria-label={`Status do pedido de ${pedido.cliente_nome}`}
+                    >
+                      {statusPedido.map((status) => (
+                        <option key={status.valor} value={status.valor}>{status.rotulo}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <ul className="mt-4 space-y-1 border-t border-zinc-800 pt-4 text-sm text-zinc-300">
+                  {(pedido.itens ?? []).map((item, indice) => (
+                    <li key={`${item.nome}-${indice}`}>
+                      {item.quantidade}x {item.nome}
+                    </li>
+                  ))}
+                </ul>
+                {(pedido.pagamento?.length > 0 || pedido.observacao) && (
+                  <div className="mt-4 text-sm text-zinc-400">
+                    {pedido.pagamento?.map((pagamento) => <p key={pagamento}>{pagamento}</p>)}
+                    {pedido.observacao && <p>{pedido.observacao}</p>}
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+          <h2 className="text-2xl font-bold">Prazo de entrega</h2>
+          <p className="mt-1 text-zinc-400">Este prazo aparece para o cliente e no pedido enviado pelo WhatsApp.</p>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <label className="flex items-center gap-2">
+              <span className="sr-only">Prazo de entrega em minutos</span>
+              <input
+                type="number"
+                min="1"
+                max="90"
+                value={tempoEntrega}
+                onChange={(event) => setTempoEntrega(event.target.value)}
+                className="w-28 rounded-lg bg-zinc-800 p-3"
+              />
+              <span>minutos</span>
+            </label>
+            <button
+              type="button"
+              onClick={salvarTempoEntrega}
+              disabled={salvandoEntrega}
+              className="rounded-lg bg-yellow-400 px-5 py-3 font-bold text-black hover:bg-yellow-300 disabled:opacity-60"
+            >
+              {salvandoEntrega ? "Salvando..." : "Salvar prazo"}
+            </button>
+          </div>
+          <p className="mt-3 text-sm text-zinc-500">Exemplos: 20 minutos em dias tranquilos; 90 minutos em dias mais corridos.</p>
+        </section>
+
+        <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+          <h2 className="text-2xl font-bold">Horário de atendimento de hoje</h2>
+          <p className="mt-1 text-zinc-400">Fora deste intervalo, o catálogo bloqueia novos pedidos automaticamente.</p>
+          <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-end">
+            <label className="flex flex-col gap-2">
+              <span className="text-sm text-zinc-300">Abre às</span>
+              <input type="time" value={horarioAbertura} onChange={(event) => setHorarioAbertura(event.target.value)} className="rounded-lg bg-zinc-800 p-3" />
+            </label>
+            <label className="flex flex-col gap-2">
+              <span className="text-sm text-zinc-300">Encerra às</span>
+              <input type="time" value={horarioFechamento} onChange={(event) => setHorarioFechamento(event.target.value)} className="rounded-lg bg-zinc-800 p-3" />
+            </label>
+            <button type="button" onClick={salvarHorarioAtendimento} disabled={salvandoHorario} className="rounded-lg bg-yellow-400 px-5 py-3 font-bold text-black hover:bg-yellow-300 disabled:opacity-60">
+              {salvandoHorario ? "Salvando..." : "Salvar horário"}
+            </button>
+          </div>
+        </section>
 
         <form
           onSubmit={salvarProduto}
           className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 mb-10"
         >
+
+          {produtoEmEdicao && (
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-yellow-400/50 bg-yellow-400/10 p-4">
+              <strong className="text-yellow-300">Editando: {nome}</strong>
+              <button type="button" onClick={limparFormulario} className="rounded-lg border border-zinc-600 px-4 py-2 text-sm hover:bg-zinc-800">
+                Cancelar edição
+              </button>
+            </div>
+          )}
 
           <div className="grid md:grid-cols-2 gap-5">
 
@@ -204,6 +575,17 @@ export default function AdminPage() {
                 </option>
               ))}
             </select>
+
+            {categorias.find((categoria) => categoria.id === categoriaId)?.nome.toLowerCase() === "cervejas" && (
+              <select
+                value={tipoVenda}
+                onChange={(e) => setTipoVenda(e.target.value as "caixa" | "avulso")}
+                className="bg-zinc-800 rounded-lg p-3"
+              >
+                <option value="caixa">Caixa fechada</option>
+                <option value="avulso">Unidade avulsa</option>
+              </select>
+            )}
 
             <input
               type="text"
@@ -239,14 +621,23 @@ export default function AdminPage() {
               required
             />
 
-            <div className="md:col-span-2">
-
+            <div
+              className="md:col-span-2 rounded-lg border border-dashed border-zinc-600 bg-zinc-800/50 p-5 focus-within:border-yellow-400"
+              onPaste={colarImagem}
+              tabIndex={0}
+              role="group"
+              aria-label="Imagem do produto"
+            >
+              <p className="mb-3 font-semibold">Imagem do produto</p>
               <input
                 type="file"
                 accept="image/*"
                 onChange={selecionarImagem}
+                className="block w-full text-sm text-zinc-300 file:mr-4 file:rounded-lg file:border-0 file:bg-yellow-400 file:px-4 file:py-2 file:font-bold file:text-black hover:file:bg-yellow-300"
               />
-
+              <p className="mt-3 text-sm text-zinc-400">
+                Ou copie uma imagem e pressione <kbd className="rounded bg-zinc-700 px-2 py-1 text-zinc-200">Ctrl+V</kbd> nesta área.
+              </p>
             </div>
 
             {preview && (
@@ -286,7 +677,7 @@ export default function AdminPage() {
             disabled={salvando}
             className="mt-8 bg-yellow-400 hover:bg-yellow-300 text-black font-bold px-8 py-3 rounded-lg transition"
           >
-            {salvando ? "Salvando..." : "Salvar Produto"}
+            {salvando ? "Salvando..." : produtoEmEdicao ? "Salvar alterações" : "Salvar Produto"}
           </button>
 
         </form>
@@ -295,14 +686,67 @@ export default function AdminPage() {
           Produtos cadastrados
         </h2>
 
-        <div className="grid gap-4"></div>
-                  {produtos.length === 0 && (
+        <div className="mb-6 flex gap-2 border-b border-zinc-700" role="tablist" aria-label="Filtrar produtos por estoque">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={abaEstoque === "com-estoque"}
+            onClick={() => setAbaEstoque("com-estoque")}
+            className={`rounded-t-lg px-5 py-3 font-semibold transition ${
+              abaEstoque === "com-estoque"
+                ? "bg-yellow-400 text-black"
+                : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+            }`}
+          >
+            Com estoque ({produtosComEstoque.length})
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={abaEstoque === "sem-estoque"}
+            onClick={() => setAbaEstoque("sem-estoque")}
+            className={`rounded-t-lg px-5 py-3 font-semibold transition ${
+              abaEstoque === "sem-estoque"
+                ? "bg-red-600 text-white"
+                : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+            }`}
+          >
+            Sem estoque ({produtosSemEstoque.length})
+          </button>
+        </div>
+
+        <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+          <label className="flex flex-col gap-2 sm:max-w-md">
+            <span className="font-semibold">Categoria dos produtos</span>
+            <select
+              value={categoriaFiltro}
+              onChange={(event) => setCategoriaFiltro(event.target.value)}
+              className="rounded-lg bg-zinc-800 p-3"
+            >
+              <option value="todas">Todas as categorias ({produtosDaAba.length})</option>
+              {categorias.map((categoria) => {
+                const quantidade = produtosDaAba.filter(
+                  (produto) => produto.categoria_id === categoria.id
+                ).length;
+
+                return (
+                  <option key={categoria.id} value={categoria.id}>
+                    {categoria.nome} ({quantidade})
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+        </div>
+
+        <div className="grid gap-4">
+          {produtosVisiveis.length === 0 && (
             <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-zinc-400">
-              Nenhum produto cadastrado.
+              Nenhum produto {abaEstoque === "com-estoque" ? "com estoque" : "sem estoque"}.
             </div>
           )}
 
-          {produtos.map((produto) => (
+          {produtosVisiveis.map((produto) => (
             <div
               key={produto.id}
               className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 flex flex-col md:flex-row items-center justify-between gap-6"
@@ -324,6 +768,9 @@ export default function AdminPage() {
                 )}
 
                 <div>
+                  <span className="mb-2 inline-block rounded-full bg-zinc-800 px-3 py-1 text-xs font-semibold text-zinc-300">
+                    {categorias.find((categoria) => categoria.id === produto.categoria_id)?.nome ?? "Sem categoria"}
+                  </span>
 
                   <h3 className="text-xl font-bold">
                     {produto.nome}
@@ -357,16 +804,26 @@ export default function AdminPage() {
 
               </div>
 
-              <button
-                onClick={() => excluirProduto(produto.id)}
-                className="bg-red-600 hover:bg-red-700 px-6 py-3 rounded-lg font-semibold transition"
-              >
-                Excluir
-              </button>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => editarProduto(produto)}
+                  className="bg-yellow-400 px-6 py-3 rounded-lg font-semibold text-black transition hover:bg-yellow-300"
+                >
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => excluirProduto(produto.id)}
+                  className="bg-red-600 hover:bg-red-700 px-6 py-3 rounded-lg font-semibold transition"
+                >
+                  Excluir
+                </button>
+              </div>
 
             </div>
           ))}
-                  </div>
+        </div>
 
         <div className="mt-12 bg-zinc-900 border border-zinc-800 rounded-xl p-6">
 

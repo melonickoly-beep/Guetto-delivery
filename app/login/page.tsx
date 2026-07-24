@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { FormEvent, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
@@ -12,7 +12,8 @@ export default function LoginPage() {
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
 
-  async function entrar() {
+  async function entrar(event: FormEvent) {
+    event.preventDefault();
     setCarregando(true);
     setErro("");
 
@@ -24,16 +25,17 @@ export default function LoginPage() {
     setCarregando(false);
 
     if (error) {
-      setErro(error.message);
+      setErro("E-mail ou senha inválidos.");
       return;
     }
 
     router.push("/admin");
+    router.refresh();
   }
 
   return (
-    <main className="min-h-screen bg-[#111111] flex items-center justify-center p-6">
-      <div className="w-full max-w-md bg-zinc-900 rounded-2xl p-8 border border-zinc-800">
+    <main className="min-h-screen flex items-center justify-center p-6">
+      <form onSubmit={entrar} className="w-full max-w-md bg-zinc-900 rounded-2xl p-8 border border-zinc-800">
 
         <h1 className="text-3xl font-bold text-yellow-400 mb-8 text-center">
           Login Administrativo
@@ -44,7 +46,9 @@ export default function LoginPage() {
           placeholder="E-mail"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          autoComplete="username"
           className="w-full bg-zinc-800 text-white rounded-lg p-3 mb-4 outline-none"
+          required
         />
 
         <input
@@ -52,7 +56,9 @@ export default function LoginPage() {
           placeholder="Senha"
           value={senha}
           onChange={(e) => setSenha(e.target.value)}
+          autoComplete="current-password"
           className="w-full bg-zinc-800 text-white rounded-lg p-3 mb-4 outline-none"
+          required
         />
 
         {erro && (
@@ -62,14 +68,14 @@ export default function LoginPage() {
         )}
 
         <button
-          onClick={entrar}
+          type="submit"
           disabled={carregando}
           className="w-full bg-yellow-400 text-black rounded-lg p-3 font-bold"
         >
           {carregando ? "Entrando..." : "Entrar"}
         </button>
 
-      </div>
+      </form>
     </main>
   );
 }
