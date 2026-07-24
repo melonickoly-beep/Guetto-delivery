@@ -23,6 +23,7 @@ type Produto = {
   grupo_estoque: string | null;
   unidades_por_venda: number | null;
   estoque_unidades: number | null;
+  estoque_opcoes?: Record<string, number> | null;
 };
 
 type EscolhasCombo = {
@@ -144,10 +145,19 @@ export default function Catalogo({
     .filter((produto) => produto.nome.startsWith("Askov 1L - "))
     .map((produto) => produto.nome.replace("Askov 1L - ", ""));
   const saboresEnergetico = produtos
-    .filter((produto) => produto.nome.startsWith("Furioso 2L - "))
+    .filter(
+      (produto) =>
+        produto.nome.startsWith("Furioso 2L - ") &&
+        estoqueDisponivel(produto) > 0
+    )
     .map((produto) => produto.nome.replace("Furioso 2L - ", ""));
   const saboresDeGelo = ["Laranja", "Maca Verde", "Limao", "Morango", "Coco", "Maracuja", "Melancia", "Uva Verde", "Amora", "Abacaxi", "Sal e Limao"];
-  const saboresWhiskyJack = ["Tradicional", "Fire", "Maca Verde", "Mel"];
+  const produtoJackDaniels = produtos.find(
+    (produto) => produto.nome.trim().toLowerCase() === "whisky jack daniels"
+  );
+  const saboresWhiskyJack = ["Tradicional", "Fire", "Maçã Verde", "Mel"].filter(
+    (sabor) => (produtoJackDaniels?.estoque_opcoes?.[sabor] ?? 1) > 0
+  );
 
   const horarioAtual = new Intl.DateTimeFormat("en-GB", {
     timeZone: "America/Sao_Paulo",
@@ -197,6 +207,12 @@ export default function Catalogo({
   }
 
   function saboresDoProduto(produto: Produto) {
+    if (produto.nome.toLowerCase().includes("jack daniel")) {
+      return ["Maçã Verde", "Fire", "Mel", "Tradicional"].filter(
+        (sabor) => (produto.estoque_opcoes?.[sabor] ?? 1) > 0
+      );
+    }
+
     return (produto.descricao ?? "")
       .replace(/\s+ou\s+/gi, ",")
       .split(",")
@@ -249,7 +265,7 @@ export default function Catalogo({
     setSaborAskov(saboresAskov[0] ?? "Tradicional");
     setSaborEnergetico(saboresEnergetico[0] ?? "Tradicional");
     setSaboresGelo(Array(6).fill(saboresDeGelo[0]));
-    setSaborWhisky("Tradicional");
+    setSaborWhisky(saboresWhiskyJack[0] ?? "");
     setComboEmConfiguracao(produto);
   }
 
@@ -499,6 +515,8 @@ export default function Catalogo({
             const eGeloDeSabor = ["gelinho gourmet", "gelo de sabor"].includes(
               produto.nome.trim().toLowerCase()
             );
+            const eJackDaniels = produto.nome.trim().toLowerCase() === "whisky jack daniels";
+            const exigeEscolhaDeSabor = eGeloDeSabor || eJackDaniels;
 
             return (
               <article
@@ -536,10 +554,10 @@ export default function Catalogo({
                         {formatarPreco(produto.preco)}
                       </p>
                       <p className="text-xs text-zinc-500">
-                        {semEstoque ? "Indisponível" : `${produto.estoque} em estoque`}
+                        {semEstoque ? "Indisponível" : `${estoqueDisponivel(produto)} em estoque`}
                       </p>
                     </div>
-                    {item && !eGeloDeSabor ? (
+                    {item && !exigeEscolhaDeSabor ? (
                       <div className="flex items-center gap-3 rounded-lg bg-zinc-800 p-1">
                         <button
                           onClick={() => alterarQuantidade(produto, -1)}
@@ -563,14 +581,14 @@ export default function Catalogo({
                         onClick={() =>
                           eCombo
                             ? abrirConfiguracaoCombo(produto)
-                            : eGeloDeSabor
+                            : exigeEscolhaDeSabor
                               ? abrirConfiguracaoGelo(produto)
                               : alterarQuantidade(produto, 1)
                         }
                         disabled={semEstoque || !atendimentoAberto}
                         className="rounded-lg bg-yellow-400 px-4 py-2 font-bold text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
                       >
-                        {eGeloDeSabor ? "Escolher sabor" : "Adicionar"}
+                        {exigeEscolhaDeSabor ? "Escolher sabor" : "Adicionar"}
                       </button>
                     )}
                   </div>
@@ -586,7 +604,11 @@ export default function Catalogo({
           <div className="w-full max-w-md rounded-2xl border border-yellow-400/50 bg-zinc-950 p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-black text-yellow-400">Gelo de sabor</h2>
+                <h2 className="text-2xl font-black text-yellow-400">
+                  {geloEmConfiguracao.nome.toLowerCase().includes("jack daniel")
+                    ? "Whisky Jack Daniel’s"
+                    : "Gelo de sabor"}
+                </h2>
                 <p className="text-zinc-300">Escolha o sabor e a quantidade.</p>
               </div>
               <button type="button" onClick={() => setGeloEmConfiguracao(null)} className="rounded-lg p-2 hover:bg-zinc-800"><X /></button>
