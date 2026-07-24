@@ -573,10 +573,16 @@ export default function AdminPage() {
           )}
         </section>
 
-        <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+        <details className="group mb-4 rounded-xl border border-zinc-800 bg-zinc-900">
+          <summary className="cursor-pointer list-none rounded-xl px-6 py-5 text-xl font-bold hover:bg-zinc-800">
+            <span className="flex items-center justify-between">
+              Pedidos recentes
+              <span className="text-yellow-400 transition group-open:rotate-180">⌄</span>
+            </span>
+          </summary>
+          <div className="border-t border-zinc-800 p-6">
           <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h2 className="text-2xl font-bold">Pedidos recentes</h2>
               <p className="text-zinc-400">Acompanhe e atualize o andamento dos pedidos.</p>
             </div>
             <button type="button" onClick={carregarPedidos} className="rounded-lg border border-zinc-600 px-4 py-2 hover:bg-zinc-800">
@@ -667,10 +673,17 @@ export default function AdminPage() {
               </article>
             ))}
           </div>
-        </section>
+          </div>
+        </details>
 
-        <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
-          <h2 className="text-2xl font-bold">Prazo de entrega</h2>
+        <details className="group mb-4 rounded-xl border border-zinc-800 bg-zinc-900">
+          <summary className="cursor-pointer list-none rounded-xl px-6 py-5 text-xl font-bold hover:bg-zinc-800">
+            <span className="flex items-center justify-between">
+              Prazo de entrega
+              <span className="text-yellow-400 transition group-open:rotate-180">⌄</span>
+            </span>
+          </summary>
+          <div className="border-t border-zinc-800 p-6">
           <p className="mt-1 text-zinc-400">Este prazo aparece para o cliente e no pedido enviado pelo WhatsApp.</p>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
             <label className="flex items-center gap-2">
@@ -695,10 +708,17 @@ export default function AdminPage() {
             </button>
           </div>
           <p className="mt-3 text-sm text-zinc-500">Exemplos: 20 minutos em dias tranquilos; 90 minutos em dias mais corridos.</p>
-        </section>
+          </div>
+        </details>
 
-        <section className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
-          <h2 className="text-2xl font-bold">Horário de atendimento de hoje</h2>
+        <details className="group mb-8 rounded-xl border border-zinc-800 bg-zinc-900">
+          <summary className="cursor-pointer list-none rounded-xl px-6 py-5 text-xl font-bold hover:bg-zinc-800">
+            <span className="flex items-center justify-between">
+              Horário de atendimento de hoje
+              <span className="text-yellow-400 transition group-open:rotate-180">⌄</span>
+            </span>
+          </summary>
+          <div className="border-t border-zinc-800 p-6">
           <p className="mt-1 text-zinc-400">Fora deste intervalo, o catálogo bloqueia novos pedidos automaticamente.</p>
           <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-end">
             <label className="flex flex-col gap-2">
@@ -713,7 +733,8 @@ export default function AdminPage() {
               {salvandoHorario ? "Salvando..." : "Salvar horário"}
             </button>
           </div>
-        </section>
+          </div>
+        </details>
 
         <form
           onSubmit={salvarProduto}
