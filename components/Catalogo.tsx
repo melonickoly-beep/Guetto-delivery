@@ -70,6 +70,18 @@ const formatarPreco = (valor: number) =>
     currency: "BRL",
   }).format(valor);
 
+const calcularSubtotalItem = (
+  item: Pick<ItemCarrinho, "nome" | "preco" | "quantidade">
+) => {
+  if (item.nome.trim().toLowerCase() === "seda zomo") {
+    const trios = Math.floor(item.quantidade / 3);
+    const unidadesRestantes = item.quantidade % 3;
+    return trios * 10 + unidadesRestantes * item.preco;
+  }
+
+  return item.preco * item.quantidade;
+};
+
 export default function Catalogo({
   categorias,
   produtos,
@@ -153,7 +165,7 @@ export default function Catalogo({
     0
   );
   const valorTotal = carrinho.reduce(
-    (total, item) => total + item.preco * item.quantidade,
+    (total, item) => total + calcularSubtotalItem(item),
     0
   );
   const quantidadeGarrafas300 = carrinho
@@ -349,7 +361,7 @@ export default function Catalogo({
     const itensPorCategoria = (nomeCategoria: string) =>
       carrinho.filter((item) => categoriaPorId.get(item.categoria_id) === nomeCategoria);
     const subtotal = (itens: ItemCarrinho[]) =>
-      itens.reduce((total, item) => total + item.preco * item.quantidade, 0);
+      itens.reduce((total, item) => total + calcularSubtotalItem(item), 0);
 
     const itensTabacaria = itensPorCategoria("tabacaria");
     if (itensTabacaria.length > 0 && subtotal(itensTabacaria) < 20) {
@@ -411,7 +423,7 @@ export default function Catalogo({
     const linhas = carrinho.map(
       (item) =>
         `${item.quantidade}x ${item.nome} — ${formatarPreco(
-          item.preco * item.quantidade
+          calcularSubtotalItem(item)
         )}${item.sabor ? `\n   Sabor: ${item.sabor}` : ""}${item.escolhasCombo ? `\n   Escolhas: ${[
           item.escolhasCombo.askov ? `Askov ${item.escolhasCombo.askov}` : "",
           `Energetico ${item.escolhasCombo.energetico}`,
@@ -796,7 +808,7 @@ export default function Catalogo({
                   <div className="flex justify-between gap-3">
                     <p className="font-bold">{item.quantidade}x {item.nome}</p>
                     <p className="font-bold text-yellow-400">
-                      {formatarPreco(item.preco * item.quantidade)}
+                      {formatarPreco(calcularSubtotalItem(item))}
                     </p>
                   </div>
                   {item.sabor && <p className="mt-1 text-sm text-zinc-300">Sabor: {item.sabor}</p>}
