@@ -185,6 +185,9 @@ export default function Catalogo({
     setCarrinho((itens) => {
       const chave = chaveItem(produto);
       const itemAtual = itens.find((item) => chaveItem(item) === chave);
+      const estoqueMaximo = produto.sabor
+        ? produto.estoque_opcoes?.[produto.sabor] ?? estoqueDisponivel(produto)
+        : estoqueDisponivel(produto);
 
       if (!itemAtual && alteracao > 0) {
         return [...itens, { ...produto, quantidade: 1 }];
@@ -196,7 +199,7 @@ export default function Catalogo({
             ? {
                 ...item,
                 quantidade: Math.min(
-                  estoqueDisponivel(produto),
+                  estoqueMaximo,
                   Math.max(0, item.quantidade + alteracao)
                 ),
               }
@@ -207,6 +210,12 @@ export default function Catalogo({
   }
 
   function saboresDoProduto(produto: Produto) {
+    if (produto.estoque_opcoes) {
+      return Object.entries(produto.estoque_opcoes)
+        .filter(([, estoque]) => estoque > 0)
+        .map(([sabor]) => sabor);
+    }
+
     if (produto.nome.toLowerCase().includes("jack daniel")) {
       return ["Maçã Verde", "Fire", "Mel", "Tradicional"].filter(
         (sabor) => (produto.estoque_opcoes?.[sabor] ?? 1) > 0
@@ -230,8 +239,11 @@ export default function Catalogo({
   function confirmarGelo() {
     if (!geloEmConfiguracao || !saborGeloAvulso) return;
 
+    const estoqueDoSabor =
+      geloEmConfiguracao.estoque_opcoes?.[saborGeloAvulso] ??
+      estoqueDisponivel(geloEmConfiguracao);
     const quantidade = Math.min(
-      estoqueDisponivel(geloEmConfiguracao),
+      estoqueDoSabor,
       Math.max(1, quantidadeGeloAvulso)
     );
     const novoItem = {
@@ -516,7 +528,10 @@ export default function Catalogo({
               produto.nome.trim().toLowerCase()
             );
             const eJackDaniels = produto.nome.trim().toLowerCase() === "whisky jack daniels";
-            const exigeEscolhaDeSabor = eGeloDeSabor || eJackDaniels;
+            const exigeEscolhaDeSabor =
+              eGeloDeSabor ||
+              eJackDaniels ||
+              Boolean(produto.estoque_opcoes);
 
             return (
               <article
@@ -607,7 +622,7 @@ export default function Catalogo({
                 <h2 className="text-2xl font-black text-yellow-400">
                   {geloEmConfiguracao.nome.toLowerCase().includes("jack daniel")
                     ? "Whisky Jack Daniel’s"
-                    : "Gelo de sabor"}
+                    : geloEmConfiguracao.nome}
                 </h2>
                 <p className="text-zinc-300">Escolha o sabor e a quantidade.</p>
               </div>
@@ -632,7 +647,10 @@ export default function Catalogo({
               <input
                 type="number"
                 min={1}
-                max={estoqueDisponivel(geloEmConfiguracao)}
+                max={
+                  geloEmConfiguracao.estoque_opcoes?.[saborGeloAvulso] ??
+                  estoqueDisponivel(geloEmConfiguracao)
+                }
                 value={quantidadeGeloAvulso}
                 onChange={(event) => setQuantidadeGeloAvulso(Number(event.target.value))}
                 className="mt-2 w-full rounded-lg bg-zinc-800 p-3 font-normal"
