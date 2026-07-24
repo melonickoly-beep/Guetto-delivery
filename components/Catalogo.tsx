@@ -32,7 +32,11 @@ type EscolhasCombo = {
   whisky?: string;
 };
 
-type ItemCarrinho = Produto & { quantidade: number; escolhasCombo?: EscolhasCombo };
+type ItemCarrinho = Produto & {
+  quantidade: number;
+  escolhasCombo?: EscolhasCombo;
+  sabor?: string;
+};
 
 type FormaPagamento = "pix" | "dinheiro" | "credito" | "debito";
 
@@ -97,6 +101,9 @@ export default function Catalogo({
   const [saborEnergetico, setSaborEnergetico] = useState("");
   const [saboresGelo, setSaboresGelo] = useState<string[]>(Array(6).fill("Laranja"));
   const [saborWhisky, setSaborWhisky] = useState("Tradicional");
+  const [geloEmConfiguracao, setGeloEmConfiguracao] = useState<Produto | null>(null);
+  const [saborGeloAvulso, setSaborGeloAvulso] = useState("");
+  const [quantidadeGeloAvulso, setQuantidadeGeloAvulso] = useState(1);
   const [agora, setAgora] = useState(() => new Date());
 
   useEffect(() => {
@@ -160,9 +167,14 @@ export default function Catalogo({
     ? minutosAgora >= minutosAbertura && minutosAgora < minutosFechamento
     : minutosAgora >= minutosAbertura || minutosAgora < minutosFechamento);
 
-  function alterarQuantidade(produto: Produto, alteracao: number) {
+  function chaveItem(item: Produto & { sabor?: string; escolhasCombo?: EscolhasCombo }) {
+    return `${item.id}:${item.sabor ?? ""}:${item.escolhasCombo ? JSON.stringify(item.escolhasCombo) : ""}`;
+  }
+
+  function alterarQuantidade(produto: Produto & { sabor?: string; escolhasCombo?: EscolhasCombo }, alteracao: number) {
     setCarrinho((itens) => {
-      const itemAtual = itens.find((item) => item.id === produto.id);
+      const chave = chaveItem(produto);
+      const itemAtual = itens.find((item) => chaveItem(item) === chave);
 
       if (!itemAtual && alteracao > 0) {
         return [...itens, { ...produto, quantidade: 1 }];
@@ -170,7 +182,7 @@ export default function Catalogo({
 
       return itens
         .map((item) =>
-          item.id === produto.id
+          chaveItem(item) === chave
             ? {
                 ...item,
                 quantidade: Math.min(
@@ -182,6 +194,55 @@ export default function Catalogo({
         )
         .filter((item) => item.quantidade > 0);
     });
+  }
+
+  function saboresDoProduto(produto: Produto) {
+    return (produto.descricao ?? "")
+      .replace(/\s+ou\s+/gi, ",")
+      .split(",")
+      .map((sabor) => sabor.trim())
+      .filter(Boolean);
+  }
+
+  function abrirConfiguracaoGelo(produto: Produto) {
+    const sabores = saboresDoProduto(produto);
+    setGeloEmConfiguracao(produto);
+    setSaborGeloAvulso(sabores[0] ?? "");
+    setQuantidadeGeloAvulso(1);
+  }
+
+  function confirmarGelo() {
+    if (!geloEmConfiguracao || !saborGeloAvulso) return;
+
+    const quantidade = Math.min(
+      estoqueDisponivel(geloEmConfiguracao),
+      Math.max(1, quantidadeGeloAvulso)
+    );
+    const novoItem = {
+      ...geloEmConfiguracao,
+      sabor: saborGeloAvulso,
+      quantidade,
+    };
+
+    setCarrinho((itens) => {
+      const chave = chaveItem(novoItem);
+      const existente = itens.find((item) => chaveItem(item) === chave);
+
+      if (!existente) return [...itens, novoItem];
+
+      return itens.map((item) =>
+        chaveItem(item) === chave
+          ? {
+              ...item,
+              quantidade: Math.min(
+                estoqueDisponivel(geloEmConfiguracao),
+                item.quantidade + quantidade
+              ),
+            }
+          : item
+      );
+    });
+    setGeloEmConfiguracao(null);
   }
 
   function abrirConfiguracaoCombo(produto: Produto) {
@@ -299,7 +360,7 @@ export default function Catalogo({
       (item) =>
         `${item.quantidade}x ${item.nome} — ${formatarPreco(
           item.preco * item.quantidade
-        )}${item.escolhasCombo ? `\n   Escolhas: ${[
+        )}${item.sabor ? `\n   Sabor: ${item.sabor}` : ""}${item.escolhasCombo ? `\n   Escolhas: ${[
           item.escolhasCombo.askov ? `Askov ${item.escolhasCombo.askov}` : "",
           `Energetico ${item.escolhasCombo.energetico}`,
           `6 gelos: ${item.escolhasCombo.gelos.join(", ")}`,
@@ -338,7 +399,9 @@ export default function Catalogo({
         itens: carrinho.map((item) => ({
           produto_id: item.id,
           quantidade: item.quantidade,
-          escolhas_combo: item.escolhasCombo ?? null,
+          escolhas_combo: item.sabor
+            ? { sabor: item.sabor }
+            : item.escolhasCombo ?? null,
         })),
         pagamento: pagamentosFormatados,
         tempo_entrega: tempoEntrega,
@@ -433,6 +496,9 @@ export default function Catalogo({
             const item = carrinho.find((itemCarrinho) => itemCarrinho.id === produto.id);
             const semEstoque = estoqueDisponivel(produto) <= 0;
             const eCombo = categorias.find((categoria) => categoria.id === produto.categoria_id)?.nome === "Combos";
+            const eGeloDeSabor = ["gelinho gourmet", "gelo de sabor"].includes(
+              produto.nome.trim().toLowerCase()
+            );
 
             return (
               <article
@@ -473,7 +539,7 @@ export default function Catalogo({
                         {semEstoque ? "Indisponível" : `${produto.estoque} em estoque`}
                       </p>
                     </div>
-                    {item ? (
+                    {item && !eGeloDeSabor ? (
                       <div className="flex items-center gap-3 rounded-lg bg-zinc-800 p-1">
                         <button
                           onClick={() => alterarQuantidade(produto, -1)}
@@ -494,11 +560,17 @@ export default function Catalogo({
                       </div>
                     ) : (
                       <button
-                        onClick={() => eCombo ? abrirConfiguracaoCombo(produto) : alterarQuantidade(produto, 1)}
+                        onClick={() =>
+                          eCombo
+                            ? abrirConfiguracaoCombo(produto)
+                            : eGeloDeSabor
+                              ? abrirConfiguracaoGelo(produto)
+                              : alterarQuantidade(produto, 1)
+                        }
                         disabled={semEstoque || !atendimentoAberto}
                         className="rounded-lg bg-yellow-400 px-4 py-2 font-bold text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
                       >
-                        Adicionar
+                        {eGeloDeSabor ? "Escolher sabor" : "Adicionar"}
                       </button>
                     )}
                   </div>
@@ -506,6 +578,49 @@ export default function Catalogo({
               </article>
             );
           })}
+        </div>
+      )}
+
+      {geloEmConfiguracao && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4" onClick={() => setGeloEmConfiguracao(null)}>
+          <div className="w-full max-w-md rounded-2xl border border-yellow-400/50 bg-zinc-950 p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-black text-yellow-400">Gelo de sabor</h2>
+                <p className="text-zinc-300">Escolha o sabor e a quantidade.</p>
+              </div>
+              <button type="button" onClick={() => setGeloEmConfiguracao(null)} className="rounded-lg p-2 hover:bg-zinc-800"><X /></button>
+            </div>
+
+            <label className="block text-sm font-bold">
+              Sabor
+              <select
+                value={saborGeloAvulso}
+                onChange={(event) => setSaborGeloAvulso(event.target.value)}
+                className="mt-2 w-full rounded-lg bg-zinc-800 p-3 font-normal"
+              >
+                {saboresDoProduto(geloEmConfiguracao).map((sabor) => (
+                  <option key={sabor} value={sabor}>{sabor}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="mt-4 block text-sm font-bold">
+              Quantidade
+              <input
+                type="number"
+                min={1}
+                max={estoqueDisponivel(geloEmConfiguracao)}
+                value={quantidadeGeloAvulso}
+                onChange={(event) => setQuantidadeGeloAvulso(Number(event.target.value))}
+                className="mt-2 w-full rounded-lg bg-zinc-800 p-3 font-normal"
+              />
+            </label>
+
+            <button type="button" onClick={confirmarGelo} className="mt-6 w-full rounded-lg bg-yellow-400 px-4 py-3 font-bold text-black hover:bg-yellow-300">
+              Adicionar ao carrinho
+            </button>
+          </div>
         </div>
       )}
 
@@ -579,12 +694,13 @@ export default function Catalogo({
               ) : (
                 <div className="space-y-4">
                   {carrinho.map((item) => (
-                    <div key={item.id} className="flex items-center gap-3 rounded-xl bg-zinc-900 p-3">
+                    <div key={chaveItem(item)} className="flex items-center gap-3 rounded-xl bg-zinc-900 p-3">
                       <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-zinc-800">
                         {item.imagem ? <Image src={item.imagem} alt="" fill className="object-cover" sizes="64px" /> : null}
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-bold">{item.nome}</p>
+                        {item.sabor && <p className="text-xs text-zinc-300">Sabor: {item.sabor}</p>}
                         <p className="text-sm text-yellow-400">{formatarPreco(item.preco)}</p>
                         {item.escolhasCombo && <p className="mt-1 text-xs text-zinc-400">{item.escolhasCombo.askov ? `Askov: ${item.escolhasCombo.askov} · ` : ""}Energetico: {item.escolhasCombo.energetico} · 6 gelos</p>}
                       </div>
@@ -592,7 +708,7 @@ export default function Catalogo({
                         <button onClick={() => alterarQuantidade(item, -1)} className="p-1 text-zinc-300"><Minus size={16} /></button>
                         <span className="w-5 text-center">{item.quantidade}</span>
                         <button onClick={() => alterarQuantidade(item, 1)} className="p-1 text-zinc-300"><Plus size={16} /></button>
-                        <button onClick={() => setCarrinho((itens) => itens.filter((produto) => produto.id !== item.id))} className="ml-1 p-1 text-red-400" aria-label={`Remover ${item.nome}`}><Trash2 size={16} /></button>
+                        <button onClick={() => setCarrinho((itens) => itens.filter((produto) => chaveItem(produto) !== chaveItem(item)))} className="ml-1 p-1 text-red-400" aria-label={`Remover ${item.nome}`}><Trash2 size={16} /></button>
                       </div>
                     </div>
                   ))}
