@@ -446,9 +446,15 @@ export default function Catalogo({
       return;
     }
 
-    await navigator.clipboard.writeText(pedido);
-    window.open(`https://wa.me/${WHATSAPP_GUETTO}?text=${encodeURIComponent(pedido)}`, "_blank", "noopener,noreferrer");
-    alert("Pedido copiado e WhatsApp aberto. Confira os dados e envie para a Guetto Delivery.");
+    try {
+      await navigator.clipboard.writeText(pedido);
+    } catch {
+      // Copiar é apenas uma conveniência e não pode impedir a abertura do WhatsApp.
+    }
+
+    window.location.assign(
+      `https://wa.me/${WHATSAPP_GUETTO}?text=${encodeURIComponent(pedido)}`
+    );
   }
 
   return (
