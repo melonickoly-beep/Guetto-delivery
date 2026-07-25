@@ -33,6 +33,7 @@ type Pedido = {
     nome: string;
     quantidade: number;
     preco_unitario: number;
+    escolhas_combo?: Record<string, string | string[]> | null;
   }>;
   total: number;
   pagamento: string[];
@@ -225,12 +226,116 @@ export default function AdminPage() {
     if (!resposta.ok) {
       const erro = await resposta.json().catch(() => null);
       alert(erro?.error ?? "Não foi possível atualizar o pedido.");
-      return;
+      return false;
     }
 
     setPedidos((atuais) =>
       atuais.map((pedido) => (pedido.id === id ? { ...pedido, status } : pedido))
     );
+    return true;
+  }
+
+  function textoSeguro(valor: unknown) {
+    return String(valor ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function imprimirPedido(pedido: Pedido, janela: Window | null = null) {
+    const janelaImpressao =
+      janela ?? window.open("", "_blank", "width=420,height=720");
+
+    if (!janelaImpressao) {
+      alert("Permita pop-ups neste site para imprimir o pedido.");
+      return;
+    }
+
+    const moeda = new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    });
+    const detalhesItens = (pedido.itens ?? [])
+      .map((item) => {
+        const escolhas = Object.entries(item.escolhas_combo ?? {})
+          .map(([nomeEscolha, valor]) => {
+            const escolha = Array.isArray(valor) ? valor.join(", ") : valor;
+            return `<div class="detalhe">${textoSeguro(nomeEscolha)}: ${textoSeguro(escolha)}</div>`;
+          })
+          .join("");
+        const subtotalItem = Number(item.preco_unitario) * item.quantidade;
+
+        return `
+          <div class="item">
+            <div><strong>${item.quantidade}x ${textoSeguro(item.nome)}</strong></div>
+            ${escolhas}
+            <div class="linha"><span>${moeda.format(Number(item.preco_unitario))} cada</span><span>${moeda.format(subtotalItem)}</span></div>
+          </div>
+        `;
+      })
+      .join("");
+
+    janelaImpressao.document.open();
+    janelaImpressao.document.write(`<!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8">
+          <title>Pedido ${textoSeguro(pedido.id.slice(0, 8))}</title>
+          <style>
+            @page { size: 80mm auto; margin: 3mm; }
+            * { box-sizing: border-box; }
+            body { width: 74mm; margin: 0 auto; color: #000; background: #fff; font: 12px/1.35 Arial, sans-serif; }
+            h1, h2, p { margin: 0; }
+            h1 { text-align: center; font-size: 20px; }
+            h2 { margin-top: 3px; text-align: center; font-size: 14px; }
+            .separador { margin: 8px 0; border-top: 1px dashed #000; }
+            .item { margin-bottom: 8px; }
+            .detalhe { padding-left: 8px; font-size: 11px; }
+            .linha { display: flex; justify-content: space-between; gap: 8px; }
+            .total { font-size: 17px; font-weight: 800; }
+            .rodape { margin-top: 10px; text-align: center; font-weight: 700; }
+          </style>
+        </head>
+        <body>
+          <h1>GUETTO DELIVERY</h1>
+          <h2>PEDIDO #${textoSeguro(pedido.id.slice(0, 8).toUpperCase())}</h2>
+          <p style="text-align:center">${textoSeguro(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(pedido.created_at)))}</p>
+          <div class="separador"></div>
+          <p><strong>Cliente:</strong> ${textoSeguro(pedido.cliente_nome)}</p>
+          <p><strong>Telefone:</strong> ${textoSeguro(pedido.telefone)}</p>
+          <p><strong>Endereço:</strong> ${textoSeguro(pedido.endereco)}</p>
+          ${pedido.referencia ? `<p><strong>Referência:</strong> ${textoSeguro(pedido.referencia)}</p>` : ""}
+          <div class="separador"></div>
+          ${detalhesItens}
+          <div class="separador"></div>
+          <div class="linha total"><span>TOTAL</span><span>${moeda.format(Number(pedido.total))}</span></div>
+          <div class="separador"></div>
+          ${(pedido.pagamento ?? []).map((pagamento) => `<p><strong>Pagamento:</strong> ${textoSeguro(pagamento)}</p>`).join("")}
+          ${pedido.observacao ? `<p><strong>Observação:</strong> ${textoSeguro(pedido.observacao)}</p>` : ""}
+          <p class="rodape">Separar e conferir antes da entrega</p>
+          <script>window.addEventListener("load", () => setTimeout(() => window.print(), 200));<\/script>
+        </body>
+      </html>`);
+    janelaImpressao.document.close();
+  }
+
+  async function confirmarEImprimirPedido(pedido: Pedido) {
+    const janelaImpressao = window.open("", "_blank", "width=420,height=720");
+    if (!janelaImpressao) {
+      alert("Permita pop-ups neste site para confirmar e imprimir o pedido.");
+      return;
+    }
+
+    janelaImpressao.document.write("<p>Preparando pedido para impressão...</p>");
+    const atualizado = await atualizarStatusPedido(pedido.id, "em_preparo");
+    if (!atualizado) {
+      janelaImpressao.close();
+      return;
+    }
+
+    imprimirPedido({ ...pedido, status: "em_preparo" }, janelaImpressao);
   }
 
   async function sair() {
@@ -708,6 +813,23 @@ export default function AdminPage() {
                   </div>
                 )}
                 <div className="mt-4 flex flex-wrap gap-2 border-t border-zinc-800 pt-4">
+                  {pedido.status === "novo" ? (
+                    <button
+                      type="button"
+                      onClick={() => confirmarEImprimirPedido(pedido)}
+                      className="rounded-lg bg-yellow-400 px-3 py-2 text-sm font-bold text-black hover:bg-yellow-300"
+                    >
+                      Confirmar e imprimir
+                    </button>
+                  ) : pedido.status !== "cancelado" ? (
+                    <button
+                      type="button"
+                      onClick={() => imprimirPedido(pedido)}
+                      className="rounded-lg border border-yellow-400 px-3 py-2 text-sm font-bold text-yellow-400 hover:bg-yellow-400/10"
+                    >
+                      Imprimir novamente
+                    </button>
+                  ) : null}
                   <a
                     href={`/acompanhar/${pedido.id}`}
                     target="_blank"
