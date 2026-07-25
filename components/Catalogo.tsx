@@ -411,16 +411,6 @@ export default function Catalogo({
       return;
     }
 
-    const itensSucosERefrigerantes = itensPorCategoria("sucos e refrigerantes");
-    if (
-      itensSucosERefrigerantes.length > 0 &&
-      !temCaixaFechada &&
-      subtotal(itensSucosERefrigerantes) < 24
-    ) {
-      alert("O pedido mínimo para Sucos e Refrigerantes é de R$ 24,00.");
-      return;
-    }
-
     if (temCervejaAvulsa && !temCaixaFechada) {
       alert("Cervejas avulsas só são entregues junto com pelo menos uma caixa fechada.");
       return;
