@@ -399,6 +399,7 @@ export default function Catalogo({
     if (
       itensTabacaria.length > 0 &&
       !temCombo &&
+      !temCaixaFechada &&
       subtotal(itensTabacaria) < 20
     ) {
       alert("O pedido mínimo para itens da Tabacaria é de R$ 20,00.");
@@ -563,9 +564,9 @@ export default function Catalogo({
           Paranacity: pedido mínimo R$ 20 · Cruzeiro do Sul: pedido mínimo R$ 35
         </p>
         <p className="mt-1 text-xs text-zinc-400">
-          Com uma caixa de cerveja, refrigerantes podem ser adicionados sem mínimo
-          próprio. Com um combo, itens de tabacaria também podem ser adicionados
-          individualmente.
+          Com uma caixa de cerveja, qualquer item avulso pode ser adicionado sem
+          mínimo próprio. Com um combo, itens de tabacaria também podem ser
+          adicionados individualmente.
         </p>
       </div>
 
