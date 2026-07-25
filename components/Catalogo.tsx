@@ -394,9 +394,6 @@ export default function Catalogo({
     const itensCombos = itensPorCategoria("combos");
     const temCombo = itensCombos.length > 0;
     const itensCerveja = itensPorCategoria("cervejas");
-    const temCervejaAvulsa = itensCerveja.some(
-      (item) => item.tipo_venda === "avulso"
-    );
     const temCaixaFechada = itensCerveja.some(
       (item) => item.tipo_venda !== "avulso"
     );
@@ -408,16 +405,6 @@ export default function Catalogo({
       subtotal(itensTabacaria) < 20
     ) {
       alert("O pedido mínimo para itens da Tabacaria é de R$ 20,00.");
-      return;
-    }
-
-    if (temCervejaAvulsa && !temCaixaFechada) {
-      alert("Cervejas avulsas só são entregues junto com pelo menos uma caixa fechada.");
-      return;
-    }
-
-    if (quantidadeGarrafas300 > 0 && quantidadeGarrafas300 < 10) {
-      alert("O pedido mínimo para cervejas em garrafa de 300 ml é de 10 unidades.");
       return;
     }
 
@@ -1043,7 +1030,7 @@ export default function Catalogo({
                   {quantidadeGarrafas300 > 0 && (
                     <div className="rounded-xl border border-yellow-400/50 bg-yellow-400/10 p-4 text-sm">
                       <p className="font-bold text-yellow-300">Garrafinhas de 300 ml</p>
-                      <p className="mt-1 text-zinc-200">Pedido mínimo: 10 unidades. O vasilhame é obrigatório, não está incluso e a loja não empresta.</p>
+                      <p className="mt-1 text-zinc-200">O vasilhame é obrigatório, não está incluso e a loja não empresta.</p>
                       <label className="mt-3 flex items-start gap-2 font-semibold">
                         <input type="checkbox" checked={vasilhameConfirmado} onChange={(event) => setVasilhameConfirmado(event.target.checked)} className="mt-1" />
                         Confirmo que vou levar o vasilhame.
