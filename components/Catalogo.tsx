@@ -368,7 +368,19 @@ export default function Catalogo({
       return;
     }
 
-    const pedidoMinimoCidade = cidadeEntrega === "Paranacity" ? 20 : 35;
+    const categoriaPorId = new Map(categorias.map((categoria) => [categoria.id, categoria.nome.toLowerCase()]));
+    const itensPorCategoria = (nomeCategoria: string) =>
+      carrinho.filter((item) => categoriaPorId.get(item.categoria_id) === nomeCategoria);
+    const subtotal = (itens: ItemCarrinho[]) =>
+      itens.reduce((total, item) => total + calcularSubtotalItem(item), 0);
+    const itensTabacaria = itensPorCategoria("tabacaria");
+    const somenteTabacaria =
+      itensTabacaria.length > 0 && itensTabacaria.length === carrinho.length;
+    const pedidoMinimoCidade = somenteTabacaria
+      ? 20
+      : cidadeEntrega === "Paranacity"
+        ? 25
+        : 35;
     if (valorTotal < pedidoMinimoCidade) {
       alert(`O pedido mínimo para entrega em ${cidadeEntrega} é de ${formatarPreco(pedidoMinimoCidade)}.`);
       return;
@@ -378,12 +390,6 @@ export default function Catalogo({
       alert("Escolha uma forma de pagamento.");
       return;
     }
-
-    const categoriaPorId = new Map(categorias.map((categoria) => [categoria.id, categoria.nome.toLowerCase()]));
-    const itensPorCategoria = (nomeCategoria: string) =>
-      carrinho.filter((item) => categoriaPorId.get(item.categoria_id) === nomeCategoria);
-    const subtotal = (itens: ItemCarrinho[]) =>
-      itens.reduce((total, item) => total + calcularSubtotalItem(item), 0);
 
     const itensCombos = itensPorCategoria("combos");
     const temCombo = itensCombos.length > 0;
@@ -395,7 +401,6 @@ export default function Catalogo({
       (item) => item.tipo_venda !== "avulso"
     );
 
-    const itensTabacaria = itensPorCategoria("tabacaria");
     if (
       itensTabacaria.length > 0 &&
       !temCombo &&
@@ -560,9 +565,6 @@ export default function Catalogo({
         </button>
         </div>
         <div className="mt-6 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent" />
-        <p className="mt-4 text-sm text-zinc-300">
-          Paranacity: pedido mínimo R$ 20 · Cruzeiro do Sul: pedido mínimo R$ 35
-        </p>
       </div>
 
       {!atendimentoAberto && (
@@ -1071,7 +1073,7 @@ export default function Catalogo({
                   <input value={referencia} onChange={(event) => setReferencia(event.target.value)} placeholder="Ponto de referência (opcional)" className="w-full rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2" />
                   <select value={cidadeEntrega} onChange={(event) => setCidadeEntrega(event.target.value as "" | "Paranacity" | "Cruzeiro do Sul")} className="w-full rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2">
                     <option value="">Escolha a cidade de entrega</option>
-                    <option value="Paranacity">Paranacity — pedido mínimo R$ 20,00</option>
+                    <option value="Paranacity">Paranacity — pedido mínimo R$ 25,00</option>
                     <option value="Cruzeiro do Sul">Cruzeiro do Sul — pedido mínimo R$ 35,00</option>
                   </select>
 
