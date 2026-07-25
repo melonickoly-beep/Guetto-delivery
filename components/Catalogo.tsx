@@ -536,7 +536,7 @@ export default function Catalogo({
   }
 
   return (
-    <section className="max-w-6xl mx-auto px-5 py-10 pb-28">
+    <section className="mx-auto max-w-[90rem] px-5 py-10 pb-28 xl:pr-[21rem]">
       <div className="mb-6 rounded-2xl border border-white/10 bg-black/25 p-6 shadow-2xl backdrop-blur-sm sm:p-8">
         <div className="flex items-end justify-between gap-4">
         <div>
@@ -777,6 +777,105 @@ export default function Catalogo({
         </div>
       )}
 
+      <aside className="fixed bottom-4 right-4 top-28 z-40 hidden w-72 flex-col overflow-hidden rounded-2xl border border-yellow-400/40 bg-zinc-950/95 shadow-2xl backdrop-blur xl:flex">
+        <div className="border-b border-zinc-800 p-5">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 text-lg font-black">
+              <ShoppingBag size={20} className="text-yellow-400" />
+              Seu carrinho
+            </h2>
+            <span className="rounded-full bg-yellow-400 px-2.5 py-1 text-xs font-black text-black">
+              {quantidadeTotal} {quantidadeTotal === 1 ? "item" : "itens"}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4">
+          {carrinho.length === 0 ? (
+            <div className="grid h-full place-items-center text-center text-sm text-zinc-400">
+              <div>
+                <ShoppingBag className="mx-auto mb-3 text-zinc-600" size={38} />
+                <p>Seu carrinho está vazio.</p>
+                <p className="mt-1 text-xs">Adicione produtos para ver o total.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {carrinho.map((item) => (
+                <div
+                  key={`mini-${chaveItem(item)}`}
+                  className="rounded-xl border border-zinc-800 bg-zinc-900 p-3"
+                >
+                  <div className="flex justify-between gap-2">
+                    <p className="line-clamp-2 text-sm font-bold">{item.nome}</p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCarrinho((itens) =>
+                          itens.filter(
+                            (produto) => chaveItem(produto) !== chaveItem(item)
+                          )
+                        )
+                      }
+                      className="shrink-0 text-red-400 hover:text-red-300"
+                      aria-label={`Remover ${item.nome}`}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                  {item.sabor && (
+                    <p className="mt-1 text-xs text-zinc-400">Sabor: {item.sabor}</p>
+                  )}
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1 rounded-lg bg-zinc-800 p-1">
+                      <button
+                        type="button"
+                        onClick={() => alterarQuantidade(item, -1)}
+                        className="rounded p-1 hover:bg-zinc-700"
+                        aria-label={`Diminuir ${item.nome}`}
+                      >
+                        <Minus size={14} />
+                      </button>
+                      <span className="w-5 text-center text-sm font-bold">
+                        {item.quantidade}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => alterarQuantidade(item, 1)}
+                        className="rounded p-1 hover:bg-zinc-700"
+                        aria-label={`Aumentar ${item.nome}`}
+                      >
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                    <p className="text-sm font-black text-yellow-400">
+                      {formatarPreco(calcularSubtotalItem(item))}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-zinc-800 bg-black/30 p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <span className="font-bold">Total</span>
+            <span className="text-xl font-black text-yellow-400">
+              {formatarPreco(valorTotal)}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCarrinhoAberto(true)}
+            disabled={carrinho.length === 0}
+            className="w-full rounded-xl bg-yellow-400 px-4 py-3 font-black text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
+          >
+            Finalizar pedido
+          </button>
+        </div>
+      </aside>
+
       {comboEmConfiguracao && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4" onClick={() => setComboEmConfiguracao(null)}>
           <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-yellow-400/50 bg-zinc-950 p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
@@ -833,7 +932,7 @@ export default function Catalogo({
         <button
           type="button"
           onClick={() => setCarrinhoAberto(true)}
-          className="fixed bottom-4 left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-center justify-between rounded-2xl bg-yellow-400 px-5 py-4 font-black text-black shadow-2xl hover:bg-yellow-300"
+          className="fixed bottom-4 left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-center justify-between rounded-2xl bg-yellow-400 px-5 py-4 font-black text-black shadow-2xl hover:bg-yellow-300 xl:hidden"
         >
           <span className="flex items-center gap-2">
             <ShoppingBag size={20} />

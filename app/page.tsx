@@ -59,10 +59,10 @@ export default async function Home() {
           <Image
             src="/images/logo.png"
             alt="Guetto Delivery"
-            width={150}
-            height={150}
+            width={220}
+            height={220}
             priority
-            className="h-24 w-24 object-contain sm:h-28 sm:w-28"
+            className="h-32 w-32 object-contain sm:h-40 sm:w-40"
           />
           <div className="text-right">
             <p className="text-sm font-semibold uppercase tracking-[0.25em] text-yellow-400">
