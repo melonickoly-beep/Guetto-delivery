@@ -96,7 +96,9 @@ export default function Catalogo({
   horarioFechamento: string;
 }) {
   const categoriaInicial =
-    categorias.find((categoria) => categoria.nome === "Combos")?.id ??
+    produtos.some((produto) => produto.destaque)
+      ? "destaques"
+      : categorias.find((categoria) => categoria.nome === "Combos")?.id ??
     categorias[0]?.id ??
     null;
   const [categoriaAtiva, setCategoriaAtiva] = useState<string | null>(
@@ -106,6 +108,7 @@ export default function Catalogo({
   const [carrinhoAberto, setCarrinhoAberto] = useState(false);
   const [revisaoAberta, setRevisaoAberta] = useState(false);
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
+  const [carrinhoCarregado, setCarrinhoCarregado] = useState(false);
   const [nome, setNome] = useState("");
   const [sobrenome, setSobrenome] = useState("");
   const [telefone, setTelefone] = useState("");
@@ -132,6 +135,22 @@ export default function Catalogo({
     return () => window.clearInterval(intervalo);
   }, []);
 
+  useEffect(() => {
+    try {
+      const salvo = window.localStorage.getItem("guetto_carrinho");
+      if (salvo) setCarrinho(JSON.parse(salvo) as ItemCarrinho[]);
+    } catch {
+      window.localStorage.removeItem("guetto_carrinho");
+    } finally {
+      setCarrinhoCarregado(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!carrinhoCarregado) return;
+    window.localStorage.setItem("guetto_carrinho", JSON.stringify(carrinho));
+  }, [carrinho, carrinhoCarregado]);
+
   function estoqueDisponivel(produto: Produto) {
     if (produto.grupo_estoque && typeof produto.estoque_unidades === "number") {
       return Math.floor(produto.estoque_unidades / (produto.unidades_por_venda || 1));
@@ -149,7 +168,10 @@ export default function Catalogo({
       const disponiveis = produtos.filter((produto) => estoqueDisponivel(produto) > 0);
       return disponiveis.filter((produto) => {
         const correspondeCategoria =
-          termo.length > 0 || produto.categoria_id === categoriaAtiva;
+          termo.length > 0 ||
+          (categoriaAtiva === "destaques"
+            ? produto.destaque
+            : produto.categoria_id === categoriaAtiva);
         const textoProduto = `${produto.nome} ${produto.descricao ?? ""}`
           .normalize("NFD")
           .replace(/[\u0300-\u036f]/g, "")
@@ -549,6 +571,22 @@ export default function Catalogo({
           />
         </label>
         <div className="mt-3 flex gap-3 overflow-x-auto pb-1">
+          {produtos.some((produto) => produto.destaque && estoqueDisponivel(produto) > 0) && (
+            <button
+              type="button"
+              onClick={() => {
+                setBusca("");
+                setCategoriaAtiva("destaques");
+              }}
+              className={`whitespace-nowrap rounded-full border px-4 py-2 font-semibold transition ${
+                categoriaAtiva === "destaques" && !busca
+                  ? "border-yellow-400 bg-yellow-400 text-black"
+                  : "border-zinc-700 bg-zinc-900 hover:border-yellow-400"
+              }`}
+            >
+              ⭐ Destaques
+            </button>
+          )}
           {categorias.map((categoria) => (
             <button
               key={categoria.id}
@@ -590,7 +628,7 @@ export default function Catalogo({
             return (
               <article
                 key={produto.id}
-                className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/95 shadow-xl transition hover:-translate-y-1 hover:border-yellow-400/60"
+                className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/95 shadow-xl transition hover:-translate-y-1 hover:border-yellow-400/60"
               >
                 <div className="relative aspect-square bg-white">
                   {produto.imagem ? (
@@ -599,7 +637,7 @@ export default function Catalogo({
                       alt={produto.nome}
                       fill
                       className="object-contain p-3"
-                      sizes="(max-width: 768px) 100vw, 33vw"
+                      sizes="(max-width: 640px) calc(100vw - 2.5rem), (max-width: 1024px) 50vw, 33vw"
                     />
                   ) : (
                     <div className="grid h-full place-items-center text-zinc-500">
@@ -612,12 +650,12 @@ export default function Catalogo({
                     </span>
                   )}
                 </div>
-                <div className="p-5">
-                  <h3 className="text-xl font-bold">{produto.nome}</h3>
+                <div className="flex flex-1 flex-col p-5">
+                  <h3 className="line-clamp-2 min-h-14 text-xl font-bold">{produto.nome}</h3>
                   {produto.descricao && (
                     <p className="mt-2 line-clamp-2 min-h-10 text-sm text-zinc-400">{produto.descricao}</p>
                   )}
-                  <div className="mt-5 flex items-center justify-between gap-3">
+                  <div className="mt-auto flex items-end justify-between gap-3 pt-5">
                     <div>
                       <p className="price-tag inline-flex rounded-md bg-red-600 px-3 py-1.5 text-xl font-black text-white">
                         {formatarPreco(produto.preco)}

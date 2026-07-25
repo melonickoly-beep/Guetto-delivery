@@ -168,6 +168,27 @@ export default function AdminPage() {
     setProdutos(data ?? []);
   }
 
+  async function atualizarProdutoRapido(
+    id: string,
+    alteracoes: Partial<Pick<Produto, "preco" | "estoque">>
+  ) {
+    const { error } = await supabase
+      .from("produtos")
+      .update(alteracoes)
+      .eq("id", id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setProdutos((atuais) =>
+      atuais.map((produto) =>
+        produto.id === id ? { ...produto, ...alteracoes } : produto
+      )
+    );
+  }
+
   async function carregarPedidos() {
     const { data, error } = await supabase
       .from("pedidos")
@@ -295,38 +316,71 @@ export default function AdminPage() {
     alert(`Atendimento definido: das ${horarioAbertura} às ${horarioFechamento}.`);
   }
 
-  function definirImagem(file: File) {
+  async function otimizarImagem(file: File) {
+    const imagem = await createImageBitmap(file);
+    const limite = 1200;
+    const escala = Math.min(1, limite / Math.max(imagem.width, imagem.height));
+    const largura = Math.max(1, Math.round(imagem.width * escala));
+    const altura = Math.max(1, Math.round(imagem.height * escala));
+    const canvas = document.createElement("canvas");
+    canvas.width = largura;
+    canvas.height = altura;
+    const contexto = canvas.getContext("2d");
+
+    if (!contexto) {
+      imagem.close();
+      return file;
+    }
+
+    contexto.fillStyle = "#ffffff";
+    contexto.fillRect(0, 0, largura, altura);
+    contexto.drawImage(imagem, 0, 0, largura, altura);
+    imagem.close();
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/webp", 0.82)
+    );
+
+    if (!blob) return file;
+    const nomeBase = file.name.replace(/\.[^.]+$/, "") || "produto";
+    return new File([blob], `${nomeBase}.webp`, { type: "image/webp" });
+  }
+
+  async function definirImagem(file: File) {
     if (!file.type.startsWith("image/")) {
       alert("Cole ou selecione um arquivo de imagem.");
       return;
     }
 
-    setArquivo(file);
+    const arquivoOtimizado = await otimizarImagem(file);
+    setArquivo(arquivoOtimizado);
     setPreview((previewAnterior) => {
       if (previewAnterior.startsWith("blob:")) URL.revokeObjectURL(previewAnterior);
-      return URL.createObjectURL(file);
+      return URL.createObjectURL(arquivoOtimizado);
     });
   }
 
-  function selecionarImagem(e: ChangeEvent<HTMLInputElement>) {
+  async function selecionarImagem(e: ChangeEvent<HTMLInputElement>) {
     if (!e.target.files?.length) return;
-    definirImagem(e.target.files[0]);
+    await definirImagem(e.target.files[0]);
   }
 
-  function colarImagem(e: ClipboardEvent<HTMLDivElement>) {
+  async function colarImagem(e: ClipboardEvent<HTMLDivElement>) {
     const imagem = Array.from(e.clipboardData.items)
       .find((item) => item.kind === "file" && item.type.startsWith("image/"))
       ?.getAsFile();
 
     if (!imagem) return;
     e.preventDefault();
-    definirImagem(imagem);
+    await definirImagem(imagem);
   }
 
   async function uploadImagem() {
     if (!arquivo) return "";
 
-    const extensao = arquivo.name.split(".").pop();
+    const extensao = arquivo.type === "image/webp"
+      ? "webp"
+      : arquivo.name.split(".").pop();
 
     const nomeArquivo =
       crypto.randomUUID() + "." + extensao;
@@ -834,6 +888,9 @@ export default function AdminPage() {
               <p className="mt-3 text-sm text-zinc-400">
                 Ou copie uma imagem e pressione <kbd className="rounded bg-zinc-700 px-2 py-1 text-zinc-200">Ctrl+V</kbd> nesta área.
               </p>
+              <p className="mt-2 text-xs text-emerald-300">
+                A imagem será centralizada, reduzida e convertida para WebP automaticamente.
+              </p>
             </div>
 
             {preview && (
@@ -845,7 +902,7 @@ export default function AdminPage() {
                   alt="Preview"
                   width={220}
                   height={220}
-                  className="rounded-lg border border-zinc-700 object-cover"
+                  className="aspect-square rounded-lg border border-zinc-700 bg-white object-contain p-2"
                 />
 
               </div>
@@ -977,7 +1034,7 @@ export default function AdminPage() {
                     alt={produto.nome}
                     width={90}
                     height={90}
-                    className="rounded-lg object-cover"
+                    className="aspect-square rounded-lg bg-white object-contain p-1"
                   />
                 ) : (
                   <div className="w-[90px] h-[90px] rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-500">
@@ -998,19 +1055,84 @@ export default function AdminPage() {
                     {produto.descricao}
                   </p>
 
-                  <p className="mt-2">
-                    <span className="font-semibold">
-                      Preço:
-                    </span>{" "}
-                    R$ {produto.preco.toFixed(2)}
-                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-4">
+                    <label className="flex items-center gap-2 text-sm">
+                      <span className="font-semibold">Preço R$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        defaultValue={produto.preco.toFixed(2)}
+                        onBlur={(event) => {
+                          const novoPreco = Number(event.target.value);
+                          if (
+                            Number.isFinite(novoPreco) &&
+                            novoPreco >= 0 &&
+                            novoPreco !== produto.preco
+                          ) {
+                            void atualizarProdutoRapido(produto.id, {
+                              preco: novoPreco,
+                            });
+                          }
+                        }}
+                        className="w-24 rounded-md bg-zinc-800 px-2 py-1.5"
+                        aria-label={`Preço de ${produto.nome}`}
+                      />
+                    </label>
 
-                  <p>
-                    <span className="font-semibold">
-                      Estoque:
-                    </span>{" "}
-                    {produto.estoque}
-                  </p>
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="font-semibold">Estoque</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void atualizarProdutoRapido(produto.id, {
+                            estoque: Math.max(0, produto.estoque - 1),
+                          })
+                        }
+                        className="grid h-8 w-8 place-items-center rounded-md bg-zinc-800 text-lg hover:bg-zinc-700"
+                        aria-label={`Diminuir estoque de ${produto.nome}`}
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        min="0"
+                        value={produto.estoque}
+                        onChange={(event) => {
+                          const novoEstoque = Math.max(
+                            0,
+                            Number(event.target.value)
+                          );
+                          setProdutos((atuais) =>
+                            atuais.map((item) =>
+                              item.id === produto.id
+                                ? { ...item, estoque: novoEstoque }
+                                : item
+                            )
+                          );
+                        }}
+                        onBlur={(event) =>
+                          void atualizarProdutoRapido(produto.id, {
+                            estoque: Math.max(0, Number(event.target.value)),
+                          })
+                        }
+                        className="w-16 rounded-md bg-zinc-800 px-2 py-1.5 text-center"
+                        aria-label={`Estoque de ${produto.nome}`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void atualizarProdutoRapido(produto.id, {
+                            estoque: produto.estoque + 1,
+                          })
+                        }
+                        className="grid h-8 w-8 place-items-center rounded-md bg-zinc-800 text-lg hover:bg-zinc-700"
+                        aria-label={`Aumentar estoque de ${produto.nome}`}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
 
                   {produto.destaque && (
                     <span className="inline-block mt-2 bg-yellow-400 text-black px-3 py-1 rounded-full text-sm font-bold">

@@ -5,15 +5,31 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100%;
+  scroll-behavior: smooth;
 }
 
 body {
   background:
     linear-gradient(rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.07)),
-    url("/images/cardapio-chalkboard-bg.png") center / cover fixed,
+    url("/images/cardapio-chalkboard-bg.webp") center / cover,
     #242424;
   color: white;
+  color-scheme: dark;
   font-family: Arial, Helvetica, sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a {
+  touch-action: manipulation;
 }
 
 .cardapio-title {
