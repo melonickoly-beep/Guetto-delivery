@@ -1,62 +1,36 @@
+import type { Metadata } from "next";
 import Image from "next/image";
-import Catalogo from "@/components/Catalogo";
-import { supabase } from "@/lib/supabase";
 
-export const dynamic = "force-dynamic";
+export const metadata: Metadata = {
+  title: "Guetto Delivery",
+  description: "Site temporariamente em manutenção.",
+  robots: {
+    index: false,
+    follow: false,
+    nocache: true,
+  },
+};
 
-export default async function Home() {
-  const { data: categorias } = await supabase
-    .from("categorias")
-    .select("*")
-    .order("nome");
-
-  const { data: produtos } = await supabase
-    .from("produtos")
-    .select("*")
-    .eq("disponivel", true)
-    .order("nome");
-
-  const { data: configuracaoEntrega } = await supabase
-    .from("configuracoes")
-    .select("valor")
-    .eq("chave", "tempo_entrega")
-    .maybeSingle();
-
-  const { data: configuracaoAbertura } = await supabase
-    .from("configuracoes")
-    .select("valor")
-    .eq("chave", "horario_abertura")
-    .maybeSingle();
-
-  const { data: configuracaoFechamento } = await supabase
-    .from("configuracoes")
-    .select("valor")
-    .eq("chave", "horario_fechamento")
-    .maybeSingle();
-
-  const tempoEntrega = Number(configuracaoEntrega?.valor) || 20;
-
+export default function Home() {
   return (
-    <main className="min-h-screen text-white">
-      <section className="py-12 border-b border-white/20">
-        <div className="max-w-7xl mx-auto text-center">
-          <Image
-            src="/images/logo.png"
-            alt="Guetto Delivery"
-            width={280}
-            height={280}
-            className="mx-auto"
-          />
-        </div>
-      </section>
+    <main className="min-h-screen flex items-center justify-center px-6 text-white">
+      <section className="max-w-xl text-center">
+        <Image
+          src="/images/logo.png"
+          alt="Guetto Delivery"
+          width={280}
+          height={280}
+          priority
+          className="mx-auto"
+        />
 
-      <Catalogo
-        categorias={categorias ?? []}
-        produtos={produtos ?? []}
-        tempoEntrega={tempoEntrega}
-        horarioAbertura={configuracaoAbertura?.valor ?? ""}
-        horarioFechamento={configuracaoFechamento?.valor ?? ""}
-      />
+        <h1 className="mt-8 text-3xl font-bold text-yellow-400">
+          Estamos preparando novidades
+        </h1>
+        <p className="mt-3 text-lg text-white/80">
+          Nosso delivery estará disponível em breve.
+        </p>
+      </section>
     </main>
   );
 }
