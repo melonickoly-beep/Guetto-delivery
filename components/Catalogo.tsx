@@ -385,21 +385,36 @@ export default function Catalogo({
     const subtotal = (itens: ItemCarrinho[]) =>
       itens.reduce((total, item) => total + calcularSubtotalItem(item), 0);
 
+    const itensCombos = itensPorCategoria("combos");
+    const temCombo = itensCombos.length > 0;
+    const itensCerveja = itensPorCategoria("cervejas");
+    const temCervejaAvulsa = itensCerveja.some(
+      (item) => item.tipo_venda === "avulso"
+    );
+    const temCaixaFechada = itensCerveja.some(
+      (item) => item.tipo_venda !== "avulso"
+    );
+
     const itensTabacaria = itensPorCategoria("tabacaria");
-    if (itensTabacaria.length > 0 && subtotal(itensTabacaria) < 20) {
+    if (
+      itensTabacaria.length > 0 &&
+      !temCombo &&
+      subtotal(itensTabacaria) < 20
+    ) {
       alert("O pedido mínimo para itens da Tabacaria é de R$ 20,00.");
       return;
     }
 
     const itensSucosERefrigerantes = itensPorCategoria("sucos e refrigerantes");
-    if (itensSucosERefrigerantes.length > 0 && subtotal(itensSucosERefrigerantes) < 24) {
+    if (
+      itensSucosERefrigerantes.length > 0 &&
+      !temCaixaFechada &&
+      subtotal(itensSucosERefrigerantes) < 24
+    ) {
       alert("O pedido mínimo para Sucos e Refrigerantes é de R$ 24,00.");
       return;
     }
 
-    const itensCerveja = itensPorCategoria("cervejas");
-    const temCervejaAvulsa = itensCerveja.some((item) => item.tipo_venda === "avulso");
-    const temCaixaFechada = itensCerveja.some((item) => item.tipo_venda !== "avulso");
     if (temCervejaAvulsa && !temCaixaFechada) {
       alert("Cervejas avulsas só são entregues junto com pelo menos uma caixa fechada.");
       return;
@@ -546,6 +561,11 @@ export default function Catalogo({
         <div className="mt-6 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent" />
         <p className="mt-4 text-sm text-zinc-300">
           Paranacity: pedido mínimo R$ 20 · Cruzeiro do Sul: pedido mínimo R$ 35
+        </p>
+        <p className="mt-1 text-xs text-zinc-400">
+          Com uma caixa de cerveja, refrigerantes podem ser adicionados sem mínimo
+          próprio. Com um combo, itens de tabacaria também podem ser adicionados
+          individualmente.
         </p>
       </div>
 
