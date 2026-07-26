@@ -55,16 +55,16 @@ export default async function Home() {
   return (
     <main className="min-h-screen text-white">
       <section className="border-b border-white/10 px-5 py-7">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-5">
+        <div className="mx-auto flex max-w-[90rem] flex-col items-center justify-center gap-3 text-center sm:flex-row sm:justify-between sm:gap-5 sm:text-right xl:pr-[21rem]">
           <Image
             src="/images/logo.png"
             alt="Guetto Delivery"
             width={220}
             height={220}
             priority
-            className="h-32 w-32 object-contain sm:h-40 sm:w-40"
+            className="h-32 w-32 shrink-0 object-contain sm:h-40 sm:w-40"
           />
-          <div className="text-right">
+          <div>
             <p className="text-sm font-semibold uppercase tracking-[0.25em] text-yellow-400">
               Delivery
             </p>
@@ -85,6 +85,36 @@ export default async function Home() {
         horarioAbertura={configuracao.get("horario_abertura") ?? ""}
         horarioFechamento={configuracao.get("horario_fechamento") ?? ""}
       />
+
+      <footer className="border-t border-white/10 bg-black/35 px-5 py-8 xl:pr-[21rem]">
+        <div className="mx-auto grid max-w-6xl gap-6 text-sm text-zinc-300 sm:grid-cols-3">
+          <div>
+            <p className="font-black text-yellow-400">Entrega</p>
+            <p className="mt-2">Paranacity e Cruzeiro do Sul</p>
+            <p>Sem taxa de entrega · respeitando o pedido mínimo</p>
+          </div>
+          <div>
+            <p className="font-black text-yellow-400">Pagamento</p>
+            <p className="mt-2">Pix, dinheiro, cartão de crédito ou débito</p>
+          </div>
+          <div>
+            <p className="font-black text-yellow-400">Atendimento</p>
+            <p className="mt-2">
+              Das {configuracao.get("horario_abertura") ?? "--:--"} às{" "}
+              {configuracao.get("horario_fechamento") ?? "--:--"}
+            </p>
+          </div>
+        </div>
+      </footer>
+
+      <a
+        href="https://wa.me/554491271708?text=Olá!%20Preciso%20de%20ajuda%20com%20meu%20pedido."
+        target="_blank"
+        rel="noreferrer"
+        className="fixed bottom-24 left-4 z-30 rounded-full bg-green-500 px-4 py-3 text-sm font-black text-black shadow-2xl transition hover:bg-green-400 xl:bottom-5"
+      >
+        💬 Ajuda no WhatsApp
+      </a>
     </main>
   );
 }

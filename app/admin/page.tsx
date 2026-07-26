@@ -295,6 +295,9 @@ export default function AdminPage() {
             .detalhe { padding-left: 8px; font-size: 11px; }
             .linha { display: flex; justify-content: space-between; gap: 8px; }
             .total { font-size: 17px; font-weight: 800; }
+            .pagamento { margin: 6px 0; border: 2px solid #000; padding: 6px; font-size: 15px; font-weight: 900; }
+            .pagamento.troco { border-width: 3px; font-size: 19px; line-height: 1.25; }
+            .pagamento-titulo { display: block; font-size: 12px; letter-spacing: .5px; }
             .rodape { margin-top: 10px; text-align: center; font-weight: 700; }
           </style>
         </head>
@@ -312,7 +315,7 @@ export default function AdminPage() {
           <div class="separador"></div>
           <div class="linha total"><span>TOTAL</span><span>${moeda.format(Number(pedido.total))}</span></div>
           <div class="separador"></div>
-          ${(pedido.pagamento ?? []).map((pagamento) => `<p><strong>Pagamento:</strong> ${textoSeguro(pagamento)}</p>`).join("")}
+          ${(pedido.pagamento ?? []).map((pagamento) => `<div class="pagamento ${/troco/i.test(pagamento) ? "troco" : ""}"><span class="pagamento-titulo">FORMA DE PAGAMENTO${/troco/i.test(pagamento) ? " / TROCO" : ""}</span>${textoSeguro(pagamento)}</div>`).join("")}
           ${pedido.observacao ? `<p><strong>Observação:</strong> ${textoSeguro(pedido.observacao)}</p>` : ""}
           <p class="rodape">Separar e conferir antes da entrega</p>
           <script>window.addEventListener("load", () => setTimeout(() => window.print(), 200));<\/script>

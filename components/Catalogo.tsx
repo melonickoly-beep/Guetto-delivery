@@ -120,6 +120,8 @@ export default function Catalogo({
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
   const [carrinhoCarregado, setCarrinhoCarregado] = useState(false);
   const [dadosClienteRecuperados, setDadosClienteRecuperados] = useState(false);
+  const [avisoCarrinho, setAvisoCarrinho] = useState("");
+  const [enviandoPedido, setEnviandoPedido] = useState(false);
   const [nome, setNome] = useState("");
   const [sobrenome, setSobrenome] = useState("");
   const [telefone, setTelefone] = useState("");
@@ -149,7 +151,61 @@ export default function Catalogo({
   useEffect(() => {
     try {
       const salvo = window.localStorage.getItem("guetto_carrinho");
-      if (salvo) setCarrinho(JSON.parse(salvo) as ItemCarrinho[]);
+      if (salvo) {
+        const itensSalvos = JSON.parse(salvo) as ItemCarrinho[];
+        const produtosAtuais = new Map(
+          produtos.map((produto) => [produto.id, produto])
+        );
+        let carrinhoFoiAjustado = false;
+        const itensAtualizados = Array.isArray(itensSalvos)
+          ? itensSalvos.flatMap((item) => {
+              const produtoAtual = produtosAtuais.get(item.id);
+              if (!produtoAtual) {
+                carrinhoFoiAjustado = true;
+                return [];
+              }
+
+              const estoqueGeral =
+                produtoAtual.grupo_estoque &&
+                typeof produtoAtual.estoque_unidades === "number"
+                  ? Math.floor(
+                      produtoAtual.estoque_unidades /
+                        (produtoAtual.unidades_por_venda || 1)
+                    )
+                  : produtoAtual.estoque;
+              const estoqueAtual =
+                item.sabor && produtoAtual.estoque_opcoes
+                  ? produtoAtual.estoque_opcoes[item.sabor] ?? 0
+                  : estoqueGeral;
+              const quantidade = Math.min(item.quantidade, estoqueAtual);
+
+              if (
+                quantidade < 1 ||
+                quantidade !== item.quantidade ||
+                Number(item.preco) !== Number(produtoAtual.preco)
+              ) {
+                carrinhoFoiAjustado = true;
+              }
+              if (quantidade < 1) return [];
+
+              return [
+                {
+                  ...produtoAtual,
+                  quantidade,
+                  sabor: item.sabor,
+                  escolhasCombo: item.escolhasCombo,
+                },
+              ];
+            })
+          : [];
+
+        setCarrinho(itensAtualizados);
+        if (carrinhoFoiAjustado) {
+          setAvisoCarrinho(
+            "Atualizamos seu carrinho conforme os preços e estoques atuais."
+          );
+        }
+      }
       if (window.localStorage.getItem("guetto_abrir_carrinho") === "1") {
         setCarrinhoAberto(true);
         window.localStorage.removeItem("guetto_abrir_carrinho");
@@ -159,7 +215,7 @@ export default function Catalogo({
     } finally {
       setCarrinhoCarregado(true);
     }
-  }, []);
+  }, [produtos]);
 
   useEffect(() => {
     if (!carrinhoCarregado) return;
@@ -395,6 +451,8 @@ export default function Catalogo({
   }
 
   async function finalizarPedido(confirmado = false) {
+    if (enviandoPedido) return;
+
     if (!atendimentoAberto) {
       alert("A Guetto Delivery está fechada no momento.");
       return;
@@ -513,63 +571,75 @@ export default function Catalogo({
       ...pagamentosFormatados.map((pagamento) => `- ${pagamento}`),
     ].join("\n");
 
-    const respostaPedido = await fetch("/api/pedidos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        cliente_nome: `${nome.trim()} ${sobrenome.trim()}`,
-        telefone: telefone.trim(),
-        endereco: `${rua.trim()}, ${numeroEndereco.trim()}`,
-        referencia: referencia.trim() || null,
-        itens: carrinho.map((item) => ({
-          produto_id: item.id,
-          quantidade: item.quantidade,
-          escolhas_combo: item.sabor
-            ? { sabor: item.sabor }
-            : item.escolhasCombo ?? null,
-        })),
-        pagamento: pagamentosFormatados,
-        tempo_entrega: tempoEntrega,
-        observacao: [
-          `Cidade de entrega: ${cidadeEntrega}.`,
-          ...(quantidadeGarrafas300 > 0 ? ["Vasilhame confirmado pelo cliente."] : []),
-        ].join(" "),
-      }),
-    });
-
-    if (!respostaPedido.ok) {
-      const erro = await respostaPedido.json().catch(() => null);
-      alert(erro?.error ?? "Não foi possível registrar o pedido.");
-      return;
-    }
-
-    const pedidoRegistrado = await respostaPedido.json();
-    const linkAcompanhamento = `${window.location.origin}/acompanhar/${pedidoRegistrado.id}`;
-    const pedidoFinal = `${pedido}\n\nAcompanhe seu pedido:\n${linkAcompanhamento}`;
-
-    const dadosCliente: DadosClienteSalvos = {
-      nome: nome.trim(),
-      sobrenome: sobrenome.trim(),
-      telefone: telefone.trim(),
-      rua: rua.trim(),
-      numeroEndereco: numeroEndereco.trim(),
-      referencia: referencia.trim(),
-      cidadeEntrega,
-    };
-    window.localStorage.setItem(
-      "guetto_dados_cliente",
-      JSON.stringify(dadosCliente)
-    );
-
+    setEnviandoPedido(true);
     try {
-      await navigator.clipboard.writeText(pedidoFinal);
-    } catch {
-      // Copiar é apenas uma conveniência e não pode impedir a abertura do WhatsApp.
-    }
+      const respostaPedido = await fetch("/api/pedidos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cliente_nome: `${nome.trim()} ${sobrenome.trim()}`,
+          telefone: telefone.trim(),
+          endereco: `${rua.trim()}, ${numeroEndereco.trim()}`,
+          referencia: referencia.trim() || null,
+          cidade_entrega: cidadeEntrega,
+          vasilhame_confirmado: vasilhameConfirmado,
+          itens: carrinho.map((item) => ({
+            produto_id: item.id,
+            quantidade: item.quantidade,
+            escolhas_combo: item.sabor
+              ? { sabor: item.sabor }
+              : item.escolhasCombo ?? null,
+          })),
+          pagamento: pagamentosFormatados,
+          tempo_entrega: tempoEntrega,
+          observacao: [
+            `Cidade de entrega: ${cidadeEntrega}.`,
+            ...(quantidadeGarrafas300 > 0 ? ["Vasilhame confirmado pelo cliente."] : []),
+          ].join(" "),
+        }),
+      });
 
-    window.location.assign(
-      `https://wa.me/${WHATSAPP_GUETTO}?text=${encodeURIComponent(pedidoFinal)}`
-    );
+      if (!respostaPedido.ok) {
+        const erro = await respostaPedido.json().catch(() => null);
+        alert(erro?.error ?? "Não foi possível registrar o pedido.");
+        return;
+      }
+
+      const pedidoRegistrado = await respostaPedido.json();
+      const linkAcompanhamento = `${window.location.origin}/acompanhar/${pedidoRegistrado.id}`;
+      const pedidoFinal = `${pedido}\n\nAcompanhe seu pedido:\n${linkAcompanhamento}`;
+
+      const dadosCliente: DadosClienteSalvos = {
+        nome: nome.trim(),
+        sobrenome: sobrenome.trim(),
+        telefone: telefone.trim(),
+        rua: rua.trim(),
+        numeroEndereco: numeroEndereco.trim(),
+        referencia: referencia.trim(),
+        cidadeEntrega,
+      };
+      window.localStorage.setItem(
+        "guetto_dados_cliente",
+        JSON.stringify(dadosCliente)
+      );
+      window.localStorage.setItem("guetto_carrinho", "[]");
+      setCarrinho([]);
+      setRevisaoAberta(false);
+
+      try {
+        await navigator.clipboard.writeText(pedidoFinal);
+      } catch {
+        // Copiar é apenas uma conveniência e não pode impedir a abertura do WhatsApp.
+      }
+
+      window.location.assign(
+        `https://wa.me/${WHATSAPP_GUETTO}?text=${encodeURIComponent(pedidoFinal)}`
+      );
+    } catch {
+      alert("Não foi possível enviar o pedido. Verifique sua internet e tente novamente.");
+    } finally {
+      setEnviandoPedido(false);
+    }
   }
 
   return (
@@ -620,7 +690,26 @@ export default function Catalogo({
             className="w-full rounded-xl border border-zinc-700 bg-zinc-900 py-3 pl-12 pr-4 outline-none focus:border-yellow-400"
           />
         </label>
-        <div className="mt-3 flex gap-3 overflow-x-auto pb-1">
+        <select
+          value={busca ? "" : categoriaAtiva ?? ""}
+          onChange={(event) => {
+            setBusca("");
+            setCategoriaAtiva(event.target.value);
+          }}
+          aria-label="Escolher categoria"
+          className="mt-3 w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3 font-bold text-white outline-none focus:border-yellow-400 sm:hidden"
+        >
+          {busca && <option value="">Resultados da busca</option>}
+          {produtos.some(
+            (produto) => produto.destaque && estoqueDisponivel(produto) > 0
+          ) && <option value="destaques">⭐ Mais pedidos e ofertas</option>}
+          {categorias.map((categoria) => (
+            <option key={categoria.id} value={categoria.id}>
+              {categoria.icone} {categoria.nome}
+            </option>
+          ))}
+        </select>
+        <div className="mt-3 hidden flex-wrap gap-2 sm:flex">
           {produtos.some((produto) => produto.destaque && estoqueDisponivel(produto) > 0) && (
             <button
               type="button"
@@ -634,7 +723,7 @@ export default function Catalogo({
                   : "border-zinc-700 bg-zinc-900 hover:border-yellow-400"
               }`}
             >
-              ⭐ Destaques
+              ⭐ Mais pedidos e ofertas
             </button>
           )}
           {categorias.map((categoria) => (
@@ -671,6 +760,7 @@ export default function Catalogo({
             );
             const eJackDaniels = produto.nome.trim().toLowerCase() === "whisky jack daniels";
             const exigeEscolhaDeSabor =
+              eCombo ||
               eGeloDeSabor ||
               eJackDaniels ||
               Boolean(produto.estoque_opcoes);
@@ -710,8 +800,12 @@ export default function Catalogo({
                       <p className="price-tag inline-flex rounded-md bg-red-600 px-3 py-1.5 text-xl font-black text-white">
                         {formatarPreco(produto.preco)}
                       </p>
-                      <p className="text-xs text-zinc-500">
-                        {semEstoque ? "Indisponível" : `${estoqueDisponivel(produto)} em estoque`}
+                      <p className="mt-1 text-xs text-zinc-400">
+                        {semEstoque
+                          ? "Indisponível"
+                          : estoqueDisponivel(produto) <= 5
+                            ? `Últimas ${estoqueDisponivel(produto)} unidades`
+                            : "Disponível"}
                       </p>
                     </div>
                     {item && !exigeEscolhaDeSabor ? (
@@ -745,7 +839,11 @@ export default function Catalogo({
                         disabled={semEstoque || !atendimentoAberto}
                         className="rounded-lg bg-yellow-400 px-4 py-2 font-bold text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
                       >
-                        {exigeEscolhaDeSabor ? "Escolher sabor" : "Adicionar"}
+                        {eCombo
+                          ? "Montar combo"
+                          : exigeEscolhaDeSabor
+                            ? "Escolher sabor"
+                            : "Adicionar"}
                       </button>
                     )}
                   </div>
@@ -803,6 +901,19 @@ export default function Catalogo({
               Adicionar ao carrinho
             </button>
           </div>
+        </div>
+      )}
+
+      {avisoCarrinho && (
+        <div className="mb-6 flex items-start justify-between gap-3 rounded-xl border border-yellow-400/40 bg-yellow-400/10 p-4 text-sm text-yellow-100">
+          <p>{avisoCarrinho}</p>
+          <button
+            type="button"
+            onClick={() => setAvisoCarrinho("")}
+            className="font-bold text-yellow-300"
+          >
+            Fechar
+          </button>
         </div>
       )}
 
@@ -941,6 +1052,25 @@ export default function Catalogo({
 
               <div>
                 <p className="text-sm font-bold">Escolha os 6 gelos</p>
+                <label className="mt-2 block text-xs font-semibold text-yellow-300">
+                  Atalho: usar o mesmo sabor nos 6 gelos
+                  <select
+                    value=""
+                    onChange={(event) => {
+                      if (event.target.value) {
+                        setSaboresGelo(Array(6).fill(event.target.value));
+                      }
+                    }}
+                    className="mt-1 w-full rounded-lg bg-zinc-800 p-2 text-sm font-normal text-white"
+                  >
+                    <option value="">Escolha um sabor para todos</option>
+                    {saboresDeGelo.map((opcao) => (
+                      <option key={opcao} value={opcao}>
+                        {opcao}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <div className="mt-2 grid grid-cols-2 gap-3">
                   {saboresGelo.map((sabor, indice) => (
                     <label key={indice} className="text-xs text-zinc-300">Gelo {indice + 1}
@@ -1017,6 +1147,25 @@ export default function Catalogo({
               {referencia.trim() && <p>Referência: {referencia.trim()}</p>}
             </div>
 
+            <div className="mt-5 rounded-xl border-2 border-yellow-400 bg-yellow-400/10 p-4">
+              <p className="text-sm font-black uppercase tracking-wide text-yellow-300">
+                Forma de pagamento
+              </p>
+              {(pagamentoDividido
+                ? [primeiroPagamento, segundoPagamento]
+                : [primeiroPagamento]
+              ).map((pagamento, indice) => (
+                <p key={`${pagamento.forma}-${indice}`} className="mt-1 text-lg font-black text-white">
+                  {resumoPagamento(
+                    pagamento,
+                    pagamentoDividido
+                      ? valorNumerico(pagamento.valor)
+                      : valorTotal
+                  )}
+                </p>
+              ))}
+            </div>
+
             <div className="mt-5 flex items-center justify-between text-xl font-black">
               <span>Total</span>
               <span className="text-yellow-400">{formatarPreco(valorTotal)}</span>
@@ -1032,9 +1181,12 @@ export default function Catalogo({
               <button
                 type="button"
                 onClick={() => finalizarPedido(true)}
-                className="rounded-xl bg-green-500 px-4 py-3 font-bold text-black hover:bg-green-400"
+                disabled={enviandoPedido}
+                className="rounded-xl bg-green-500 px-4 py-3 font-bold text-black hover:bg-green-400 disabled:cursor-wait disabled:bg-zinc-700 disabled:text-zinc-300"
               >
-                Confirmar e abrir WhatsApp
+                {enviandoPedido
+                  ? "Enviando pedido..."
+                  : "Confirmar e abrir WhatsApp"}
               </button>
             </div>
           </div>
@@ -1115,8 +1267,8 @@ export default function Catalogo({
                     <option value="Cruzeiro do Sul">Cruzeiro do Sul — pedido mínimo R$ 35,00</option>
                   </select>
 
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="font-bold">Pagamento</h3>
+                  <div className="flex items-center justify-between gap-3 rounded-xl border-2 border-yellow-400 bg-yellow-400/10 p-4">
+                    <h3 className="text-lg font-black uppercase tracking-wide text-yellow-300">Pagamento</h3>
                     <label className="flex items-center gap-2 text-sm text-zinc-300">
                       <input type="checkbox" checked={pagamentoDividido} onChange={(event) => setPagamentoDividido(event.target.checked)} />
                       Dividir em dois
