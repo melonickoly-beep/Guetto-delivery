@@ -48,6 +48,16 @@ type Pagamento = {
   trocoPara: string;
 };
 
+type DadosClienteSalvos = {
+  nome: string;
+  sobrenome: string;
+  telefone: string;
+  rua: string;
+  numeroEndereco: string;
+  referencia: string;
+  cidadeEntrega: "" | "Paranacity" | "Cruzeiro do Sul";
+};
+
 const formasPagamento: Array<{ valor: FormaPagamento; rotulo: string }> = [
   { valor: "pix", rotulo: "Pix" },
   { valor: "credito", rotulo: "Cartão de crédito" },
@@ -109,6 +119,7 @@ export default function Catalogo({
   const [revisaoAberta, setRevisaoAberta] = useState(false);
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
   const [carrinhoCarregado, setCarrinhoCarregado] = useState(false);
+  const [dadosClienteRecuperados, setDadosClienteRecuperados] = useState(false);
   const [nome, setNome] = useState("");
   const [sobrenome, setSobrenome] = useState("");
   const [telefone, setTelefone] = useState("");
@@ -154,6 +165,27 @@ export default function Catalogo({
     if (!carrinhoCarregado) return;
     window.localStorage.setItem("guetto_carrinho", JSON.stringify(carrinho));
   }, [carrinho, carrinhoCarregado]);
+
+  useEffect(() => {
+    try {
+      const dadosSalvos = window.localStorage.getItem(
+        "guetto_dados_cliente"
+      );
+      if (!dadosSalvos) return;
+
+      const dados = JSON.parse(dadosSalvos) as DadosClienteSalvos;
+      setNome(dados.nome ?? "");
+      setSobrenome(dados.sobrenome ?? "");
+      setTelefone(dados.telefone ?? "");
+      setRua(dados.rua ?? "");
+      setNumeroEndereco(dados.numeroEndereco ?? "");
+      setReferencia(dados.referencia ?? "");
+      setCidadeEntrega(dados.cidadeEntrega ?? "");
+      setDadosClienteRecuperados(true);
+    } catch {
+      window.localStorage.removeItem("guetto_dados_cliente");
+    }
+  }, []);
 
   function estoqueDisponivel(produto: Produto) {
     if (produto.grupo_estoque && typeof produto.estoque_unidades === "number") {
@@ -514,6 +546,20 @@ export default function Catalogo({
     const pedidoRegistrado = await respostaPedido.json();
     const linkAcompanhamento = `${window.location.origin}/acompanhar/${pedidoRegistrado.id}`;
     const pedidoFinal = `${pedido}\n\nAcompanhe seu pedido:\n${linkAcompanhamento}`;
+
+    const dadosCliente: DadosClienteSalvos = {
+      nome: nome.trim(),
+      sobrenome: sobrenome.trim(),
+      telefone: telefone.trim(),
+      rua: rua.trim(),
+      numeroEndereco: numeroEndereco.trim(),
+      referencia: referencia.trim(),
+      cidadeEntrega,
+    };
+    window.localStorage.setItem(
+      "guetto_dados_cliente",
+      JSON.stringify(dadosCliente)
+    );
 
     try {
       await navigator.clipboard.writeText(pedidoFinal);
@@ -1047,6 +1093,12 @@ export default function Catalogo({
                     </div>
                   )}
                   <h3 className="text-lg font-bold">Dados para o pedido</h3>
+                  {dadosClienteRecuperados && (
+                    <div className="rounded-lg border border-yellow-400/40 bg-yellow-400/10 px-3 py-2 text-sm text-yellow-100">
+                      Preenchemos seu último endereço. Você pode editar qualquer
+                      campo antes de finalizar.
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                     <input value={nome} onChange={(event) => setNome(event.target.value)} placeholder="Nome" className="min-w-0 rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2" />
                     <input value={sobrenome} onChange={(event) => setSobrenome(event.target.value)} placeholder="Sobrenome" className="min-w-0 rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2" />
