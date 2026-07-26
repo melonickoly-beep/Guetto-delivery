@@ -139,6 +139,10 @@ export default function Catalogo({
     try {
       const salvo = window.localStorage.getItem("guetto_carrinho");
       if (salvo) setCarrinho(JSON.parse(salvo) as ItemCarrinho[]);
+      if (window.localStorage.getItem("guetto_abrir_carrinho") === "1") {
+        setCarrinhoAberto(true);
+        window.localStorage.removeItem("guetto_abrir_carrinho");
+      }
     } catch {
       window.localStorage.removeItem("guetto_carrinho");
     } finally {
