@@ -312,6 +312,24 @@ export default function Catalogo({
     (total, item) => total + calcularSubtotalItem(item),
     0
   );
+  const totalPagamentosInformado = [
+    primeiroPagamento,
+    segundoPagamento,
+    terceiroPagamento,
+  ]
+    .slice(0, quantidadePagamentos)
+    .reduce(
+      (total, pagamento) => total + valorNumerico(pagamento.valor),
+      0
+    );
+  const valorRestantePagamento = Math.max(
+    0,
+    valorTotal - totalPagamentosInformado
+  );
+  const valorExcedentePagamento = Math.max(
+    0,
+    totalPagamentosInformado - valorTotal
+  );
   const quantidadeGarrafas300 = carrinho
     .filter((item) => item.nome.toLowerCase().includes("garrafa 300ml"))
     .reduce((total, item) => total + item.quantidade, 0);
@@ -489,7 +507,8 @@ export default function Catalogo({
   }
 
   function valorNumerico(valor: string) {
-    return Number(valor.replace(",", "."));
+    const numero = Number(valor.replace(",", "."));
+    return Number.isFinite(numero) ? numero : 0;
   }
 
   function resumoPagamento(pagamento: Pagamento, valor: number) {
@@ -1397,6 +1416,30 @@ export default function Catalogo({
                       <input value={terceiroPagamento.valor} onChange={(event) => setTerceiroPagamento({ ...terceiroPagamento, valor: event.target.value })} inputMode="decimal" placeholder="Valor deste pagamento" className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2" />
                       {terceiroPagamento.forma === "dinheiro" && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={terceiroPagamento.precisaTroco} onChange={(event) => setTerceiroPagamento({ ...terceiroPagamento, precisaTroco: event.target.checked })} /> Precisa de troco</label>}
                       {terceiroPagamento.forma === "dinheiro" && terceiroPagamento.precisaTroco && <input value={terceiroPagamento.trocoPara} onChange={(event) => setTerceiroPagamento({ ...terceiroPagamento, trocoPara: event.target.value })} inputMode="decimal" placeholder="Troco para quanto? Ex.: 100,00" className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2" />}
+                    </div>
+                  )}
+
+                  {quantidadePagamentos > 1 && (
+                    <div
+                      className={`rounded-xl border-2 p-4 ${
+                        valorExcedentePagamento > 0.009
+                          ? "border-red-500 bg-red-950/50 text-red-100"
+                          : valorRestantePagamento > 0.009
+                            ? "border-yellow-400 bg-yellow-400/10 text-yellow-100"
+                            : "border-green-500 bg-green-950/50 text-green-100"
+                      }`}
+                    >
+                      <p className="text-sm font-bold">
+                        Valores informados:{" "}
+                        {formatarPreco(totalPagamentosInformado)}
+                      </p>
+                      <p className="mt-1 text-lg font-black">
+                        {valorExcedentePagamento > 0.009
+                          ? `Ultrapassou o total em ${formatarPreco(valorExcedentePagamento)}`
+                          : valorRestantePagamento > 0.009
+                            ? `Falta pagar ${formatarPreco(valorRestantePagamento)}`
+                            : "Pagamento completo"}
+                      </p>
                     </div>
                   )}
                 </div>
