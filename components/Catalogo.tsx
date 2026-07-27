@@ -1,7 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { Search, ShoppingBag, Minus, Plus, Trash2, X } from "lucide-react";
+import {
+  Search,
+  ShoppingBag,
+  Minus,
+  Plus,
+  Trash2,
+  RotateCcw,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 type Categoria = {
@@ -120,6 +128,8 @@ export default function Catalogo({
   const [revisaoAberta, setRevisaoAberta] = useState(false);
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
   const [carrinhoCarregado, setCarrinhoCarregado] = useState(false);
+  const [ultimoPedido, setUltimoPedido] = useState<ItemCarrinho[]>([]);
+  const [ultimoPedidoFoiAjustado, setUltimoPedidoFoiAjustado] = useState(false);
   const [dadosClienteRecuperados, setDadosClienteRecuperados] = useState(false);
   const [avisoCarrinho, setAvisoCarrinho] = useState("");
   const [enviandoPedido, setEnviandoPedido] = useState(false);
@@ -153,18 +163,17 @@ export default function Catalogo({
 
   useEffect(() => {
     try {
-      const salvo = window.localStorage.getItem("guetto_carrinho");
-      if (salvo) {
-        const itensSalvos = JSON.parse(salvo) as ItemCarrinho[];
-        const produtosAtuais = new Map(
-          produtos.map((produto) => [produto.id, produto])
-        );
-        let carrinhoFoiAjustado = false;
+      const produtosAtuais = new Map(
+        produtos.map((produto) => [produto.id, produto])
+      );
+      const reconciliarItens = (valorSalvo: string) => {
+        const itensSalvos = JSON.parse(valorSalvo) as ItemCarrinho[];
+        let foiAjustado = false;
         const itensAtualizados = Array.isArray(itensSalvos)
           ? itensSalvos.flatMap((item) => {
               const produtoAtual = produtosAtuais.get(item.id);
               if (!produtoAtual) {
-                carrinhoFoiAjustado = true;
+                foiAjustado = true;
                 return [];
               }
 
@@ -187,7 +196,7 @@ export default function Catalogo({
                 quantidade !== item.quantidade ||
                 Number(item.preco) !== Number(produtoAtual.preco)
               ) {
-                carrinhoFoiAjustado = true;
+                foiAjustado = true;
               }
               if (quantidade < 1) return [];
 
@@ -202,6 +211,13 @@ export default function Catalogo({
             })
           : [];
 
+        return { itensAtualizados, foiAjustado };
+      };
+
+      const salvo = window.localStorage.getItem("guetto_carrinho");
+      if (salvo) {
+        const { itensAtualizados, foiAjustado: carrinhoFoiAjustado } =
+          reconciliarItens(salvo);
         setCarrinho(itensAtualizados);
         if (carrinhoFoiAjustado) {
           setAvisoCarrinho(
@@ -209,6 +225,17 @@ export default function Catalogo({
           );
         }
       }
+
+      const ultimoPedidoSalvo = window.localStorage.getItem(
+        "guetto_ultimo_pedido"
+      );
+      if (ultimoPedidoSalvo) {
+        const { itensAtualizados, foiAjustado } =
+          reconciliarItens(ultimoPedidoSalvo);
+        setUltimoPedido(itensAtualizados);
+        setUltimoPedidoFoiAjustado(foiAjustado);
+      }
+
       if (window.localStorage.getItem("guetto_abrir_carrinho") === "1") {
         setCarrinhoAberto(true);
         window.localStorage.removeItem("guetto_abrir_carrinho");
@@ -327,6 +354,26 @@ export default function Catalogo({
 
   function chaveItem(item: Produto & { sabor?: string; escolhasCombo?: EscolhasCombo }) {
     return `${item.id}:${item.sabor ?? ""}:${item.escolhasCombo ? JSON.stringify(item.escolhasCombo) : ""}`;
+  }
+
+  function repetirUltimoPedido() {
+    if (ultimoPedido.length === 0) return;
+    if (
+      carrinho.length > 0 &&
+      !window.confirm(
+        "Seu carrinho atual será substituído pelo último pedido. Deseja continuar?"
+      )
+    ) {
+      return;
+    }
+
+    setCarrinho(ultimoPedido);
+    setCarrinhoAberto(true);
+    if (ultimoPedidoFoiAjustado) {
+      setAvisoCarrinho(
+        "Alguns itens do último pedido foram ajustados conforme o estoque e os preços atuais."
+      );
+    }
   }
 
   function alterarQuantidade(produto: Produto & { sabor?: string; escolhasCombo?: EscolhasCombo }, alteracao: number) {
@@ -627,6 +674,12 @@ export default function Catalogo({
         "guetto_dados_cliente",
         JSON.stringify(dadosCliente)
       );
+      window.localStorage.setItem(
+        "guetto_ultimo_pedido",
+        JSON.stringify(carrinho)
+      );
+      setUltimoPedido(carrinho);
+      setUltimoPedidoFoiAjustado(false);
       window.localStorage.setItem("guetto_carrinho", "[]");
       setCarrinho([]);
       setRevisaoAberta(false);
@@ -650,7 +703,7 @@ export default function Catalogo({
   return (
     <section className="mx-auto max-w-[90rem] px-5 py-10 pb-28 xl:pr-[21rem]">
       <div className="mb-6 rounded-2xl border border-white/10 bg-black/25 p-6 shadow-2xl backdrop-blur-sm sm:p-8">
-        <div className="flex items-end justify-between gap-4">
+        <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <p className="text-sm font-bold tracking-[0.24em] text-yellow-400">GUETTO DELIVERY</p>
           <h2 className="cardapio-title mt-2 text-3xl font-black uppercase sm:text-4xl">Cardápio</h2>
@@ -658,18 +711,29 @@ export default function Catalogo({
             {atendimentoAberto ? "Aberto agora" : "Fechado agora"} · Entrega em até {tempoEntrega} minutos
           </p>
         </div>
-        <button
-          onClick={() => setCarrinhoAberto(true)}
-          className="relative inline-flex items-center gap-2 rounded-lg bg-yellow-400 px-4 py-3 font-bold text-black hover:bg-yellow-300"
-          aria-label="Abrir carrinho"
-        >
-          <ShoppingBag size={20} /> Carrinho
-          {quantidadeTotal > 0 && (
-            <span className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-600 text-xs text-white">
-              {quantidadeTotal}
-            </span>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          {ultimoPedido.length > 0 && (
+            <button
+              type="button"
+              onClick={repetirUltimoPedido}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-yellow-400 px-4 py-3 font-bold text-yellow-300 transition hover:bg-yellow-400/10"
+            >
+              <RotateCcw size={19} /> Repetir último pedido
+            </button>
           )}
-        </button>
+          <button
+            onClick={() => setCarrinhoAberto(true)}
+            className="relative inline-flex items-center justify-center gap-2 rounded-lg bg-yellow-400 px-4 py-3 font-bold text-black hover:bg-yellow-300"
+            aria-label="Abrir carrinho"
+          >
+            <ShoppingBag size={20} /> Carrinho
+            {quantidadeTotal > 0 && (
+              <span className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-600 text-xs text-white">
+                {quantidadeTotal}
+              </span>
+            )}
+          </button>
+        </div>
         </div>
         <div className="mt-6 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent" />
       </div>

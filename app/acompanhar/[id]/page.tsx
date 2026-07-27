@@ -2,21 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Check, ChefHat, Clock3, PackageCheck, Truck } from "lucide-react";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import RepetirPedidoButton from "@/components/RepetirPedidoButton";
 
 export const dynamic = "force-dynamic";
 
 type ItemPedido = {
-  produto_id: string;
   nome: string;
   quantidade: number;
-  escolhas_combo?: {
-    sabor?: string;
-    askov?: string;
-    energetico?: string;
-    gelos?: string[];
-    whisky?: string;
-  } | null;
 };
 
 const etapas = [
@@ -43,63 +34,6 @@ export default async function AcompanharPedido({
   const indiceAtual = etapas.findIndex((etapa) => etapa.valor === pedido.status);
   const cancelado = pedido.status === "cancelado";
   const itens = (pedido.itens ?? []) as ItemPedido[];
-  const idsProdutos = [...new Set(itens.map((item) => item.produto_id).filter(Boolean))];
-  const { data: produtosAtuais } = idsProdutos.length
-    ? await supabaseAdmin
-        .from("produtos")
-        .select(
-          "id, categoria_id, nome, descricao, preco, estoque, imagem, destaque, tipo_venda, grupo_estoque, unidades_por_venda, estoque_unidades, estoque_opcoes"
-        )
-        .in("id", idsProdutos)
-    : { data: [] };
-  const produtosPorId = new Map(
-    (produtosAtuais ?? []).map((produto) => [produto.id, produto])
-  );
-  const itensParaRepetir = itens.flatMap((item) => {
-    const produto = produtosPorId.get(item.produto_id);
-    if (!produto) return [];
-
-    const sabor = item.escolhas_combo?.sabor;
-    const estoqueGeral =
-      produto.grupo_estoque && typeof produto.estoque_unidades === "number"
-        ? Math.floor(
-            produto.estoque_unidades / (produto.unidades_por_venda || 1)
-          )
-        : produto.estoque;
-    const estoqueDisponivel =
-      sabor && produto.estoque_opcoes
-        ? Number(produto.estoque_opcoes[sabor] ?? 0)
-        : estoqueGeral;
-    const quantidade = Math.min(item.quantidade, estoqueDisponivel);
-    if (quantidade < 1) return [];
-
-    const escolhasCombo =
-      item.escolhas_combo && !sabor
-        ? {
-            askov: item.escolhas_combo.askov,
-            energetico: item.escolhas_combo.energetico ?? "",
-            gelos: item.escolhas_combo.gelos ?? [],
-            whisky: item.escolhas_combo.whisky,
-          }
-        : undefined;
-
-    return [
-      {
-        ...produto,
-        quantidade,
-        ...(sabor ? { sabor } : {}),
-        ...(escolhasCombo ? { escolhasCombo } : {}),
-      },
-    ];
-  });
-  const quantidadeOriginal = itens.reduce(
-    (total, item) => total + item.quantidade,
-    0
-  );
-  const quantidadeDisponivel = itensParaRepetir.reduce(
-    (total, item) => total + item.quantidade,
-    0
-  );
 
   return (
     <main className="min-h-screen px-5 py-10 text-white">
@@ -170,10 +104,6 @@ export default async function AcompanharPedido({
                 currency: "BRL",
               }).format(Number(pedido.total))}
             </p>
-            <RepetirPedidoButton
-              itens={itensParaRepetir}
-              teveAjustes={quantidadeDisponivel < quantidadeOriginal}
-            />
           </div>
         </section>
       </div>
