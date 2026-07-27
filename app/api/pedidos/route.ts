@@ -33,6 +33,11 @@ export async function POST(request: Request) {
     !cidadeEntrega ||
     !Array.isArray(body?.pagamento) ||
     body.pagamento.length < 1 ||
+    body.pagamento.length > 3 ||
+    body.pagamento.some(
+      (pagamento: unknown) =>
+        typeof pagamento !== "string" || !pagamento.trim()
+    ) ||
     itens.length === 0 ||
     itens.length > 50
   ) {
@@ -189,7 +194,7 @@ export async function POST(request: Request) {
     p_endereco: body.endereco,
     p_referencia: typeof body.referencia === "string" ? body.referencia : "",
     p_itens: itens,
-    p_pagamento: Array.isArray(body.pagamento) ? body.pagamento.slice(0, 2) : [],
+    p_pagamento: Array.isArray(body.pagamento) ? body.pagamento.slice(0, 3) : [],
     p_tempo_entrega: Number(body.tempo_entrega) || 20,
     p_observacao: typeof body.observacao === "string" ? body.observacao : "",
   });

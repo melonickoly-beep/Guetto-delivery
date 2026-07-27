@@ -40,6 +40,7 @@ type ItemCarrinho = Produto & {
 };
 
 type FormaPagamento = "pix" | "dinheiro" | "credito" | "debito";
+type QuantidadePagamentos = 1 | 2 | 3;
 
 type Pagamento = {
   forma: FormaPagamento | "";
@@ -129,9 +130,11 @@ export default function Catalogo({
   const [numeroEndereco, setNumeroEndereco] = useState("");
   const [referencia, setReferencia] = useState("");
   const [cidadeEntrega, setCidadeEntrega] = useState<"" | "Paranacity" | "Cruzeiro do Sul">("");
-  const [pagamentoDividido, setPagamentoDividido] = useState(false);
+  const [quantidadePagamentos, setQuantidadePagamentos] =
+    useState<QuantidadePagamentos>(1);
   const [primeiroPagamento, setPrimeiroPagamento] = useState<Pagamento>(pagamentoVazio);
   const [segundoPagamento, setSegundoPagamento] = useState<Pagamento>(pagamentoVazio);
+  const [terceiroPagamento, setTerceiroPagamento] = useState<Pagamento>(pagamentoVazio);
   const [vasilhameConfirmado, setVasilhameConfirmado] = useState(false);
   const [comboEmConfiguracao, setComboEmConfiguracao] = useState<Produto | null>(null);
   const [saborAskov, setSaborAskov] = useState("");
@@ -512,19 +515,21 @@ export default function Catalogo({
       return;
     }
 
-    const pagamentos = pagamentoDividido
-      ? [primeiroPagamento, segundoPagamento]
-      : [primeiroPagamento];
+    const pagamentos = [
+      primeiroPagamento,
+      segundoPagamento,
+      terceiroPagamento,
+    ].slice(0, quantidadePagamentos);
 
-    if (pagamentoDividido && !segundoPagamento.forma) {
-      alert("Escolha a segunda forma de pagamento.");
+    if (pagamentos.some((pagamento) => !pagamento.forma)) {
+      alert("Escolha todas as formas de pagamento.");
       return;
     }
 
-    if (pagamentoDividido) {
+    if (quantidadePagamentos > 1) {
       const soma = pagamentos.reduce((total, pagamento) => total + valorNumerico(pagamento.valor), 0);
       if (pagamentos.some((pagamento) => !pagamento.valor || valorNumerico(pagamento.valor) <= 0) || Math.abs(soma - valorTotal) > 0.01) {
-        alert(`Os dois pagamentos precisam somar ${formatarPreco(valorTotal)}.`);
+        alert(`Os pagamentos precisam somar ${formatarPreco(valorTotal)}.`);
         return;
       }
     }
@@ -551,7 +556,7 @@ export default function Catalogo({
         ].filter(Boolean).join(" | ")}` : ""}`
     );
     const pagamentosFormatados = pagamentos.map((pagamento) =>
-      resumoPagamento(pagamento, pagamentoDividido ? valorNumerico(pagamento.valor) : valorTotal)
+      resumoPagamento(pagamento, quantidadePagamentos > 1 ? valorNumerico(pagamento.valor) : valorTotal)
     );
     const pedido = [
       "Olá! Gostaria de fazer este pedido:",
@@ -1151,19 +1156,22 @@ export default function Catalogo({
               <p className="text-sm font-black uppercase tracking-wide text-yellow-300">
                 Forma de pagamento
               </p>
-              {(pagamentoDividido
-                ? [primeiroPagamento, segundoPagamento]
-                : [primeiroPagamento]
-              ).map((pagamento, indice) => (
+              {[
+                primeiroPagamento,
+                segundoPagamento,
+                terceiroPagamento,
+              ]
+                .slice(0, quantidadePagamentos)
+                .map((pagamento, indice) => (
                 <p key={`${pagamento.forma}-${indice}`} className="mt-1 text-lg font-black text-white">
                   {resumoPagamento(
                     pagamento,
-                    pagamentoDividido
+                    quantidadePagamentos > 1
                       ? valorNumerico(pagamento.valor)
                       : valorTotal
                   )}
                 </p>
-              ))}
+                ))}
             </div>
 
             <div className="mt-5 flex items-center justify-between text-xl font-black">
@@ -1267,21 +1275,33 @@ export default function Catalogo({
                     <option value="Cruzeiro do Sul">Cruzeiro do Sul — pedido mínimo R$ 35,00</option>
                   </select>
 
-                  <div className="flex items-center justify-between gap-3 rounded-xl border-2 border-yellow-400 bg-yellow-400/10 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-yellow-400 bg-yellow-400/10 p-4">
                     <h3 className="text-lg font-black uppercase tracking-wide text-yellow-300">Pagamento</h3>
-                    <label className="flex items-center gap-2 text-sm text-zinc-300">
-                      <input type="checkbox" checked={pagamentoDividido} onChange={(event) => setPagamentoDividido(event.target.checked)} />
-                      Dividir em dois
+                    <label className="flex items-center gap-2 text-sm font-bold text-white">
+                      Quantas formas?
+                      <select
+                        value={quantidadePagamentos}
+                        onChange={(event) =>
+                          setQuantidadePagamentos(
+                            Number(event.target.value) as QuantidadePagamentos
+                          )
+                        }
+                        className="rounded-lg bg-zinc-800 px-3 py-2 outline-none ring-yellow-400 focus:ring-2"
+                      >
+                        <option value={1}>1 forma</option>
+                        <option value={2}>2 formas</option>
+                        <option value={3}>3 formas</option>
+                      </select>
                     </label>
                   </div>
 
                   <div className="space-y-3 rounded-xl bg-zinc-900 p-4">
-                    <p className="text-sm font-semibold text-zinc-300">{pagamentoDividido ? "1º pagamento" : "Forma de pagamento"}</p>
+                    <p className="text-sm font-semibold text-zinc-300">{quantidadePagamentos > 1 ? "1º pagamento" : "Forma de pagamento"}</p>
                     <select value={primeiroPagamento.forma} onChange={(event) => setPrimeiroPagamento({ ...primeiroPagamento, forma: event.target.value as FormaPagamento })} className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2">
                       <option value="">Escolha como pagar</option>
                       {formasPagamento.map((forma) => <option key={forma.valor} value={forma.valor}>{forma.rotulo}</option>)}
                     </select>
-                    {pagamentoDividido && <input value={primeiroPagamento.valor} onChange={(event) => setPrimeiroPagamento({ ...primeiroPagamento, valor: event.target.value })} inputMode="decimal" placeholder="Valor deste pagamento" className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2" />}
+                    {quantidadePagamentos > 1 && <input value={primeiroPagamento.valor} onChange={(event) => setPrimeiroPagamento({ ...primeiroPagamento, valor: event.target.value })} inputMode="decimal" placeholder="Valor deste pagamento" className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2" />}
                     {primeiroPagamento.forma === "dinheiro" && (
                       <label className="flex items-center gap-2 text-sm">
                         <input type="checkbox" checked={primeiroPagamento.precisaTroco} onChange={(event) => setPrimeiroPagamento({ ...primeiroPagamento, precisaTroco: event.target.checked })} /> Precisa de troco
@@ -1290,7 +1310,7 @@ export default function Catalogo({
                     {primeiroPagamento.forma === "dinheiro" && primeiroPagamento.precisaTroco && <input value={primeiroPagamento.trocoPara} onChange={(event) => setPrimeiroPagamento({ ...primeiroPagamento, trocoPara: event.target.value })} inputMode="decimal" placeholder="Troco para quanto? Ex.: 100,00" className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2" />}
                   </div>
 
-                  {pagamentoDividido && (
+                  {quantidadePagamentos >= 2 && (
                     <div className="space-y-3 rounded-xl bg-zinc-900 p-4">
                       <p className="text-sm font-semibold text-zinc-300">2º pagamento</p>
                       <select value={segundoPagamento.forma} onChange={(event) => setSegundoPagamento({ ...segundoPagamento, forma: event.target.value as FormaPagamento })} className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2">
@@ -1300,6 +1320,19 @@ export default function Catalogo({
                       <input value={segundoPagamento.valor} onChange={(event) => setSegundoPagamento({ ...segundoPagamento, valor: event.target.value })} inputMode="decimal" placeholder="Valor deste pagamento" className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2" />
                       {segundoPagamento.forma === "dinheiro" && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={segundoPagamento.precisaTroco} onChange={(event) => setSegundoPagamento({ ...segundoPagamento, precisaTroco: event.target.checked })} /> Precisa de troco</label>}
                       {segundoPagamento.forma === "dinheiro" && segundoPagamento.precisaTroco && <input value={segundoPagamento.trocoPara} onChange={(event) => setSegundoPagamento({ ...segundoPagamento, trocoPara: event.target.value })} inputMode="decimal" placeholder="Troco para quanto? Ex.: 100,00" className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2" />}
+                    </div>
+                  )}
+
+                  {quantidadePagamentos === 3 && (
+                    <div className="space-y-3 rounded-xl bg-zinc-900 p-4">
+                      <p className="text-sm font-semibold text-zinc-300">3º pagamento</p>
+                      <select value={terceiroPagamento.forma} onChange={(event) => setTerceiroPagamento({ ...terceiroPagamento, forma: event.target.value as FormaPagamento })} className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2">
+                        <option value="">Escolha como pagar</option>
+                        {formasPagamento.map((forma) => <option key={forma.valor} value={forma.valor}>{forma.rotulo}</option>)}
+                      </select>
+                      <input value={terceiroPagamento.valor} onChange={(event) => setTerceiroPagamento({ ...terceiroPagamento, valor: event.target.value })} inputMode="decimal" placeholder="Valor deste pagamento" className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2" />
+                      {terceiroPagamento.forma === "dinheiro" && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={terceiroPagamento.precisaTroco} onChange={(event) => setTerceiroPagamento({ ...terceiroPagamento, precisaTroco: event.target.checked })} /> Precisa de troco</label>}
+                      {terceiroPagamento.forma === "dinheiro" && terceiroPagamento.precisaTroco && <input value={terceiroPagamento.trocoPara} onChange={(event) => setTerceiroPagamento({ ...terceiroPagamento, trocoPara: event.target.value })} inputMode="decimal" placeholder="Troco para quanto? Ex.: 100,00" className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2" />}
                     </div>
                   )}
                 </div>
