@@ -41,3 +41,26 @@ export async function PATCH(
 
   return NextResponse.json({ sucesso: true });
 }
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  if (!(await obterAdministrador())) {
+    return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
+  }
+
+  const { id } = await params;
+  const { error } = await supabaseAdmin.rpc("excluir_pedido_seguro", {
+    p_pedido_id: id,
+  });
+
+  if (error) {
+    return NextResponse.json(
+      { error: error.message || "Não foi possível excluir o pedido." },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({ sucesso: true });
+}

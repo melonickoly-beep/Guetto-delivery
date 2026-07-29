@@ -235,6 +235,32 @@ export default function AdminPage() {
     return true;
   }
 
+  async function excluirPedido(pedido: Pedido) {
+    const identificacao = pedido.id.slice(0, 8).toUpperCase();
+    if (
+      !confirm(
+        `Excluir definitivamente o pedido #${identificacao}?\n\n` +
+          "Se o estoque já tiver sido baixado, ele será reposto."
+      )
+    ) {
+      return;
+    }
+
+    const resposta = await fetch(`/api/admin/pedidos/${pedido.id}`, {
+      method: "DELETE",
+    });
+
+    if (!resposta.ok) {
+      const erro = await resposta.json().catch(() => null);
+      alert(erro?.error ?? "Não foi possível excluir o pedido.");
+      return;
+    }
+
+    setPedidos((atuais) =>
+      atuais.filter((pedidoAtual) => pedidoAtual.id !== pedido.id)
+    );
+  }
+
   function textoSeguro(valor: unknown) {
     return String(valor ?? "")
       .replaceAll("&", "&amp;")
@@ -776,7 +802,12 @@ export default function AdminPage() {
                     </p>
                     <select
                       value={pedido.status}
-                      onChange={(event) => atualizarStatusPedido(pedido.id, event.target.value)}
+                      onChange={(event) =>
+                        void atualizarStatusPedido(
+                          pedido.id,
+                          event.target.value
+                        )
+                      }
                       className="mt-2 rounded-lg bg-zinc-800 p-2"
                       aria-label={`Status do pedido de ${pedido.cliente_nome}`}
                     >
@@ -790,7 +821,7 @@ export default function AdminPage() {
                         <button
                           type="button"
                           onClick={() =>
-                            atualizarStatusPedido(
+                            void atualizarStatusPedido(
                               pedido.id,
                               "saiu_para_entrega"
                             )
@@ -847,6 +878,13 @@ export default function AdminPage() {
                     className="rounded-lg bg-green-600 px-3 py-2 text-sm font-bold text-white hover:bg-green-500"
                   >
                     Avisar cliente no WhatsApp
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void excluirPedido(pedido)}
+                    className="rounded-lg border border-red-500 px-3 py-2 text-sm font-bold text-red-400 hover:bg-red-500/10"
+                  >
+                    Excluir pedido
                   </button>
                 </div>
               </article>
