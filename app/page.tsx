@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 import Catalogo from "@/components/Catalogo";
 import Manutencao from "@/components/Manutencao";
 import { SITE_EM_MANUTENCAO } from "@/lib/site-config";
@@ -103,6 +104,12 @@ export default async function Home() {
               Das {configuracao.get("horario_abertura") ?? "--:--"} às{" "}
               {configuracao.get("horario_fechamento") ?? "--:--"}
             </p>
+            <Link
+              href="/privacidade"
+              className="mt-2 inline-block font-semibold text-yellow-300 underline underline-offset-4"
+            >
+              Privacidade e dados
+            </Link>
           </div>
         </div>
       </footer>

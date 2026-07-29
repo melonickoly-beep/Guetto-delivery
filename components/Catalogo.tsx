@@ -131,6 +131,8 @@ export default function Catalogo({
   const [ultimoPedido, setUltimoPedido] = useState<ItemCarrinho[]>([]);
   const [ultimoPedidoFoiAjustado, setUltimoPedidoFoiAjustado] = useState(false);
   const [dadosClienteRecuperados, setDadosClienteRecuperados] = useState(false);
+  const [salvarDadosNoAparelho, setSalvarDadosNoAparelho] = useState(false);
+  const [avisoDadosSalvos, setAvisoDadosSalvos] = useState("");
   const [avisoCarrinho, setAvisoCarrinho] = useState("");
   const [enviandoPedido, setEnviandoPedido] = useState(false);
   const [nome, setNome] = useState("");
@@ -268,10 +270,20 @@ export default function Catalogo({
       setReferencia(dados.referencia ?? "");
       setCidadeEntrega(dados.cidadeEntrega ?? "");
       setDadosClienteRecuperados(true);
+      setSalvarDadosNoAparelho(true);
     } catch {
       window.localStorage.removeItem("guetto_dados_cliente");
     }
   }, []);
+
+  function apagarDadosClienteSalvos() {
+    window.localStorage.removeItem("guetto_dados_cliente");
+    setSalvarDadosNoAparelho(false);
+    setDadosClienteRecuperados(false);
+    setAvisoDadosSalvos(
+      "Os dados pessoais salvos neste aparelho foram apagados."
+    );
+  }
 
   function estoqueDisponivel(produto: Produto) {
     if (produto.grupo_estoque && typeof produto.estoque_unidades === "number") {
@@ -689,10 +701,14 @@ export default function Catalogo({
         referencia: referencia.trim(),
         cidadeEntrega,
       };
-      window.localStorage.setItem(
-        "guetto_dados_cliente",
-        JSON.stringify(dadosCliente)
-      );
+      if (salvarDadosNoAparelho) {
+        window.localStorage.setItem(
+          "guetto_dados_cliente",
+          JSON.stringify(dadosCliente)
+        );
+      } else {
+        window.localStorage.removeItem("guetto_dados_cliente");
+      }
       window.localStorage.setItem(
         "guetto_ultimo_pedido",
         JSON.stringify(carrinho)
@@ -1357,6 +1373,60 @@ export default function Catalogo({
                     <option value="Paranacity">Paranacity — pedido mínimo R$ 25,00</option>
                     <option value="Cruzeiro do Sul">Cruzeiro do Sul — pedido mínimo R$ 35,00</option>
                   </select>
+
+                  <div className="rounded-xl border border-zinc-700 bg-zinc-900/70 p-4 text-sm">
+                    <label className="flex cursor-pointer items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={salvarDadosNoAparelho}
+                        onChange={(event) => {
+                          const salvar = event.target.checked;
+                          setSalvarDadosNoAparelho(salvar);
+                          setAvisoDadosSalvos("");
+                          if (!salvar) {
+                            window.localStorage.removeItem(
+                              "guetto_dados_cliente"
+                            );
+                            setDadosClienteRecuperados(false);
+                          }
+                        }}
+                        className="mt-1"
+                      />
+                      <span>
+                        <strong className="block text-white">
+                          Salvar meus dados neste aparelho
+                        </strong>
+                        <span className="text-zinc-400">
+                          Guarda nome, telefone e endereço somente neste
+                          navegador para preencher o próximo pedido.
+                        </span>
+                      </span>
+                    </label>
+                    {(dadosClienteRecuperados || avisoDadosSalvos) && (
+                      <div className="mt-3 border-t border-zinc-700 pt-3">
+                        {avisoDadosSalvos && (
+                          <p className="mb-2 text-green-300">
+                            {avisoDadosSalvos}
+                          </p>
+                        )}
+                        {dadosClienteRecuperados && (
+                          <button
+                            type="button"
+                            onClick={apagarDadosClienteSalvos}
+                            className="font-bold text-red-400 underline underline-offset-4 hover:text-red-300"
+                          >
+                            Apagar meus dados salvos
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    <a
+                      href="/privacidade"
+                      className="mt-3 inline-block font-semibold text-yellow-300 underline underline-offset-4"
+                    >
+                      Saiba como seus dados são utilizados
+                    </a>
+                  </div>
 
                   <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-yellow-400 bg-yellow-400/10 p-4">
                     <h3 className="text-lg font-black uppercase tracking-wide text-yellow-300">Pagamento</h3>
