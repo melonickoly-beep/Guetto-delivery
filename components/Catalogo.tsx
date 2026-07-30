@@ -881,7 +881,7 @@ export default function Catalogo({
   return (
     <section className="mx-auto max-w-[90rem] px-4 py-5 pb-28 sm:px-5 sm:py-8 xl:pr-[21rem]">
       <div className="mb-4 rounded-2xl border border-white/10 bg-black/25 p-4 shadow-2xl backdrop-blur-sm sm:p-6">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="hidden text-xs font-bold tracking-[0.24em] text-yellow-400 sm:block">
               GUETTO DELIVERY
@@ -893,21 +893,21 @@ export default function Catalogo({
               {atendimentoAberto ? "Aberto agora" : "Fechado agora"}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full items-stretch gap-2 sm:w-auto sm:items-center">
             {ultimoPedido.length > 0 && (
               <button
                 type="button"
                 onClick={repetirUltimoPedido}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-yellow-400 px-3 py-2 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400/10"
-                aria-label="Repetir último pedido"
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-yellow-400 px-3 py-2 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400/10 sm:flex-none"
+                aria-label="Refazer último pedido"
               >
-                <RotateCcw size={18} />
-                <span className="hidden sm:inline">Repetir pedido</span>
+                <RotateCcw size={18} aria-hidden="true" />
+                <span>Refazer último pedido</span>
               </button>
             )}
             <button
               onClick={() => setCarrinhoAberto(true)}
-              className="relative inline-flex items-center justify-center gap-2 rounded-lg bg-yellow-400 px-3 py-2 text-sm font-bold text-black hover:bg-yellow-300 sm:px-4"
+              className="relative inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-yellow-400 px-3 py-2 text-sm font-bold text-black hover:bg-yellow-300 sm:flex-none sm:px-4"
               aria-label="Abrir carrinho"
             >
               <ShoppingBag size={19} /> Carrinho
