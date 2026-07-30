@@ -9,6 +9,10 @@ import {
   Trash2,
   RotateCcw,
   X,
+  Clock3,
+  MapPin,
+  MessageCircle,
+  Truck,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -88,6 +92,14 @@ const formatarPreco = (valor: number) =>
     style: "currency",
     currency: "BRL",
   }).format(valor);
+
+const formatarNomeProduto = (nome: string) =>
+  nome
+    .replace(/\bcarvao\b/gi, "Carvão")
+    .replace(/\benergetico\b/gi, "Energético")
+    .replace(/\s*-\s*/g, " - ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 const calcularSubtotalItem = (
   item: Pick<ItemCarrinho, "nome" | "preco" | "quantidade">
@@ -324,6 +336,66 @@ export default function Catalogo({
     (total, item) => total + calcularSubtotalItem(item),
     0
   );
+  const categoriaPorIdAtual = new Map(
+    categorias.map((categoria) => [
+      categoria.id,
+      categoria.nome.trim().toLowerCase(),
+    ])
+  );
+  const itensTabacariaAtual = carrinho.filter(
+    (item) => categoriaPorIdAtual.get(item.categoria_id) === "tabacaria"
+  );
+  const somenteTabacariaAtual =
+    carrinho.length > 0 && itensTabacariaAtual.length === carrinho.length;
+  const temComboAtual = carrinho.some(
+    (item) => categoriaPorIdAtual.get(item.categoria_id) === "combos"
+  );
+  const temCaixaFechadaAtual = carrinho.some(
+    (item) =>
+      categoriaPorIdAtual.get(item.categoria_id) === "cervejas" &&
+      item.tipo_venda !== "avulso"
+  );
+  const subtotalTabacariaAtual = itensTabacariaAtual.reduce(
+    (total, item) => total + calcularSubtotalItem(item),
+    0
+  );
+  const pedidoMinimoCidadeAtual =
+    cidadeEntrega === ""
+      ? null
+      : somenteTabacariaAtual
+        ? 20
+        : cidadeEntrega === "Paranacity"
+          ? 25
+          : 35;
+  const faltaMinimoCidade =
+    pedidoMinimoCidadeAtual === null
+      ? null
+      : Math.max(0, pedidoMinimoCidadeAtual - valorTotal);
+  const faltaMinimoTabacaria =
+    itensTabacariaAtual.length > 0 &&
+    !temComboAtual &&
+    !temCaixaFechadaAtual
+      ? Math.max(0, 20 - subtotalTabacariaAtual)
+      : 0;
+  const regraTabacariaEmFoco =
+    faltaMinimoCidade !== null &&
+    faltaMinimoTabacaria > faltaMinimoCidade;
+  const pedidoMinimoAtual = regraTabacariaEmFoco
+    ? 20
+    : pedidoMinimoCidadeAtual;
+  const faltaPedidoMinimo =
+    faltaMinimoCidade === null
+      ? null
+      : Math.max(faltaMinimoCidade, faltaMinimoTabacaria);
+  const progressoPedidoMinimo =
+    pedidoMinimoAtual === null
+      ? 0
+      : Math.min(
+          100,
+          ((regraTabacariaEmFoco ? subtotalTabacariaAtual : valorTotal) /
+            pedidoMinimoAtual) *
+            100
+        );
   const totalPagamentosInformado = [
     primeiroPagamento,
     segundoPagamento,
@@ -624,11 +696,11 @@ export default function Catalogo({
 
     const linhas = carrinho.map(
       (item) =>
-        `${item.quantidade}x ${item.nome} — ${formatarPreco(
+        `${item.quantidade}x ${formatarNomeProduto(item.nome)} — ${formatarPreco(
           calcularSubtotalItem(item)
         )}${item.sabor ? `\n   Sabor: ${item.sabor}` : ""}${item.escolhasCombo ? `\n   Escolhas: ${[
           item.escolhasCombo.askov ? `Askov ${item.escolhasCombo.askov}` : "",
-          `Energetico ${item.escolhasCombo.energetico}`,
+          `Energético ${item.escolhasCombo.energetico}`,
           `6 gelos: ${item.escolhasCombo.gelos.join(", ")}`,
           item.escolhasCombo.whisky ? `Whisky Jack Daniel's ${item.escolhasCombo.whisky}` : "",
         ].filter(Boolean).join(" | ")}` : ""}`
@@ -735,46 +807,174 @@ export default function Catalogo({
     }
   }
 
-  return (
-    <section className="mx-auto max-w-[90rem] px-5 py-10 pb-28 xl:pr-[21rem]">
-      <div className="mb-6 rounded-2xl border border-white/10 bg-black/25 p-6 shadow-2xl backdrop-blur-sm sm:p-8">
-        <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
-        <div>
-          <p className="text-sm font-bold tracking-[0.24em] text-yellow-400">GUETTO DELIVERY</p>
-          <h2 className="cardapio-title mt-2 text-3xl font-black uppercase sm:text-4xl">Cardápio</h2>
-          <p className="mt-1 text-sm text-zinc-400">
-            {atendimentoAberto ? "Aberto agora" : "Fechado agora"} · Entrega em até {tempoEntrega} minutos
-          </p>
-        </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          {ultimoPedido.length > 0 && (
-            <button
-              type="button"
-              onClick={repetirUltimoPedido}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-yellow-400 px-4 py-3 font-bold text-yellow-300 transition hover:bg-yellow-400/10"
+  function IndicadorPedidoMinimo({
+    compacto = false,
+  }: {
+    compacto?: boolean;
+  }) {
+    if (carrinho.length === 0) return null;
+
+    return (
+      <div
+        className={`rounded-xl border p-3 ${
+          faltaPedidoMinimo === 0
+            ? "border-green-500/50 bg-green-950/40"
+            : "border-yellow-400/40 bg-yellow-400/10"
+        }`}
+      >
+        {pedidoMinimoAtual === null ? (
+          <div className="flex items-start gap-2 text-sm text-yellow-100">
+            <MapPin className="mt-0.5 shrink-0 text-yellow-400" size={17} />
+            <div>
+              <p className="font-bold">Escolha sua cidade</p>
+              {!compacto && (
+                <p className="mt-0.5 text-xs text-zinc-300">
+                  Assim mostramos quanto falta para o pedido mínimo.
+                </p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <p
+                className={`font-bold ${
+                  faltaPedidoMinimo === 0
+                    ? "text-green-300"
+                    : "text-yellow-100"
+                }`}
+              >
+                {faltaPedidoMinimo === 0
+                  ? "Pedido mínimo atingido"
+                  : `Faltam ${formatarPreco(faltaPedidoMinimo ?? 0)}${
+                      regraTabacariaEmFoco ? " em Tabacaria" : ""
+                    }`}
+              </p>
+              {!compacto && (
+                <span className="shrink-0 text-xs text-zinc-400">
+                  {regraTabacariaEmFoco ? "Tabacaria" : "Mínimo"}{" "}
+                  {formatarPreco(pedidoMinimoAtual)}
+                </span>
+              )}
+            </div>
+            <div
+              className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-800"
+              role="progressbar"
+              aria-label="Progresso para o pedido mínimo"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(progressoPedidoMinimo)}
             >
-              <RotateCcw size={19} /> Repetir último pedido
-            </button>
-          )}
-          <button
-            onClick={() => setCarrinhoAberto(true)}
-            className="relative inline-flex items-center justify-center gap-2 rounded-lg bg-yellow-400 px-4 py-3 font-bold text-black hover:bg-yellow-300"
-            aria-label="Abrir carrinho"
-          >
-            <ShoppingBag size={20} /> Carrinho
-            {quantidadeTotal > 0 && (
-              <span className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-600 text-xs text-white">
-                {quantidadeTotal}
-              </span>
+              <div
+                className={`h-full rounded-full transition-all ${
+                  faltaPedidoMinimo === 0 ? "bg-green-500" : "bg-yellow-400"
+                }`}
+                style={{ width: `${progressoPedidoMinimo}%` }}
+              />
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <section className="mx-auto max-w-[90rem] px-4 py-5 pb-28 sm:px-5 sm:py-8 xl:pr-[21rem]">
+      <div className="mb-4 rounded-2xl border border-white/10 bg-black/25 p-4 shadow-2xl backdrop-blur-sm sm:p-6">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="hidden text-xs font-bold tracking-[0.24em] text-yellow-400 sm:block">
+              GUETTO DELIVERY
+            </p>
+            <h2 className="cardapio-title text-2xl font-black uppercase sm:mt-1 sm:text-3xl">
+              Cardápio
+            </h2>
+            <p className="mt-1 text-xs text-zinc-400 sm:text-sm">
+              {atendimentoAberto ? "Aberto agora" : "Fechado agora"}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {ultimoPedido.length > 0 && (
+              <button
+                type="button"
+                onClick={repetirUltimoPedido}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-yellow-400 px-3 py-2 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400/10"
+                aria-label="Repetir último pedido"
+              >
+                <RotateCcw size={18} />
+                <span className="hidden sm:inline">Repetir pedido</span>
+              </button>
             )}
-          </button>
+            <button
+              onClick={() => setCarrinhoAberto(true)}
+              className="relative inline-flex items-center justify-center gap-2 rounded-lg bg-yellow-400 px-3 py-2 text-sm font-bold text-black hover:bg-yellow-300 sm:px-4"
+              aria-label="Abrir carrinho"
+            >
+              <ShoppingBag size={19} /> Carrinho
+              {quantidadeTotal > 0 && (
+                <span className="absolute -right-2 -top-2 grid h-6 min-w-6 place-items-center rounded-full bg-red-600 px-1 text-xs text-white">
+                  {quantidadeTotal}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
+
+        <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 lg:grid-cols-[1fr_auto] lg:items-end">
+          <div className="grid grid-cols-3 gap-2 text-xs sm:text-sm">
+            <div className="rounded-xl bg-zinc-900/80 p-3">
+              <Truck className="mb-1 text-yellow-400" size={18} />
+              <strong className="block text-white">Entrega grátis</strong>
+              <span className="text-zinc-400">Sem taxa</span>
+            </div>
+            <div className="rounded-xl bg-zinc-900/80 p-3">
+              <Clock3 className="mb-1 text-yellow-400" size={18} />
+              <strong className="block text-white">Até {tempoEntrega} min</strong>
+              <span className="text-zinc-400">Após confirmar</span>
+            </div>
+            <a
+              href="https://wa.me/554491271708?text=Olá!%20Preciso%20de%20ajuda%20com%20meu%20pedido."
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-xl bg-green-500/15 p-3 transition hover:bg-green-500/25"
+            >
+              <MessageCircle className="mb-1 text-green-400" size={18} />
+              <strong className="block text-white">Precisa de ajuda?</strong>
+              <span className="text-green-300">Fale conosco</span>
+            </a>
+          </div>
+
+          <label className="block text-sm font-bold text-zinc-200 lg:min-w-80">
+            <span className="mb-1.5 flex items-center gap-2">
+              <MapPin size={17} className="text-yellow-400" />
+              Onde vamos entregar?
+            </span>
+            <select
+              value={cidadeEntrega}
+              onChange={(event) =>
+                setCidadeEntrega(
+                  event.target.value as
+                    | ""
+                    | "Paranacity"
+                    | "Cruzeiro do Sul"
+                )
+              }
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3 font-semibold text-white outline-none focus:border-yellow-400"
+            >
+              <option value="">Escolha sua cidade</option>
+              <option value="Paranacity">
+                Paranacity · mínimo R$ 25,00
+              </option>
+              <option value="Cruzeiro do Sul">
+                Cruzeiro do Sul · mínimo R$ 35,00
+              </option>
+            </select>
+          </label>
         </div>
-        <div className="mt-6 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent" />
       </div>
 
       {!atendimentoAberto && (
-        <div className="mb-6 rounded-xl border border-red-500/50 bg-red-950/50 p-4 text-red-100">
+        <div className="mb-4 rounded-xl border border-red-500/50 bg-red-950/50 p-4 text-red-100">
           <p className="font-bold">A Guetto Delivery está encerrada no momento.</p>
           {horarioConfigurado ? (
             <p className="mt-1 text-sm">Atendimento de hoje: das {horarioAbertura} às {horarioFechamento}.</p>
@@ -784,14 +984,14 @@ export default function Catalogo({
         </div>
       )}
 
-      <div className="sticky top-0 z-30 -mx-5 border-y border-white/10 bg-zinc-950/95 px-5 py-4 backdrop-blur">
+      <div className="sticky top-0 z-30 -mx-4 border-y border-white/10 bg-zinc-950/95 px-4 py-3 shadow-xl backdrop-blur sm:-mx-5 sm:px-5">
         <label className="relative block">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={20} />
           <input
             value={busca}
             onChange={(event) => setBusca(event.target.value)}
             placeholder="Pesquisar produto, marca ou sabor"
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 py-3 pl-12 pr-4 outline-none focus:border-yellow-400"
+            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 py-2.5 pl-12 pr-4 outline-none focus:border-yellow-400"
           />
         </label>
         <select
@@ -801,7 +1001,7 @@ export default function Catalogo({
             setCategoriaAtiva(event.target.value);
           }}
           aria-label="Escolher categoria"
-          className="mt-3 w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3 font-bold text-white outline-none focus:border-yellow-400 sm:hidden"
+          className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 p-2.5 font-bold text-white outline-none focus:border-yellow-400 sm:hidden"
         >
           {busca && <option value="">Resultados da busca</option>}
           {produtos.some(
@@ -813,7 +1013,7 @@ export default function Catalogo({
             </option>
           ))}
         </select>
-        <div className="mt-3 hidden flex-wrap gap-2 sm:flex">
+        <div className="mt-2 hidden gap-2 overflow-x-auto pb-1 sm:flex">
           {produtos.some((produto) => produto.destaque && estoqueDisponivel(produto) > 0) && (
             <button
               type="button"
@@ -874,13 +1074,13 @@ export default function Catalogo({
                 key={produto.id}
                 className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/95 shadow-xl transition hover:-translate-y-1 hover:border-yellow-400/60"
               >
-                <div className="relative aspect-square bg-white">
+                <div className="relative aspect-[4/3] bg-white sm:aspect-square">
                   {produto.imagem ? (
                     <Image
                       src={produto.imagem}
-                      alt={produto.nome}
+                      alt={formatarNomeProduto(produto.nome)}
                       fill
-                      className="object-contain p-3"
+                      className="object-contain p-4"
                       sizes="(max-width: 640px) calc(100vw - 2.5rem), (max-width: 1024px) 50vw, 33vw"
                     />
                   ) : (
@@ -894,8 +1094,10 @@ export default function Catalogo({
                     </span>
                   )}
                 </div>
-                <div className="flex flex-1 flex-col p-5">
-                  <h3 className="line-clamp-2 min-h-14 text-xl font-bold">{produto.nome}</h3>
+                <div className="flex flex-1 flex-col p-4 sm:p-5">
+                  <h3 className="line-clamp-2 min-h-12 text-lg font-bold sm:min-h-14 sm:text-xl">
+                    {formatarNomeProduto(produto.nome)}
+                  </h3>
                   {produto.descricao && (
                     <p className="mt-2 line-clamp-2 min-h-10 text-sm text-zinc-400">{produto.descricao}</p>
                   )}
@@ -966,7 +1168,7 @@ export default function Catalogo({
                 <h2 className="text-2xl font-black text-yellow-400">
                   {geloEmConfiguracao.nome.toLowerCase().includes("jack daniel")
                     ? "Whisky Jack Daniel’s"
-                    : geloEmConfiguracao.nome}
+                    : formatarNomeProduto(geloEmConfiguracao.nome)}
                 </h2>
                 <p className="text-zinc-300">Escolha o sabor e a quantidade.</p>
               </div>
@@ -1051,7 +1253,9 @@ export default function Catalogo({
                   className="rounded-xl border border-zinc-800 bg-zinc-900 p-3"
                 >
                   <div className="flex justify-between gap-2">
-                    <p className="line-clamp-2 text-sm font-bold">{item.nome}</p>
+                    <p className="line-clamp-2 text-sm font-bold">
+                      {formatarNomeProduto(item.nome)}
+                    </p>
                     <button
                       type="button"
                       onClick={() =>
@@ -1103,6 +1307,9 @@ export default function Catalogo({
         </div>
 
         <div className="border-t border-zinc-800 bg-black/30 p-5">
+          <div className="mb-3">
+            <IndicadorPedidoMinimo compacto />
+          </div>
           <div className="mb-4 flex items-center justify-between">
             <span className="font-bold">Total</span>
             <span className="text-xl font-black text-yellow-400">
@@ -1126,7 +1333,9 @@ export default function Catalogo({
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-black text-yellow-400">Monte seu combo</h2>
-                <p className="text-zinc-300">{comboEmConfiguracao.nome}</p>
+                <p className="text-zinc-300">
+                  {formatarNomeProduto(comboEmConfiguracao.nome)}
+                </p>
               </div>
               <button type="button" onClick={() => setComboEmConfiguracao(null)} className="rounded-lg p-2 hover:bg-zinc-800"><X /></button>
             </div>
@@ -1140,7 +1349,7 @@ export default function Catalogo({
                 </label>
               )}
 
-              <label className="block text-sm font-bold">Sabor do energetico 2 L
+              <label className="block text-sm font-bold">Sabor do energético 2 L
                 <select value={saborEnergetico} onChange={(event) => setSaborEnergetico(event.target.value)} className="mt-2 w-full rounded-lg bg-zinc-800 p-3 font-normal">
                   {saboresEnergetico.map((sabor) => <option key={sabor} value={sabor}>{sabor}</option>)}
                 </select>
@@ -1197,9 +1406,20 @@ export default function Catalogo({
           onClick={() => setCarrinhoAberto(true)}
           className="fixed bottom-4 left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-center justify-between rounded-2xl bg-yellow-400 px-5 py-4 font-black text-black shadow-2xl hover:bg-yellow-300 xl:hidden"
         >
-          <span className="flex items-center gap-2">
-            <ShoppingBag size={20} />
-            Carrinho ({quantidadeTotal})
+          <span className="flex flex-col items-start">
+            <span className="flex items-center gap-2">
+              <ShoppingBag size={20} />
+              Carrinho ({quantidadeTotal})
+            </span>
+            <span className="text-xs font-semibold">
+              {pedidoMinimoAtual === null
+                ? "Escolha a cidade para ver o mínimo"
+                : faltaPedidoMinimo === 0
+                  ? "Pedido mínimo atingido"
+                  : `Faltam ${formatarPreco(faltaPedidoMinimo ?? 0)}${
+                      regraTabacariaEmFoco ? " em Tabacaria" : ""
+                    }`}
+            </span>
           </span>
           <span>{formatarPreco(valorTotal)}</span>
         </button>
@@ -1223,11 +1443,37 @@ export default function Catalogo({
               </button>
             </div>
 
+            <ol className="mt-5 grid grid-cols-4 gap-1 rounded-xl bg-zinc-900 p-3 text-center text-[10px] font-bold">
+              {["Entrega", "Pagamento", "Revisão", "WhatsApp"].map(
+                (etapa, indice) => (
+                  <li
+                    key={etapa}
+                    className={
+                      indice <= 2 ? "text-yellow-300" : "text-green-300"
+                    }
+                  >
+                    <span
+                      className={`mx-auto mb-1 grid h-6 w-6 place-items-center rounded-full ${
+                        indice <= 2
+                          ? "bg-yellow-400 text-black"
+                          : "bg-green-500 text-black"
+                      }`}
+                    >
+                      {indice + 1}
+                    </span>
+                    {etapa}
+                  </li>
+                )
+              )}
+            </ol>
+
             <div className="mt-5 space-y-3">
               {carrinho.map((item) => (
                 <div key={chaveItem(item)} className="rounded-xl bg-zinc-900 p-4">
                   <div className="flex justify-between gap-3">
-                    <p className="font-bold">{item.quantidade}x {item.nome}</p>
+                    <p className="font-bold">
+                      {item.quantidade}x {formatarNomeProduto(item.nome)}
+                    </p>
                     <p className="font-bold text-yellow-400">
                       {formatarPreco(calcularSubtotalItem(item))}
                     </p>
@@ -1277,7 +1523,17 @@ export default function Catalogo({
               <span>Total</span>
               <span className="text-yellow-400">{formatarPreco(valorTotal)}</span>
             </div>
-            <div className="mt-5 grid grid-cols-2 gap-3">
+            <div className="mt-5 flex items-start gap-3 rounded-xl border border-green-500/40 bg-green-500/10 p-4 text-sm text-green-100">
+              <MessageCircle className="mt-0.5 shrink-0 text-green-400" size={20} />
+              <p>
+                <strong className="block text-white">
+                  Falta apenas enviar no WhatsApp
+                </strong>
+                Seu pedido só será confirmado após você enviar a mensagem que
+                abriremos no WhatsApp.
+              </p>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <button
                 type="button"
                 onClick={() => setRevisaoAberta(false)}
@@ -1293,7 +1549,7 @@ export default function Catalogo({
               >
                 {enviandoPedido
                   ? "Enviando pedido..."
-                  : "Confirmar e abrir WhatsApp"}
+                  : "Abrir WhatsApp"}
               </button>
             </div>
           </div>
@@ -1303,7 +1559,7 @@ export default function Catalogo({
       {carrinhoAberto && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/70" onClick={() => setCarrinhoAberto(false)}>
           <aside
-            className="flex h-full w-full max-w-md flex-col bg-zinc-950 p-6 shadow-2xl"
+            className="flex h-full w-full max-w-md flex-col bg-zinc-950 p-4 shadow-2xl sm:p-6"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-zinc-800 pb-5">
@@ -1312,6 +1568,27 @@ export default function Catalogo({
                 <X />
               </button>
             </div>
+            <ol className="grid grid-cols-4 gap-1 border-b border-zinc-800 py-3 text-center text-[10px] font-bold text-zinc-500">
+              {["Entrega", "Pagamento", "Revisão", "WhatsApp"].map(
+                (etapa, indice) => (
+                  <li
+                    key={etapa}
+                    className={indice < 2 ? "text-yellow-300" : ""}
+                  >
+                    <span
+                      className={`mx-auto mb-1 grid h-6 w-6 place-items-center rounded-full ${
+                        indice < 2
+                          ? "bg-yellow-400 text-black"
+                          : "bg-zinc-800 text-zinc-400"
+                      }`}
+                    >
+                      {indice + 1}
+                    </span>
+                    {etapa}
+                  </li>
+                )
+              )}
+            </ol>
             <div className="flex-1 overflow-y-auto py-5">
               {carrinho.length === 0 ? (
                 <p className="text-center text-zinc-400">Seu carrinho está vazio.</p>
@@ -1320,13 +1597,13 @@ export default function Catalogo({
                   {carrinho.map((item) => (
                     <div key={chaveItem(item)} className="flex items-center gap-3 rounded-xl bg-zinc-900 p-3">
                       <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-zinc-800">
-                        {item.imagem ? <Image src={item.imagem} alt="" fill className="object-cover" sizes="64px" /> : null}
+                        {item.imagem ? <Image src={item.imagem} alt="" fill className="object-contain p-1" sizes="64px" /> : null}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-bold">{item.nome}</p>
+                        <p className="truncate font-bold">{formatarNomeProduto(item.nome)}</p>
                         {item.sabor && <p className="text-xs text-zinc-300">Sabor: {item.sabor}</p>}
                         <p className="text-sm text-yellow-400">{formatarPreco(item.preco)}</p>
-                        {item.escolhasCombo && <p className="mt-1 text-xs text-zinc-400">{item.escolhasCombo.askov ? `Askov: ${item.escolhasCombo.askov} · ` : ""}Energetico: {item.escolhasCombo.energetico} · 6 gelos</p>}
+                        {item.escolhasCombo && <p className="mt-1 text-xs text-zinc-400">{item.escolhasCombo.askov ? `Askov: ${item.escolhasCombo.askov} · ` : ""}Energético: {item.escolhasCombo.energetico} · 6 gelos</p>}
                       </div>
                       <div className="flex items-center gap-1">
                         <button onClick={() => alterarQuantidade(item, -1)} className="p-1 text-zinc-300"><Minus size={16} /></button>
@@ -1341,6 +1618,7 @@ export default function Catalogo({
 
               {carrinho.length > 0 && (
                 <div className="mt-7 space-y-4 border-t border-zinc-800 pt-6">
+                  <IndicadorPedidoMinimo />
                   {quantidadeGarrafas300 > 0 && (
                     <div className="rounded-xl border border-yellow-400/50 bg-yellow-400/10 p-4 text-sm">
                       <p className="font-bold text-yellow-300">Garrafinhas de 300 ml</p>
@@ -1351,7 +1629,17 @@ export default function Catalogo({
                       </label>
                     </div>
                   )}
-                  <h3 className="text-lg font-bold">Dados para o pedido</h3>
+                  <div className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-yellow-400 font-black text-black">
+                      1
+                    </span>
+                    <div>
+                      <h3 className="font-black text-white">Entrega</h3>
+                      <p className="text-xs text-zinc-400">
+                        Seus dados e o endereço do pedido
+                      </p>
+                    </div>
+                  </div>
                   {dadosClienteRecuperados && (
                     <div className="rounded-lg border border-yellow-400/40 bg-yellow-400/10 px-3 py-2 text-sm text-yellow-100">
                       Preenchemos seu último endereço. Você pode editar qualquer
@@ -1429,7 +1717,17 @@ export default function Catalogo({
                   </div>
 
                   <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-yellow-400 bg-yellow-400/10 p-4">
-                    <h3 className="text-lg font-black uppercase tracking-wide text-yellow-300">Pagamento</h3>
+                    <div className="flex items-center gap-3">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-yellow-400 font-black text-black">
+                        2
+                      </span>
+                      <div>
+                        <h3 className="font-black text-yellow-300">Pagamento</h3>
+                        <p className="text-xs text-zinc-300">
+                          Escolha uma ou mais formas
+                        </p>
+                      </div>
+                    </div>
                     <label className="flex items-center gap-2 text-sm font-bold text-white">
                       Quantas formas?
                       <select
@@ -1516,10 +1814,25 @@ export default function Catalogo({
               )}
             </div>
             <div className="border-t border-zinc-800 pt-5">
+              <div className="mb-3 flex items-center gap-3 text-sm">
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-yellow-400 font-black text-black">
+                  3
+                </span>
+                <div>
+                  <p className="font-black">Revisão</p>
+                  <p className="text-xs text-zinc-400">
+                    Confira tudo antes de enviar
+                  </p>
+                </div>
+              </div>
               <div className="mb-4 flex justify-between text-lg font-bold"><span>Total</span><span className="text-yellow-400">{formatarPreco(valorTotal)}</span></div>
               <button onClick={() => finalizarPedido()} disabled={carrinho.length === 0 || !atendimentoAberto} className="w-full rounded-lg bg-yellow-400 px-4 py-3 font-bold text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400">
                 Revisar pedido
               </button>
+              <p className="mt-2 text-center text-xs text-zinc-400">
+                Depois da revisão, abriremos o WhatsApp para você enviar a
+                mensagem.
+              </p>
             </div>
           </aside>
         </div>

@@ -55,24 +55,24 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen text-white">
-      <section className="border-b border-white/10 px-5 py-7">
-        <div className="mx-auto flex max-w-[90rem] flex-col items-center justify-center gap-3 text-center sm:flex-row sm:justify-between sm:gap-5 sm:text-right xl:pr-[21rem]">
+      <section className="border-b border-white/10 px-5 py-3 sm:py-6">
+        <div className="mx-auto flex max-w-[90rem] items-center justify-between gap-3 text-left sm:gap-5 sm:text-right xl:pr-[21rem]">
           <Image
             src="/images/logo.png"
             alt="Guetto Delivery"
             width={220}
             height={220}
             priority
-            className="h-32 w-32 shrink-0 object-contain sm:h-40 sm:w-40"
+            className="h-20 w-20 shrink-0 object-contain sm:h-32 sm:w-32"
           />
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-yellow-400">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-yellow-400 sm:text-sm">
               Delivery
             </p>
-            <h1 className="mt-1 text-2xl font-black sm:text-4xl">
+            <h1 className="mt-1 text-lg font-black leading-tight sm:text-3xl">
               Bebidas, conveniência e mais
             </h1>
-            <p className="mt-2 text-sm text-zinc-300">
+            <p className="mt-1 text-xs text-zinc-300 sm:mt-2 sm:text-sm">
               Escolha, monte seu pedido e finalize pelo WhatsApp.
             </p>
           </div>
@@ -114,14 +114,6 @@ export default async function Home() {
         </div>
       </footer>
 
-      <a
-        href="https://wa.me/554491271708?text=Olá!%20Preciso%20de%20ajuda%20com%20meu%20pedido."
-        target="_blank"
-        rel="noreferrer"
-        className="fixed bottom-24 left-4 z-30 rounded-full bg-green-500 px-4 py-3 text-sm font-black text-black shadow-2xl transition hover:bg-green-400 xl:bottom-5"
-      >
-        💬 Ajuda no WhatsApp
-      </a>
     </main>
   );
 }
