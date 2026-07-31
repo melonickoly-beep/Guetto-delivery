@@ -138,6 +138,7 @@ export default function Catalogo({
   const [busca, setBusca] = useState("");
   const [carrinhoAberto, setCarrinhoAberto] = useState(false);
   const [revisaoAberta, setRevisaoAberta] = useState(false);
+  const [maiorDeIdadeConfirmado, setMaiorDeIdadeConfirmado] = useState(false);
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
   const [carrinhoCarregado, setCarrinhoCarregado] = useState(false);
   const [ultimoPedido, setUltimoPedido] = useState<ItemCarrinho[]>([]);
@@ -690,7 +691,13 @@ export default function Catalogo({
     }
 
     if (!confirmado) {
+      setMaiorDeIdadeConfirmado(false);
       setRevisaoAberta(true);
+      return;
+    }
+
+    if (!maiorDeIdadeConfirmado) {
+      alert("Confirme que você tem 18 anos ou mais para enviar o pedido.");
       return;
     }
 
@@ -721,6 +728,7 @@ export default function Catalogo({
       "",
       `Total: ${formatarPreco(valorTotal)}`,
       `Previsão de entrega: até ${tempoEntrega} minutos`,
+      "Maioridade: cliente confirmou ter 18 anos ou mais.",
       ...(quantidadeGarrafas300 > 0 ? ["Vasilhame: cliente confirmou que levará o próprio."] : []),
       "Pagamento:",
       ...pagamentosFormatados.map((pagamento) => `- ${pagamento}`),
@@ -749,6 +757,7 @@ export default function Catalogo({
           tempo_entrega: tempoEntrega,
           observacao: [
             `Cidade de entrega: ${cidadeEntrega}.`,
+            "Cliente confirmou ter 18 anos ou mais.",
             ...(quantidadeGarrafas300 > 0 ? ["Vasilhame confirmado pelo cliente."] : []),
           ].join(" "),
         }),
@@ -790,6 +799,7 @@ export default function Catalogo({
       window.localStorage.setItem("guetto_carrinho", "[]");
       setCarrinho([]);
       setRevisaoAberta(false);
+      setMaiorDeIdadeConfirmado(false);
 
       try {
         await navigator.clipboard.writeText(pedidoFinal);
@@ -1523,6 +1533,25 @@ export default function Catalogo({
               <span>Total</span>
               <span className="text-yellow-400">{formatarPreco(valorTotal)}</span>
             </div>
+            <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border-2 border-red-500/60 bg-red-950/40 p-4">
+              <input
+                type="checkbox"
+                checked={maiorDeIdadeConfirmado}
+                onChange={(event) =>
+                  setMaiorDeIdadeConfirmado(event.target.checked)
+                }
+                className="mt-1 h-5 w-5 shrink-0 accent-yellow-400"
+              />
+              <span>
+                <strong className="block text-white">
+                  Confirmo que tenho 18 anos ou mais
+                </strong>
+                <span className="mt-1 block text-sm text-red-200">
+                  A venda de bebidas alcoólicas e produtos de tabacaria é
+                  proibida para menores de 18 anos.
+                </span>
+              </span>
+            </label>
             <div className="mt-5 flex items-start gap-3 rounded-xl border border-green-500/40 bg-green-500/10 p-4 text-sm text-green-100">
               <MessageCircle className="mt-0.5 shrink-0 text-green-400" size={20} />
               <p>
@@ -1544,12 +1573,14 @@ export default function Catalogo({
               <button
                 type="button"
                 onClick={() => finalizarPedido(true)}
-                disabled={enviandoPedido}
-                className="rounded-xl bg-green-500 px-4 py-3 font-bold text-black hover:bg-green-400 disabled:cursor-wait disabled:bg-zinc-700 disabled:text-zinc-300"
+                disabled={enviandoPedido || !maiorDeIdadeConfirmado}
+                className="rounded-xl bg-green-500 px-4 py-3 font-bold text-black hover:bg-green-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-300"
               >
                 {enviandoPedido
                   ? "Enviando pedido..."
-                  : "Abrir WhatsApp"}
+                  : maiorDeIdadeConfirmado
+                    ? "Abrir WhatsApp"
+                    : "Confirme sua idade"}
               </button>
             </div>
           </div>
