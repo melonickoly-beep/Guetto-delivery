@@ -16,7 +16,8 @@ export default function PwaRegistro() {
   const pathname = usePathname();
   const [promptInstalacao, setPromptInstalacao] =
     useState<BeforeInstallPromptEvent | null>(null);
-  const [mostrarAjudaIos, setMostrarAjudaIos] = useState(false);
+  const [mostrarAjudaManual, setMostrarAjudaManual] = useState(false);
+  const [plataforma, setPlataforma] = useState<"android" | "ios" | null>(null);
   const [visivel, setVisivel] = useState(false);
 
   useEffect(() => {
@@ -30,39 +31,56 @@ export default function PwaRegistro() {
         (navigator as Navigator & { standalone?: boolean }).standalone === true);
     if (modoStandalone) return;
 
-    const dispensadoEm = Number(localStorage.getItem(DISPENSADO_EM) ?? 0);
-    if (Date.now() - dispensadoEm < ESPERA_PARA_REEXIBIR) return;
-
     const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const android = /android/i.test(navigator.userAgent);
+    setPlataforma(ios ? "ios" : android ? "android" : null);
+
+    const dispensadoEm = Number(localStorage.getItem(DISPENSADO_EM) ?? 0);
+    if (!android && Date.now() - dispensadoEm < ESPERA_PARA_REEXIBIR) return;
+
     const aoSolicitarInstalacao = (event: Event) => {
       event.preventDefault();
       setPromptInstalacao(event as BeforeInstallPromptEvent);
+      setMostrarAjudaManual(false);
       setVisivel(true);
     };
 
+    const aoInstalar = () => {
+      setPromptInstalacao(null);
+      setVisivel(false);
+    };
+
     window.addEventListener("beforeinstallprompt", aoSolicitarInstalacao);
+    window.addEventListener("appinstalled", aoInstalar);
+
+    if (android) {
+      setVisivel(true);
+    }
 
     if (ios) {
       const timer = window.setTimeout(() => setVisivel(true), 1800);
       return () => {
         window.clearTimeout(timer);
         window.removeEventListener("beforeinstallprompt", aoSolicitarInstalacao);
+        window.removeEventListener("appinstalled", aoInstalar);
       };
     }
 
-    return () =>
+    return () => {
       window.removeEventListener("beforeinstallprompt", aoSolicitarInstalacao);
+      window.removeEventListener("appinstalled", aoInstalar);
+    };
   }, []);
 
   function fechar() {
     localStorage.setItem(DISPENSADO_EM, String(Date.now()));
     setVisivel(false);
-    setMostrarAjudaIos(false);
+    setMostrarAjudaManual(false);
   }
 
   async function instalar() {
     if (!promptInstalacao) {
-      setMostrarAjudaIos(true);
+      setMostrarAjudaManual(true);
       return;
     }
 
@@ -109,16 +127,23 @@ export default function PwaRegistro() {
         </div>
       </div>
 
-      {mostrarAjudaIos ? (
+      {mostrarAjudaManual ? (
         <div className="mt-3 rounded-xl bg-white/8 p-3 text-sm text-zinc-200">
           <p className="flex items-center gap-2 font-semibold text-white">
             <Share2 size={17} className="text-yellow-400" aria-hidden="true" />
-            No iPhone ou iPad
+            {plataforma === "android" ? "No Android" : "No iPhone ou iPad"}
           </p>
-          <p className="mt-1.5">
-            Toque em <strong>Compartilhar</strong> no Safari e depois em{" "}
-            <strong>Adicionar à Tela de Início</strong>.
-          </p>
+          {plataforma === "android" ? (
+            <p className="mt-1.5">
+              No Chrome, toque no menu de <strong>três pontos</strong> e escolha{" "}
+              <strong>Adicionar à tela inicial</strong> ou <strong>Instalar app</strong>.
+            </p>
+          ) : (
+            <p className="mt-1.5">
+              Toque em <strong>Compartilhar</strong> no Safari e depois em{" "}
+              <strong>Adicionar à Tela de Início</strong>.
+            </p>
+          )}
         </div>
       ) : (
         <button
