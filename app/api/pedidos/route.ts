@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     await Promise.all([
       supabaseAdmin
         .from("produtos")
-        .select("id,nome,preco,categoria_id,tipo_venda,disponivel")
+        .select("id,nome,preco,categoria_id,disponivel")
         .in("id", idsProdutos),
       supabaseAdmin.from("categorias").select("id,nome"),
     ]);
@@ -136,30 +136,6 @@ export async function POST(request: Request) {
       {
         error: `O pedido mínimo para entrega em ${cidadeEntrega} é de R$ ${pedidoMinimo.toFixed(2).replace(".", ",")}.`,
       },
-      { status: 400 }
-    );
-  }
-
-  const temCombo = itensValidados.some(
-    (item) => item.categoria === "combos"
-  );
-  const temCaixaFechada = itensValidados.some(
-    (item) =>
-      item.categoria === "cervejas" && item.produto.tipo_venda !== "avulso"
-  );
-  const subtotalTabacaria = itensTabacaria.reduce(
-    (total, item) => total + item.subtotal,
-    0
-  );
-
-  if (
-    itensTabacaria.length > 0 &&
-    !temCombo &&
-    !temCaixaFechada &&
-    subtotalTabacaria < 20
-  ) {
-    return NextResponse.json(
-      { error: "O pedido mínimo para itens da Tabacaria é de R$ 20,00." },
       { status: 400 }
     );
   }

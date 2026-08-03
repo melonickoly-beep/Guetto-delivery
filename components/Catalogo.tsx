@@ -348,18 +348,6 @@ export default function Catalogo({
   );
   const somenteTabacariaAtual =
     carrinho.length > 0 && itensTabacariaAtual.length === carrinho.length;
-  const temComboAtual = carrinho.some(
-    (item) => categoriaPorIdAtual.get(item.categoria_id) === "combos"
-  );
-  const temCaixaFechadaAtual = carrinho.some(
-    (item) =>
-      categoriaPorIdAtual.get(item.categoria_id) === "cervejas" &&
-      item.tipo_venda !== "avulso"
-  );
-  const subtotalTabacariaAtual = itensTabacariaAtual.reduce(
-    (total, item) => total + calcularSubtotalItem(item),
-    0
-  );
   const pedidoMinimoCidadeAtual =
     cidadeEntrega === ""
       ? null
@@ -372,31 +360,12 @@ export default function Catalogo({
     pedidoMinimoCidadeAtual === null
       ? null
       : Math.max(0, pedidoMinimoCidadeAtual - valorTotal);
-  const faltaMinimoTabacaria =
-    itensTabacariaAtual.length > 0 &&
-    !temComboAtual &&
-    !temCaixaFechadaAtual
-      ? Math.max(0, 20 - subtotalTabacariaAtual)
-      : 0;
-  const regraTabacariaEmFoco =
-    faltaMinimoCidade !== null &&
-    faltaMinimoTabacaria > faltaMinimoCidade;
-  const pedidoMinimoAtual = regraTabacariaEmFoco
-    ? 20
-    : pedidoMinimoCidadeAtual;
-  const faltaPedidoMinimo =
-    faltaMinimoCidade === null
-      ? null
-      : Math.max(faltaMinimoCidade, faltaMinimoTabacaria);
+  const pedidoMinimoAtual = pedidoMinimoCidadeAtual;
+  const faltaPedidoMinimo = faltaMinimoCidade;
   const progressoPedidoMinimo =
     pedidoMinimoAtual === null
       ? 0
-      : Math.min(
-          100,
-          ((regraTabacariaEmFoco ? subtotalTabacariaAtual : valorTotal) /
-            pedidoMinimoAtual) *
-            100
-        );
+      : Math.min(100, (valorTotal / pedidoMinimoAtual) * 100);
   const totalPagamentosInformado = [
     primeiroPagamento,
     segundoPagamento,
@@ -619,8 +588,6 @@ export default function Catalogo({
     const categoriaPorId = new Map(categorias.map((categoria) => [categoria.id, categoria.nome.toLowerCase()]));
     const itensPorCategoria = (nomeCategoria: string) =>
       carrinho.filter((item) => categoriaPorId.get(item.categoria_id) === nomeCategoria);
-    const subtotal = (itens: ItemCarrinho[]) =>
-      itens.reduce((total, item) => total + calcularSubtotalItem(item), 0);
     const itensTabacaria = itensPorCategoria("tabacaria");
     const somenteTabacaria =
       itensTabacaria.length > 0 && itensTabacaria.length === carrinho.length;
@@ -636,23 +603,6 @@ export default function Catalogo({
 
     if (!primeiroPagamento.forma) {
       alert("Escolha uma forma de pagamento.");
-      return;
-    }
-
-    const itensCombos = itensPorCategoria("combos");
-    const temCombo = itensCombos.length > 0;
-    const itensCerveja = itensPorCategoria("cervejas");
-    const temCaixaFechada = itensCerveja.some(
-      (item) => item.tipo_venda !== "avulso"
-    );
-
-    if (
-      itensTabacaria.length > 0 &&
-      !temCombo &&
-      !temCaixaFechada &&
-      subtotal(itensTabacaria) < 20
-    ) {
-      alert("O pedido mínimo para itens da Tabacaria é de R$ 20,00.");
       return;
     }
 
@@ -856,14 +806,11 @@ export default function Catalogo({
               >
                 {faltaPedidoMinimo === 0
                   ? "Pedido mínimo atingido"
-                  : `Faltam ${formatarPreco(faltaPedidoMinimo ?? 0)}${
-                      regraTabacariaEmFoco ? " em Tabacaria" : ""
-                    }`}
+                  : `Faltam ${formatarPreco(faltaPedidoMinimo ?? 0)}`}
               </p>
               {!compacto && (
                 <span className="shrink-0 text-xs text-zinc-400">
-                  {regraTabacariaEmFoco ? "Tabacaria" : "Mínimo"}{" "}
-                  {formatarPreco(pedidoMinimoAtual)}
+                  Mínimo {formatarPreco(pedidoMinimoAtual)}
                 </span>
               )}
             </div>
@@ -1426,9 +1373,7 @@ export default function Catalogo({
                 ? "Escolha a cidade para ver o mínimo"
                 : faltaPedidoMinimo === 0
                   ? "Pedido mínimo atingido"
-                  : `Faltam ${formatarPreco(faltaPedidoMinimo ?? 0)}${
-                      regraTabacariaEmFoco ? " em Tabacaria" : ""
-                    }`}
+                  : `Faltam ${formatarPreco(faltaPedidoMinimo ?? 0)}`}
             </span>
           </span>
           <span>{formatarPreco(valorTotal)}</span>
