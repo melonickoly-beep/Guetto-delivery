@@ -65,7 +65,11 @@ export default async function Home() {
   return (
     <main className="min-h-screen text-white">
       <section className="border-b border-white/10 px-5 py-3 sm:py-6">
-        <div className="mx-auto flex max-w-[90rem] items-center justify-between gap-3 text-left sm:gap-5 sm:text-right xl:pr-[21rem]">
+        <div
+          className={`mx-auto flex max-w-[90rem] items-center justify-between gap-3 text-left sm:gap-5 sm:text-right ${
+            somenteRetiradaHoje ? "" : "xl:pr-[21rem]"
+          }`}
+        >
           <Image
             src="/images/logo.png"
             alt="Guetto Delivery"
@@ -76,13 +80,15 @@ export default async function Home() {
           />
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-yellow-400 sm:text-sm">
-              {somenteRetiradaHoje ? "Retirada na loja" : "Delivery"}
+              {somenteRetiradaHoje ? "Catálogo · compras na loja" : "Delivery"}
             </p>
             <h1 className="mt-1 text-lg font-black leading-tight sm:text-3xl">
               Bebidas, conveniência e mais
             </h1>
             <p className="mt-1 text-xs text-zinc-300 sm:mt-2 sm:text-sm">
-              Escolha, monte seu pedido e finalize pelo WhatsApp.
+              {somenteRetiradaHoje
+                ? "Consulte nossos produtos e preços. Compras somente na loja."
+                : "Escolha, monte seu pedido e finalize pelo WhatsApp."}
             </p>
           </div>
         </div>
@@ -97,14 +103,20 @@ export default async function Home() {
         somenteRetiradaConfigurada={somenteRetiradaConfigurada}
       />
 
-      <footer className="border-t border-white/10 bg-black/35 px-5 py-8 xl:pr-[21rem]">
+      <footer
+        className={`border-t border-white/10 bg-black/35 px-5 py-8 ${
+          somenteRetiradaHoje ? "" : "xl:pr-[21rem]"
+        }`}
+      >
         <div className="mx-auto grid max-w-6xl gap-6 text-sm text-zinc-300 sm:grid-cols-3">
           <div>
             <p className="font-black text-yellow-400">
-              {somenteRetiradaHoje ? "Retirada" : "Entrega"}
+              {somenteRetiradaHoje ? "Compras na loja" : "Entrega"}
             </p>
             {somenteRetiradaHoje ? (
-              <p className="mt-2">Hoje, os pedidos devem ser retirados na loja.</p>
+              <p className="mt-2">
+                Consulte produtos e preços. As compras são feitas presencialmente.
+              </p>
             ) : (
               <>
                 <p className="mt-2">Paranacity e Cruzeiro do Sul</p>

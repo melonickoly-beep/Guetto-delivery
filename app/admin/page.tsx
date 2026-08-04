@@ -480,7 +480,9 @@ export default function AdminPage() {
 
     alert(
       `Atendimento definido: das ${horarioAbertura} às ${horarioFechamento}. ${
-        somenteRetirada ? "Somente retirada na loja." : "Delivery disponível."
+        somenteRetirada
+          ? "Site apenas para consulta; compras presenciais."
+          : "Delivery disponível."
       }`
     );
   }
@@ -983,11 +985,12 @@ export default function AdminPage() {
             />
             <span>
               <strong className="block text-yellow-300">
-                Somente retirada na loja
+                Somente retirada na loja — compra presencial
               </strong>
               <span className="text-sm text-zinc-300">
-                Bloqueia delivery e permite pedidos apenas para retirada. Às
-                terças-feiras isso acontece automaticamente, mesmo com esta
+                Bloqueia todos os pedidos pelo site e deixa o cardápio apenas
+                para consulta. As compras são feitas presencialmente na loja.
+                Às terças-feiras isso acontece automaticamente, mesmo com esta
                 opção desmarcada.
               </span>
             </span>

@@ -346,6 +346,14 @@ export default function Catalogo({
       weekday: "short",
     }).format(agora) === "Tue";
   const somenteRetiradaHoje = somenteRetiradaConfigurada || tercaFeira;
+
+  useEffect(() => {
+    if (!somenteRetiradaHoje) return;
+    setCarrinhoAberto(false);
+    setRevisaoAberta(false);
+    setGeloEmConfiguracao(null);
+    setComboEmConfiguracao(null);
+  }, [somenteRetiradaHoje]);
   const categoriaPorIdAtual = new Map(
     categorias.map((categoria) => [
       categoria.id,
@@ -442,6 +450,7 @@ export default function Catalogo({
   }
 
   function repetirUltimoPedido() {
+    if (somenteRetiradaHoje) return;
     if (ultimoPedido.length === 0) return;
     if (
       carrinho.length > 0 &&
@@ -462,6 +471,7 @@ export default function Catalogo({
   }
 
   function alterarQuantidade(produto: Produto & { sabor?: string; escolhasCombo?: EscolhasCombo }, alteracao: number) {
+    if (somenteRetiradaHoje) return;
     setCarrinho((itens) => {
       const chave = chaveItem(produto);
       const itemAtual = itens.find((item) => chaveItem(item) === chave);
@@ -510,6 +520,7 @@ export default function Catalogo({
   }
 
   function abrirConfiguracaoGelo(produto: Produto) {
+    if (somenteRetiradaHoje) return;
     const sabores = saboresDoProduto(produto);
     setGeloEmConfiguracao(produto);
     setSaborGeloAvulso(sabores[0] ?? "");
@@ -554,6 +565,7 @@ export default function Catalogo({
   }
 
   function abrirConfiguracaoCombo(produto: Produto) {
+    if (somenteRetiradaHoje) return;
     setSaborAskov(saboresAskov[0] ?? "Tradicional");
     setSaborEnergetico(saboresEnergetico[0] ?? "Tradicional");
     setSaboresGelo(Array(6).fill(saboresDeGelo[0]));
@@ -588,6 +600,13 @@ export default function Catalogo({
 
   async function finalizarPedido(confirmado = false) {
     if (enviandoPedido) return;
+
+    if (somenteRetiradaHoje) {
+      alert(
+        "Hoje o site está disponível apenas para consulta. As compras devem ser feitas presencialmente na loja."
+      );
+      return;
+    }
 
     if (!atendimentoAberto) {
       alert("A Guetto Delivery está fechada no momento.");
@@ -888,7 +907,11 @@ export default function Catalogo({
   }
 
   return (
-    <section className="mx-auto max-w-[90rem] px-4 py-5 pb-28 sm:px-5 sm:py-8 xl:pr-[21rem]">
+    <section
+      className={`mx-auto max-w-[90rem] px-4 py-5 sm:px-5 sm:py-8 ${
+        somenteRetiradaHoje ? "pb-12" : "pb-28 xl:pr-[21rem]"
+      }`}
+    >
       <div className="mb-4 rounded-2xl border border-white/10 bg-black/25 p-4 shadow-2xl backdrop-blur-sm sm:p-6">
         <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -901,12 +924,13 @@ export default function Catalogo({
             <p className="mt-1 text-xs text-zinc-400 sm:text-sm">
               {atendimentoAberto
                 ? somenteRetiradaHoje
-                  ? "Aberto · somente retirada"
+                  ? "Catálogo · compras presenciais"
                   : "Aberto agora"
                 : "Fechado agora"}
             </p>
           </div>
-          <div className="flex w-full items-stretch gap-2 sm:w-auto sm:items-center">
+          {!somenteRetiradaHoje && (
+            <div className="flex w-full items-stretch gap-2 sm:w-auto sm:items-center">
             {ultimoPedido.length > 0 && (
               <button
                 type="button"
@@ -930,7 +954,8 @@ export default function Catalogo({
                 </span>
               )}
             </button>
-          </div>
+            </div>
+          )}
         </div>
 
         <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 lg:grid-cols-[1fr_auto] lg:items-end">
@@ -942,21 +967,21 @@ export default function Catalogo({
                 <Truck className="mb-1 text-yellow-400" size={18} />
               )}
               <strong className="block text-white">
-                {somenteRetiradaHoje ? "Retirada na loja" : "Entrega grátis"}
+                {somenteRetiradaHoje ? "Catálogo para consulta" : "Entrega grátis"}
               </strong>
               <span className="text-zinc-400">
-                {somenteRetiradaHoje ? "Sem delivery hoje" : "Sem taxa"}
+                {somenteRetiradaHoje ? "Veja produtos e preços" : "Sem taxa"}
               </span>
             </div>
             <div className="rounded-xl bg-zinc-900/80 p-3">
               <Clock3 className="mb-1 text-yellow-400" size={18} />
               <strong className="block text-white">
                 {somenteRetiradaHoje
-                  ? "Aviso pelo WhatsApp"
+                  ? "Compra presencial"
                   : `Até ${tempoEntrega} min`}
               </strong>
               <span className="text-zinc-400">
-                {somenteRetiradaHoje ? "Quando estiver pronto" : "Após confirmar"}
+                {somenteRetiradaHoje ? "Diretamente na loja" : "Após confirmar"}
               </span>
             </div>
             <a
@@ -974,10 +999,10 @@ export default function Catalogo({
           {somenteRetiradaHoje ? (
             <div className="rounded-xl border border-yellow-400/40 bg-yellow-400/10 p-3 text-sm lg:min-w-80">
               <strong className="flex items-center gap-2 text-yellow-300">
-                <Store size={17} /> Somente retirada na loja
+                <Store size={17} /> Somente compras presenciais
               </strong>
               <p className="mt-1 text-zinc-300">
-                Faça o pedido normalmente e aguarde a confirmação pelo WhatsApp.
+                O site está disponível apenas para consultar produtos e preços.
               </p>
             </div>
           ) : (
@@ -1017,7 +1042,8 @@ export default function Catalogo({
             <Store size={19} /> Hoje não haverá delivery.
           </p>
           <p className="mt-1 text-sm">
-            Os pedidos feitos pelo site serão somente para retirada na loja.
+            O cardápio fica disponível para consulta, mas não aceita pedidos.
+            Para comprar, venha pessoalmente à loja.
           </p>
         </div>
       )}
@@ -1163,7 +1189,11 @@ export default function Catalogo({
                             : "Disponível"}
                       </p>
                     </div>
-                    {item && !exigeEscolhaDeSabor ? (
+                    {somenteRetiradaHoje ? (
+                      <span className="rounded-lg border border-yellow-400/40 bg-yellow-400/10 px-3 py-2 text-center text-xs font-bold text-yellow-200">
+                        Venda somente na loja
+                      </span>
+                    ) : item && !exigeEscolhaDeSabor ? (
                       <div className="flex items-center gap-3 rounded-lg bg-zinc-800 p-1">
                         <button
                           onClick={() => alterarQuantidade(produto, -1)}
@@ -1209,7 +1239,7 @@ export default function Catalogo({
         </div>
       )}
 
-      {geloEmConfiguracao && (
+      {!somenteRetiradaHoje && geloEmConfiguracao && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4" onClick={() => setGeloEmConfiguracao(null)}>
           <div className="w-full max-w-md rounded-2xl border border-yellow-400/50 bg-zinc-950 p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="mb-5 flex items-start justify-between gap-4">
@@ -1259,7 +1289,7 @@ export default function Catalogo({
         </div>
       )}
 
-      {avisoCarrinho && (
+      {!somenteRetiradaHoje && avisoCarrinho && (
         <div className="mb-6 flex items-start justify-between gap-3 rounded-xl border border-yellow-400/40 bg-yellow-400/10 p-4 text-sm text-yellow-100">
           <p>{avisoCarrinho}</p>
           <button
@@ -1272,6 +1302,7 @@ export default function Catalogo({
         </div>
       )}
 
+      {!somenteRetiradaHoje && (
       <aside className="fixed bottom-4 right-4 top-28 z-40 hidden w-72 flex-col overflow-hidden rounded-2xl border border-yellow-400/40 bg-zinc-950/95 shadow-2xl backdrop-blur xl:flex">
         <div className="border-b border-zinc-800 p-5">
           <div className="flex items-center justify-between gap-3">
@@ -1375,8 +1406,9 @@ export default function Catalogo({
           </button>
         </div>
       </aside>
+      )}
 
-      {comboEmConfiguracao && (
+      {!somenteRetiradaHoje && comboEmConfiguracao && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4" onClick={() => setComboEmConfiguracao(null)}>
           <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-yellow-400/50 bg-zinc-950 p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="mb-5 flex items-start justify-between gap-4">
@@ -1449,7 +1481,7 @@ export default function Catalogo({
         </div>
       )}
 
-      {quantidadeTotal > 0 && !carrinhoAberto && (
+      {!somenteRetiradaHoje && quantidadeTotal > 0 && !carrinhoAberto && (
         <button
           type="button"
           onClick={() => setCarrinhoAberto(true)}
@@ -1474,7 +1506,7 @@ export default function Catalogo({
         </button>
       )}
 
-      {revisaoAberta && (
+      {!somenteRetiradaHoje && revisaoAberta && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4">
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-yellow-400/50 bg-zinc-950 p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
@@ -1637,7 +1669,7 @@ export default function Catalogo({
         </div>
       )}
 
-      {carrinhoAberto && (
+      {!somenteRetiradaHoje && carrinhoAberto && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/70" onClick={() => setCarrinhoAberto(false)}>
           <aside
             className="flex h-full w-full max-w-md flex-col bg-zinc-950 p-4 shadow-2xl sm:p-6"

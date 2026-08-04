@@ -53,11 +53,11 @@ export async function POST(request: Request) {
     );
   }
 
-  if (somenteRetiradaHoje && tipoAtendimento !== "retirada") {
+  if (somenteRetiradaHoje) {
     return NextResponse.json(
       {
         error:
-          "Hoje não realizamos delivery. Faça o pedido para retirada na loja.",
+          "Hoje o site está disponível apenas para consulta. As compras devem ser feitas presencialmente na loja.",
       },
       { status: 403 }
     );
@@ -70,7 +70,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const retiradaNaLoja = tipoAtendimento === "retirada";
   const cidadeEntrega =
     body?.cidade_entrega === "Paranacity" ||
     body?.cidade_entrega === "Cruzeiro do Sul"
@@ -82,10 +81,9 @@ export async function POST(request: Request) {
     typeof body?.telefone !== "string" ||
     !body.cliente_nome.trim() ||
     !body.telefone.trim() ||
-    (!retiradaNaLoja &&
-      (typeof body?.endereco !== "string" ||
-        !body.endereco.trim() ||
-        !cidadeEntrega)) ||
+    typeof body?.endereco !== "string" ||
+    !body.endereco.trim() ||
+    !cidadeEntrega ||
     !Array.isArray(body?.pagamento) ||
     body.pagamento.length < 1 ||
     body.pagamento.length > 3 ||
@@ -186,7 +184,7 @@ export async function POST(request: Request) {
       ? 25
       : 35;
 
-  if (!retiradaNaLoja && valorTotal < pedidoMinimo) {
+  if (valorTotal < pedidoMinimo) {
     return NextResponse.json(
       {
         error: `O pedido mínimo para entrega em ${cidadeEntrega} é de R$ ${pedidoMinimo.toFixed(2).replace(".", ",")}.`,
@@ -222,11 +220,8 @@ export async function POST(request: Request) {
   const { data: pedidoId, error } = await supabaseAdmin.rpc("criar_pedido_seguro", {
     p_cliente_nome: body.cliente_nome,
     p_telefone: body.telefone,
-    p_endereco: retiradaNaLoja ? "Retirada na loja" : body.endereco,
-    p_referencia:
-      !retiradaNaLoja && typeof body.referencia === "string"
-        ? body.referencia
-        : "",
+    p_endereco: body.endereco,
+    p_referencia: typeof body.referencia === "string" ? body.referencia : "",
     p_itens: itens,
     p_pagamento: Array.isArray(body.pagamento) ? body.pagamento.slice(0, 3) : [],
     p_tempo_entrega: Number(body.tempo_entrega) || 20,
