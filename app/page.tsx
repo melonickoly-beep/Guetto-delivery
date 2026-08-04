@@ -108,7 +108,7 @@ export default async function Home() {
           somenteRetiradaHoje ? "" : "xl:pr-[21rem]"
         }`}
       >
-        <div className="mx-auto grid max-w-6xl gap-6 text-sm text-zinc-300 sm:grid-cols-3">
+        <div className="mx-auto grid max-w-6xl gap-6 text-sm text-zinc-300 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <p className="font-black text-yellow-400">
               {somenteRetiradaHoje ? "Compras na loja" : "Entrega"}
@@ -140,6 +140,18 @@ export default async function Home() {
             >
               Privacidade e dados
             </Link>
+          </div>
+          <div>
+            <p className="font-black text-yellow-400">Loja física</p>
+            <p className="mt-2">Paranacity - PR</p>
+            <a
+              href="https://share.google/yohBwgZriRO6w4SWp"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-block rounded-lg border border-yellow-400/50 px-3 py-2 font-bold text-yellow-300 transition hover:bg-yellow-400/10"
+            >
+              Como chegar pelo Google
+            </a>
           </div>
         </div>
       </footer>

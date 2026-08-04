@@ -87,6 +87,7 @@ const pagamentoVazio: Pagamento = {
 };
 
 const WHATSAPP_GUETTO = "554491271708";
+const GOOGLE_EMPRESA_URL = "https://share.google/yohBwgZriRO6w4SWp";
 
 const formatarPreco = (valor: number) =>
   new Intl.NumberFormat("pt-BR", {
@@ -315,8 +316,7 @@ export default function Catalogo({
         .replace(/[\u0300-\u036f]/g, "")
         .toLowerCase()
         .trim();
-      const disponiveis = produtos.filter((produto) => estoqueDisponivel(produto) > 0);
-      return disponiveis.filter((produto) => {
+      return produtos.filter((produto) => {
         const correspondeCategoria =
           termo.length > 0 ||
           (categoriaAtiva === "destaques"
@@ -984,16 +984,30 @@ export default function Catalogo({
                 {somenteRetiradaHoje ? "Diretamente na loja" : "Após confirmar"}
               </span>
             </div>
-            <a
-              href="https://wa.me/554491271708?text=Olá!%20Preciso%20de%20ajuda%20com%20meu%20pedido."
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-xl bg-green-500/15 p-3 transition hover:bg-green-500/25"
-            >
-              <MessageCircle className="mb-1 text-green-400" size={18} />
-              <strong className="block text-white">Precisa de ajuda?</strong>
-              <span className="text-green-300">Fale conosco</span>
-            </a>
+            {somenteRetiradaHoje ? (
+              <a
+                href={GOOGLE_EMPRESA_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-xl bg-blue-500/15 p-3 transition hover:bg-blue-500/25"
+                aria-label="Abrir a localização oficial da Guetto no Google"
+              >
+                <MapPin className="mb-1 text-blue-300" size={18} />
+                <strong className="block text-white">Como chegar?</strong>
+                <span className="text-blue-200">Abrir no Google</span>
+              </a>
+            ) : (
+              <a
+                href="https://wa.me/554491271708?text=Olá!%20Preciso%20de%20ajuda%20com%20meu%20pedido."
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-xl bg-green-500/15 p-3 transition hover:bg-green-500/25"
+              >
+                <MessageCircle className="mb-1 text-green-400" size={18} />
+                <strong className="block text-white">Precisa de ajuda?</strong>
+                <span className="text-green-300">Fale conosco</span>
+              </a>
+            )}
           </div>
 
           {somenteRetiradaHoje ? (
@@ -1004,6 +1018,14 @@ export default function Catalogo({
               <p className="mt-1 text-zinc-300">
                 O site está disponível apenas para consultar produtos e preços.
               </p>
+              <a
+                href={GOOGLE_EMPRESA_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-flex items-center gap-2 font-bold text-blue-200 underline underline-offset-4"
+              >
+                <MapPin size={16} /> Ver localização oficial
+              </a>
             </div>
           ) : (
             <label className="block text-sm font-bold text-zinc-200 lg:min-w-80">
@@ -1061,11 +1083,15 @@ export default function Catalogo({
 
       <div className="sticky top-0 z-30 -mx-4 border-y border-white/10 bg-zinc-950/95 px-4 py-3 shadow-xl backdrop-blur sm:-mx-5 sm:px-5">
         <label className="relative block">
+          <span className="sr-only">Pesquisar produtos</span>
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={20} />
           <input
+            type="search"
+            name="busca-produtos"
             value={busca}
             onChange={(event) => setBusca(event.target.value)}
             placeholder="Pesquisar produto, marca ou sabor"
+            aria-label="Pesquisar produto, marca ou sabor"
             className="w-full rounded-xl border border-zinc-700 bg-zinc-900 py-2.5 pl-12 pr-4 outline-none focus:border-yellow-400"
           />
         </label>
@@ -1079,9 +1105,9 @@ export default function Catalogo({
           className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 p-2.5 font-bold text-white outline-none focus:border-yellow-400 sm:hidden"
         >
           {busca && <option value="">Resultados da busca</option>}
-          {produtos.some(
-            (produto) => produto.destaque && estoqueDisponivel(produto) > 0
-          ) && <option value="destaques">⭐ Mais pedidos e ofertas</option>}
+          {produtos.some((produto) => produto.destaque) && (
+            <option value="destaques">⭐ Mais pedidos e ofertas</option>
+          )}
           {categorias.map((categoria) => (
             <option key={categoria.id} value={categoria.id}>
               {categoria.icone} {categoria.nome}
@@ -1089,7 +1115,7 @@ export default function Catalogo({
           ))}
         </select>
         <div className="mt-2 hidden gap-2 overflow-x-auto pb-1 sm:flex">
-          {produtos.some((produto) => produto.destaque && estoqueDisponivel(produto) > 0) && (
+          {produtos.some((produto) => produto.destaque) && (
             <button
               type="button"
               onClick={() => {
@@ -1126,7 +1152,7 @@ export default function Catalogo({
 
       {produtosFiltrados.length === 0 ? (
         <div className="mt-8 rounded-xl border border-dashed border-zinc-700 p-10 text-center text-zinc-400">
-          Nenhum produto disponível nesta categoria no momento.
+          Nenhum produto encontrado nesta categoria.
         </div>
       ) : (
         <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -1147,7 +1173,11 @@ export default function Catalogo({
             return (
               <article
                 key={produto.id}
-                className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/95 shadow-xl transition hover:-translate-y-1 hover:border-yellow-400/60"
+                className={`flex h-full flex-col overflow-hidden rounded-2xl border bg-zinc-900/95 shadow-xl transition ${
+                  semEstoque
+                    ? "border-zinc-800"
+                    : "border-white/10 hover:-translate-y-1 hover:border-yellow-400/60"
+                }`}
               >
                 <div className="relative aspect-[4/3] bg-white sm:aspect-square">
                   {produto.imagem ? (
@@ -1155,7 +1185,9 @@ export default function Catalogo({
                       src={produto.imagem}
                       alt={formatarNomeProduto(produto.nome)}
                       fill
-                      className="object-contain p-4"
+                      className={`object-contain p-4 ${
+                        semEstoque ? "grayscale opacity-60" : ""
+                      }`}
                       sizes="(max-width: 640px) calc(100vw - 2.5rem), (max-width: 1024px) 50vw, 33vw"
                     />
                   ) : (
@@ -1166,6 +1198,11 @@ export default function Catalogo({
                   {produto.destaque && (
                     <span className="absolute left-3 top-3 rounded-full bg-yellow-400 px-3 py-1 text-xs font-bold text-black">
                       Destaque
+                    </span>
+                  )}
+                  {semEstoque && (
+                    <span className="absolute right-3 top-3 rounded-full bg-zinc-950 px-3 py-1 text-xs font-bold text-zinc-200">
+                      Esgotado
                     </span>
                   )}
                 </div>
@@ -1189,7 +1226,11 @@ export default function Catalogo({
                             : "Disponível"}
                       </p>
                     </div>
-                    {somenteRetiradaHoje ? (
+                    {semEstoque ? (
+                      <span className="rounded-lg border border-zinc-600 bg-zinc-800 px-3 py-2 text-center text-xs font-bold text-zinc-300">
+                        Indisponível
+                      </span>
+                    ) : somenteRetiradaHoje ? (
                       <span className="rounded-lg border border-yellow-400/40 bg-yellow-400/10 px-3 py-2 text-center text-xs font-bold text-yellow-200">
                         Venda somente na loja
                       </span>
@@ -1769,11 +1810,49 @@ export default function Catalogo({
                         : "Preenchemos seu último endereço. Você pode editar qualquer campo antes de finalizar."}
                     </div>
                   )}
-                  <div className="grid grid-cols-2 gap-3">
-                    <input value={nome} onChange={(event) => setNome(event.target.value)} placeholder="Nome" className="min-w-0 rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2" />
-                    <input value={sobrenome} onChange={(event) => setSobrenome(event.target.value)} placeholder="Sobrenome" className="min-w-0 rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2" />
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="space-y-1.5 text-sm font-bold text-zinc-200">
+                      <span>Nome <span aria-hidden="true">*</span></span>
+                      <input
+                        name="nome"
+                        autoComplete="given-name"
+                        value={nome}
+                        onChange={(event) => setNome(event.target.value)}
+                        placeholder="Ex.: Maria"
+                        required
+                        className="w-full min-w-0 rounded-lg bg-zinc-900 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2"
+                      />
+                    </label>
+                    <label className="space-y-1.5 text-sm font-bold text-zinc-200">
+                      <span>Sobrenome <span aria-hidden="true">*</span></span>
+                      <input
+                        name="sobrenome"
+                        autoComplete="family-name"
+                        value={sobrenome}
+                        onChange={(event) => setSobrenome(event.target.value)}
+                        placeholder="Ex.: Silva"
+                        required
+                        className="w-full min-w-0 rounded-lg bg-zinc-900 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2"
+                      />
+                    </label>
                   </div>
-                  <input value={telefone} onChange={(event) => setTelefone(event.target.value)} inputMode="tel" placeholder="Telefone com DDD" className="w-full rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2" />
+                  <label className="space-y-1.5 text-sm font-bold text-zinc-200">
+                    <span>WhatsApp com DDD <span aria-hidden="true">*</span></span>
+                    <input
+                      name="telefone"
+                      autoComplete="tel"
+                      value={telefone}
+                      onChange={(event) => setTelefone(event.target.value)}
+                      inputMode="tel"
+                      placeholder="Ex.: (44) 99999-9999"
+                      aria-describedby="ajuda-telefone"
+                      required
+                      className="w-full rounded-lg bg-zinc-900 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2"
+                    />
+                    <span id="ajuda-telefone" className="block text-xs font-normal text-zinc-400">
+                      Usaremos este número para confirmar e atualizar seu pedido.
+                    </span>
+                  </label>
                   {somenteRetiradaHoje ? (
                     <div className="rounded-xl border border-yellow-400/40 bg-yellow-400/10 p-4 text-sm text-yellow-100">
                       <strong>Pedido para retirada na loja</strong>
@@ -1784,16 +1863,56 @@ export default function Catalogo({
                     </div>
                   ) : (
                     <>
-                      <div className="grid grid-cols-[1fr_7rem] gap-3">
-                        <input value={rua} onChange={(event) => setRua(event.target.value)} placeholder="Rua / Avenida" className="min-w-0 rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2" />
-                        <input value={numeroEndereco} onChange={(event) => setNumeroEndereco(event.target.value)} placeholder="Número" className="min-w-0 rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2" />
+                      <div className="grid gap-3 sm:grid-cols-[1fr_7rem]">
+                        <label className="space-y-1.5 text-sm font-bold text-zinc-200">
+                          <span>Rua ou avenida <span aria-hidden="true">*</span></span>
+                          <input
+                            name="rua"
+                            autoComplete="address-line1"
+                            value={rua}
+                            onChange={(event) => setRua(event.target.value)}
+                            placeholder="Ex.: Rua das Flores"
+                            required
+                            className="w-full min-w-0 rounded-lg bg-zinc-900 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2"
+                          />
+                        </label>
+                        <label className="space-y-1.5 text-sm font-bold text-zinc-200">
+                          <span>Número <span aria-hidden="true">*</span></span>
+                          <input
+                            name="numero-endereco"
+                            autoComplete="address-line2"
+                            value={numeroEndereco}
+                            onChange={(event) => setNumeroEndereco(event.target.value)}
+                            placeholder="Ex.: 123"
+                            required
+                            className="w-full min-w-0 rounded-lg bg-zinc-900 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2"
+                          />
+                        </label>
                       </div>
-                      <input value={referencia} onChange={(event) => setReferencia(event.target.value)} placeholder="Ponto de referência (opcional)" className="w-full rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2" />
-                      <select value={cidadeEntrega} onChange={(event) => setCidadeEntrega(event.target.value as "" | "Paranacity" | "Cruzeiro do Sul")} className="w-full rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2">
-                        <option value="">Escolha a cidade de entrega</option>
-                        <option value="Paranacity">Paranacity — pedido mínimo R$ 25,00</option>
-                        <option value="Cruzeiro do Sul">Cruzeiro do Sul — pedido mínimo R$ 35,00</option>
-                      </select>
+                      <label className="space-y-1.5 text-sm font-bold text-zinc-200">
+                        <span>Ponto de referência <span className="font-normal text-zinc-400">(opcional)</span></span>
+                        <input
+                          name="referencia"
+                          value={referencia}
+                          onChange={(event) => setReferencia(event.target.value)}
+                          placeholder="Ex.: perto da praça"
+                          className="w-full rounded-lg bg-zinc-900 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2"
+                        />
+                      </label>
+                      <label className="space-y-1.5 text-sm font-bold text-zinc-200">
+                        <span>Cidade de entrega <span aria-hidden="true">*</span></span>
+                        <select
+                          name="cidade-entrega"
+                          value={cidadeEntrega}
+                          onChange={(event) => setCidadeEntrega(event.target.value as "" | "Paranacity" | "Cruzeiro do Sul")}
+                          required
+                          className="w-full rounded-lg bg-zinc-900 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2"
+                        >
+                          <option value="">Selecione sua cidade</option>
+                          <option value="Paranacity">Paranacity — pedido mínimo R$ 25,00</option>
+                          <option value="Cruzeiro do Sul">Cruzeiro do Sul — pedido mínimo R$ 35,00</option>
+                        </select>
+                      </label>
                     </>
                   )}
 
@@ -1866,6 +1985,7 @@ export default function Catalogo({
                     <label className="flex items-center gap-2 text-sm font-bold text-white">
                       Quantas formas?
                       <select
+                        name="quantidade-pagamentos"
                         value={quantidadePagamentos}
                         onChange={(event) =>
                           setQuantidadePagamentos(
@@ -1882,43 +2002,75 @@ export default function Catalogo({
                   </div>
 
                   <div className="space-y-3 rounded-xl bg-zinc-900 p-4">
-                    <p className="text-sm font-semibold text-zinc-300">{quantidadePagamentos > 1 ? "1º pagamento" : "Forma de pagamento"}</p>
-                    <select value={primeiroPagamento.forma} onChange={(event) => setPrimeiroPagamento({ ...primeiroPagamento, forma: event.target.value as FormaPagamento })} className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2">
-                      <option value="">Escolha como pagar</option>
-                      {formasPagamento.map((forma) => <option key={forma.valor} value={forma.valor}>{forma.rotulo}</option>)}
-                    </select>
-                    {quantidadePagamentos > 1 && <input value={primeiroPagamento.valor} onChange={(event) => setPrimeiroPagamento({ ...primeiroPagamento, valor: event.target.value })} inputMode="decimal" placeholder="Valor deste pagamento" className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2" />}
+                    <label className="block space-y-1.5 text-sm font-semibold text-zinc-300">
+                      <span>{quantidadePagamentos > 1 ? "Forma do 1º pagamento" : "Forma de pagamento"}</span>
+                      <select name="primeiro-pagamento" value={primeiroPagamento.forma} onChange={(event) => setPrimeiroPagamento({ ...primeiroPagamento, forma: event.target.value as FormaPagamento })} className="w-full rounded-lg bg-zinc-800 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2">
+                        <option value="">Selecione como deseja pagar</option>
+                        {formasPagamento.map((forma) => <option key={forma.valor} value={forma.valor}>{forma.rotulo}</option>)}
+                      </select>
+                    </label>
+                    {quantidadePagamentos > 1 && (
+                      <label className="block space-y-1.5 text-sm font-semibold text-zinc-300">
+                        <span>Valor do 1º pagamento</span>
+                        <input name="valor-primeiro-pagamento" value={primeiroPagamento.valor} onChange={(event) => setPrimeiroPagamento({ ...primeiroPagamento, valor: event.target.value })} inputMode="decimal" placeholder="Ex.: 20,00" className="w-full rounded-lg bg-zinc-800 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2" />
+                      </label>
+                    )}
                     {primeiroPagamento.forma === "dinheiro" && (
                       <label className="flex items-center gap-2 text-sm">
                         <input type="checkbox" checked={primeiroPagamento.precisaTroco} onChange={(event) => setPrimeiroPagamento({ ...primeiroPagamento, precisaTroco: event.target.checked })} /> Precisa de troco
                       </label>
                     )}
-                    {primeiroPagamento.forma === "dinheiro" && primeiroPagamento.precisaTroco && <input value={primeiroPagamento.trocoPara} onChange={(event) => setPrimeiroPagamento({ ...primeiroPagamento, trocoPara: event.target.value })} inputMode="decimal" placeholder="Troco para quanto? Ex.: 100,00" className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2" />}
+                    {primeiroPagamento.forma === "dinheiro" && primeiroPagamento.precisaTroco && (
+                      <label className="block space-y-1.5 text-sm font-semibold text-zinc-300">
+                        <span>Troco para quanto?</span>
+                        <input name="troco-primeiro-pagamento" value={primeiroPagamento.trocoPara} onChange={(event) => setPrimeiroPagamento({ ...primeiroPagamento, trocoPara: event.target.value })} inputMode="decimal" placeholder="Ex.: 100,00" className="w-full rounded-lg bg-zinc-800 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2" />
+                      </label>
+                    )}
                   </div>
 
                   {quantidadePagamentos >= 2 && (
                     <div className="space-y-3 rounded-xl bg-zinc-900 p-4">
-                      <p className="text-sm font-semibold text-zinc-300">2º pagamento</p>
-                      <select value={segundoPagamento.forma} onChange={(event) => setSegundoPagamento({ ...segundoPagamento, forma: event.target.value as FormaPagamento })} className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2">
-                        <option value="">Escolha como pagar</option>
-                        {formasPagamento.map((forma) => <option key={forma.valor} value={forma.valor}>{forma.rotulo}</option>)}
-                      </select>
-                      <input value={segundoPagamento.valor} onChange={(event) => setSegundoPagamento({ ...segundoPagamento, valor: event.target.value })} inputMode="decimal" placeholder="Valor deste pagamento" className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2" />
+                      <label className="block space-y-1.5 text-sm font-semibold text-zinc-300">
+                        <span>Forma do 2º pagamento</span>
+                        <select name="segundo-pagamento" value={segundoPagamento.forma} onChange={(event) => setSegundoPagamento({ ...segundoPagamento, forma: event.target.value as FormaPagamento })} className="w-full rounded-lg bg-zinc-800 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2">
+                          <option value="">Selecione como deseja pagar</option>
+                          {formasPagamento.map((forma) => <option key={forma.valor} value={forma.valor}>{forma.rotulo}</option>)}
+                        </select>
+                      </label>
+                      <label className="block space-y-1.5 text-sm font-semibold text-zinc-300">
+                        <span>Valor do 2º pagamento</span>
+                        <input name="valor-segundo-pagamento" value={segundoPagamento.valor} onChange={(event) => setSegundoPagamento({ ...segundoPagamento, valor: event.target.value })} inputMode="decimal" placeholder="Ex.: 20,00" className="w-full rounded-lg bg-zinc-800 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2" />
+                      </label>
                       {segundoPagamento.forma === "dinheiro" && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={segundoPagamento.precisaTroco} onChange={(event) => setSegundoPagamento({ ...segundoPagamento, precisaTroco: event.target.checked })} /> Precisa de troco</label>}
-                      {segundoPagamento.forma === "dinheiro" && segundoPagamento.precisaTroco && <input value={segundoPagamento.trocoPara} onChange={(event) => setSegundoPagamento({ ...segundoPagamento, trocoPara: event.target.value })} inputMode="decimal" placeholder="Troco para quanto? Ex.: 100,00" className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2" />}
+                      {segundoPagamento.forma === "dinheiro" && segundoPagamento.precisaTroco && (
+                        <label className="block space-y-1.5 text-sm font-semibold text-zinc-300">
+                          <span>Troco para quanto?</span>
+                          <input name="troco-segundo-pagamento" value={segundoPagamento.trocoPara} onChange={(event) => setSegundoPagamento({ ...segundoPagamento, trocoPara: event.target.value })} inputMode="decimal" placeholder="Ex.: 100,00" className="w-full rounded-lg bg-zinc-800 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2" />
+                        </label>
+                      )}
                     </div>
                   )}
 
                   {quantidadePagamentos === 3 && (
                     <div className="space-y-3 rounded-xl bg-zinc-900 p-4">
-                      <p className="text-sm font-semibold text-zinc-300">3º pagamento</p>
-                      <select value={terceiroPagamento.forma} onChange={(event) => setTerceiroPagamento({ ...terceiroPagamento, forma: event.target.value as FormaPagamento })} className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2">
-                        <option value="">Escolha como pagar</option>
-                        {formasPagamento.map((forma) => <option key={forma.valor} value={forma.valor}>{forma.rotulo}</option>)}
-                      </select>
-                      <input value={terceiroPagamento.valor} onChange={(event) => setTerceiroPagamento({ ...terceiroPagamento, valor: event.target.value })} inputMode="decimal" placeholder="Valor deste pagamento" className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2" />
+                      <label className="block space-y-1.5 text-sm font-semibold text-zinc-300">
+                        <span>Forma do 3º pagamento</span>
+                        <select name="terceiro-pagamento" value={terceiroPagamento.forma} onChange={(event) => setTerceiroPagamento({ ...terceiroPagamento, forma: event.target.value as FormaPagamento })} className="w-full rounded-lg bg-zinc-800 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2">
+                          <option value="">Selecione como deseja pagar</option>
+                          {formasPagamento.map((forma) => <option key={forma.valor} value={forma.valor}>{forma.rotulo}</option>)}
+                        </select>
+                      </label>
+                      <label className="block space-y-1.5 text-sm font-semibold text-zinc-300">
+                        <span>Valor do 3º pagamento</span>
+                        <input name="valor-terceiro-pagamento" value={terceiroPagamento.valor} onChange={(event) => setTerceiroPagamento({ ...terceiroPagamento, valor: event.target.value })} inputMode="decimal" placeholder="Ex.: 20,00" className="w-full rounded-lg bg-zinc-800 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2" />
+                      </label>
                       {terceiroPagamento.forma === "dinheiro" && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={terceiroPagamento.precisaTroco} onChange={(event) => setTerceiroPagamento({ ...terceiroPagamento, precisaTroco: event.target.checked })} /> Precisa de troco</label>}
-                      {terceiroPagamento.forma === "dinheiro" && terceiroPagamento.precisaTroco && <input value={terceiroPagamento.trocoPara} onChange={(event) => setTerceiroPagamento({ ...terceiroPagamento, trocoPara: event.target.value })} inputMode="decimal" placeholder="Troco para quanto? Ex.: 100,00" className="w-full rounded-lg bg-zinc-800 p-3 outline-none ring-yellow-400 focus:ring-2" />}
+                      {terceiroPagamento.forma === "dinheiro" && terceiroPagamento.precisaTroco && (
+                        <label className="block space-y-1.5 text-sm font-semibold text-zinc-300">
+                          <span>Troco para quanto?</span>
+                          <input name="troco-terceiro-pagamento" value={terceiroPagamento.trocoPara} onChange={(event) => setTerceiroPagamento({ ...terceiroPagamento, trocoPara: event.target.value })} inputMode="decimal" placeholder="Ex.: 100,00" className="w-full rounded-lg bg-zinc-800 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2" />
+                        </label>
+                      )}
                     </div>
                   )}
 
