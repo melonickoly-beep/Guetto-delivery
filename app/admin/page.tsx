@@ -43,11 +43,18 @@ type Pedido = {
 
 type AbaEstoque = "com-estoque" | "baixo-estoque" | "sem-estoque";
 
+type ResumoPedidosHoje = {
+  data: string | null;
+  ativos: number;
+  concluidos: number;
+  total: number;
+};
+
 const statusPedido = [
   { valor: "novo", rotulo: "Novo" },
   { valor: "em_preparo", rotulo: "Em preparo" },
   { valor: "saiu_para_entrega", rotulo: "Saiu para entrega" },
-  { valor: "concluido", rotulo: "Concluído" },
+  { valor: "concluido", rotulo: "Concluir e excluir" },
   { valor: "cancelado", rotulo: "Cancelado" },
 ];
 
@@ -61,6 +68,8 @@ export default function AdminPage() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
+  const [resumoPedidosHoje, setResumoPedidosHoje] =
+    useState<ResumoPedidosHoje | null>(null);
   const [notificacoesAtivadas, setNotificacoesAtivadas] = useState(false);
   const quantidadeNovosAnterior = useRef<number | null>(null);
 
@@ -110,8 +119,12 @@ export default function AdminPage() {
     carregarTempoEntrega();
     carregarHorarioAtendimento();
     carregarPedidos();
+    carregarResumoPedidos();
 
-    const intervaloPedidos = window.setInterval(carregarPedidos, 30_000);
+    const intervaloPedidos = window.setInterval(() => {
+      carregarPedidos();
+      carregarResumoPedidos();
+    }, 30_000);
     return () => window.clearInterval(intervaloPedidos);
   }, [painelDesbloqueado]);
 
@@ -216,7 +229,31 @@ export default function AdminPage() {
     setPedidos(lista);
   }
 
+  async function carregarResumoPedidos() {
+    const resposta = await fetch("/api/admin/pedidos/resumo", {
+      cache: "no-store",
+    });
+
+    if (!resposta.ok) return;
+
+    const resumo = (await resposta.json()) as ResumoPedidosHoje;
+    setResumoPedidosHoje(resumo);
+  }
+
+  async function carregarPainelPedidos() {
+    await Promise.all([carregarPedidos(), carregarResumoPedidos()]);
+  }
+
   async function atualizarStatusPedido(id: string, status: string) {
+    if (
+      status === "concluido" &&
+      !confirm(
+        "Concluir este pedido? Os dados do cliente e os itens serão excluídos automaticamente. Apenas a contagem será mantida."
+      )
+    ) {
+      return false;
+    }
+
     const resposta = await fetch(`/api/admin/pedidos/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -229,36 +266,20 @@ export default function AdminPage() {
       return false;
     }
 
-    setPedidos((atuais) =>
-      atuais.map((pedido) => (pedido.id === id ? { ...pedido, status } : pedido))
-    );
+    if (status === "concluido") {
+      setPedidos((atuais) =>
+        atuais.filter((pedidoAtual) => pedidoAtual.id !== id)
+      );
+      await carregarResumoPedidos();
+    } else {
+      setPedidos((atuais) =>
+        atuais.map((pedido) =>
+          pedido.id === id ? { ...pedido, status } : pedido
+        )
+      );
+    }
+
     return true;
-  }
-
-  async function excluirPedido(pedido: Pedido) {
-    const identificacao = pedido.id.slice(0, 8).toUpperCase();
-    if (
-      !confirm(
-        `Excluir definitivamente o pedido #${identificacao}?\n\n` +
-          "Se o estoque já tiver sido baixado, ele será reposto."
-      )
-    ) {
-      return;
-    }
-
-    const resposta = await fetch(`/api/admin/pedidos/${pedido.id}`, {
-      method: "DELETE",
-    });
-
-    if (!resposta.ok) {
-      const erro = await resposta.json().catch(() => null);
-      alert(erro?.error ?? "Não foi possível excluir o pedido.");
-      return;
-    }
-
-    setPedidos((atuais) =>
-      atuais.filter((pedidoAtual) => pedidoAtual.id !== pedido.id)
-    );
   }
 
   function textoSeguro(valor: unknown) {
@@ -745,7 +766,9 @@ export default function AdminPage() {
         <section className="mb-8 rounded-xl border border-yellow-400/50 bg-yellow-400/10 p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-xl font-bold">Pedidos de hoje: {pedidosHoje.length}</h2>
+              <h2 className="text-xl font-bold">
+                Pedidos de hoje: {resumoPedidosHoje?.total ?? pedidosHoje.length}
+              </h2>
               <p className="text-zinc-300">
                 {pedidosNovos.length > 0 ? `${pedidosNovos.length} novo(s) aguardando atendimento.` : "Nenhum pedido novo aguardando atendimento."}
               </p>
@@ -773,7 +796,7 @@ export default function AdminPage() {
             <div>
               <p className="text-zinc-400">Acompanhe e atualize o andamento dos pedidos.</p>
             </div>
-            <button type="button" onClick={carregarPedidos} className="rounded-lg border border-zinc-600 px-4 py-2 hover:bg-zinc-800">
+            <button type="button" onClick={() => void carregarPainelPedidos()} className="rounded-lg border border-zinc-600 px-4 py-2 hover:bg-zinc-800">
               Atualizar
             </button>
           </div>
@@ -878,13 +901,6 @@ export default function AdminPage() {
                     className="rounded-lg bg-green-600 px-3 py-2 text-sm font-bold text-white hover:bg-green-500"
                   >
                     Avisar cliente no WhatsApp
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void excluirPedido(pedido)}
-                    className="rounded-lg border border-red-500 px-3 py-2 text-sm font-bold text-red-400 hover:bg-red-500/10"
-                  >
-                    Excluir pedido
                   </button>
                 </div>
               </article>

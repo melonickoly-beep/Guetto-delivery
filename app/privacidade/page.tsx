@@ -24,7 +24,7 @@ export default function PrivacidadePage() {
         <h1 className="mt-2 text-3xl font-black">
           Privacidade e dados armazenados
         </h1>
-        <p className="mt-3 text-zinc-400">Última atualização: 29/07/2026.</p>
+        <p className="mt-3 text-zinc-400">Última atualização: 03/08/2026.</p>
 
         <div className="mt-8 space-y-8 leading-7 text-zinc-300">
           <section>
@@ -36,6 +36,18 @@ export default function PrivacidadePage() {
               endereço, referência, cidade, itens escolhidos e forma de
               pagamento. Essas informações são enviadas à Guetto Delivery pelo
               sistema e pelo WhatsApp para atendimento, preparo e entrega.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-black text-white">
+              Exclusão após a entrega
+            </h2>
+            <p className="mt-2">
+              Quando o pedido é marcado como concluído, os dados do cliente e
+              os detalhes da compra são excluídos automaticamente do sistema.
+              Mantemos somente uma contagem anônima de pedidos por dia, sem
+              nome, telefone, endereço ou itens comprados.
             </p>
           </section>
 
