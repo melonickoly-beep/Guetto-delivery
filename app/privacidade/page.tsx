@@ -48,6 +48,8 @@ export default function PrivacidadePage() {
               os detalhes da compra são excluídos automaticamente do sistema.
               Mantemos somente uma contagem anônima de pedidos por dia, sem
               nome, telefone, endereço ou itens comprados.
+              Isso não apaga os dados que o cliente escolheu salvar no próprio
+              aparelho para preencher pedidos futuros.
             </p>
           </section>
 

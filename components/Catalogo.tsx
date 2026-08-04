@@ -12,6 +12,7 @@ import {
   Clock3,
   MapPin,
   MessageCircle,
+  Store,
   Truck,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -119,12 +120,14 @@ export default function Catalogo({
   tempoEntrega,
   horarioAbertura,
   horarioFechamento,
+  somenteRetiradaConfigurada,
 }: {
   categorias: Categoria[];
   produtos: Produto[];
   tempoEntrega: number;
   horarioAbertura: string;
   horarioFechamento: string;
+  somenteRetiradaConfigurada: boolean;
 }) {
   const categoriaInicial =
     produtos.some((produto) => produto.destaque)
@@ -337,6 +340,12 @@ export default function Catalogo({
     (total, item) => total + calcularSubtotalItem(item),
     0
   );
+  const tercaFeira =
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Sao_Paulo",
+      weekday: "short",
+    }).format(agora) === "Tue";
+  const somenteRetiradaHoje = somenteRetiradaConfigurada || tercaFeira;
   const categoriaPorIdAtual = new Map(
     categorias.map((categoria) => [
       categoria.id,
@@ -349,7 +358,9 @@ export default function Catalogo({
   const somenteTabacariaAtual =
     carrinho.length > 0 && itensTabacariaAtual.length === carrinho.length;
   const pedidoMinimoCidadeAtual =
-    cidadeEntrega === ""
+    somenteRetiradaHoje
+      ? 0
+      : cidadeEntrega === ""
       ? null
       : somenteTabacariaAtual
         ? 20
@@ -365,6 +376,8 @@ export default function Catalogo({
   const progressoPedidoMinimo =
     pedidoMinimoAtual === null
       ? 0
+      : pedidoMinimoAtual === 0
+        ? 100
       : Math.min(100, (valorTotal / pedidoMinimoAtual) * 100);
   const totalPagamentosInformado = [
     primeiroPagamento,
@@ -580,8 +593,15 @@ export default function Catalogo({
       alert("A Guetto Delivery está fechada no momento.");
       return;
     }
-    if (!nome.trim() || !sobrenome.trim() || !telefone.trim() || !rua.trim() || !numeroEndereco.trim() || !cidadeEntrega) {
-      alert("Preencha nome, sobrenome, telefone, endereço e cidade para continuar.");
+    if (!nome.trim() || !sobrenome.trim() || !telefone.trim()) {
+      alert("Preencha nome, sobrenome e telefone para continuar.");
+      return;
+    }
+    if (
+      !somenteRetiradaHoje &&
+      (!rua.trim() || !numeroEndereco.trim() || !cidadeEntrega)
+    ) {
+      alert("Preencha o endereço e a cidade para continuar.");
       return;
     }
 
@@ -596,7 +616,7 @@ export default function Catalogo({
       : cidadeEntrega === "Paranacity"
         ? 25
         : 35;
-    if (valorTotal < pedidoMinimoCidade) {
+    if (!somenteRetiradaHoje && valorTotal < pedidoMinimoCidade) {
       alert(`O pedido mínimo para entrega em ${cidadeEntrega} é de ${formatarPreco(pedidoMinimoCidade)}.`);
       return;
     }
@@ -670,14 +690,23 @@ export default function Catalogo({
       "",
       `Cliente: ${nome.trim()} ${sobrenome.trim()}`,
       `Telefone: ${telefone.trim()}`,
-      `Cidade: ${cidadeEntrega}`,
-      `Endereço: ${rua.trim()}, ${numeroEndereco.trim()}`,
-      ...(referencia.trim() ? [`Referência: ${referencia.trim()}`] : []),
+      `Atendimento: ${somenteRetiradaHoje ? "Retirada na loja" : "Delivery"}`,
+      ...(!somenteRetiradaHoje
+        ? [
+            `Cidade: ${cidadeEntrega}`,
+            `Endereço: ${rua.trim()}, ${numeroEndereco.trim()}`,
+            ...(referencia.trim()
+              ? [`Referência: ${referencia.trim()}`]
+              : []),
+          ]
+        : []),
       "",
       ...linhas,
       "",
       `Total: ${formatarPreco(valorTotal)}`,
-      `Previsão de entrega: até ${tempoEntrega} minutos`,
+      somenteRetiradaHoje
+        ? "Retirada: avisem pelo WhatsApp quando o pedido estiver pronto."
+        : `Previsão de entrega: até ${tempoEntrega} minutos`,
       "Maioridade: cliente confirmou ter 18 anos ou mais.",
       ...(quantidadeGarrafas300 > 0 ? ["Vasilhame: cliente confirmou que levará o próprio."] : []),
       "Pagamento:",
@@ -692,9 +721,12 @@ export default function Catalogo({
         body: JSON.stringify({
           cliente_nome: `${nome.trim()} ${sobrenome.trim()}`,
           telefone: telefone.trim(),
-          endereco: `${rua.trim()}, ${numeroEndereco.trim()}`,
-          referencia: referencia.trim() || null,
-          cidade_entrega: cidadeEntrega,
+          tipo_atendimento: somenteRetiradaHoje ? "retirada" : "delivery",
+          endereco: somenteRetiradaHoje
+            ? "Retirada na loja"
+            : `${rua.trim()}, ${numeroEndereco.trim()}`,
+          referencia: somenteRetiradaHoje ? null : referencia.trim() || null,
+          cidade_entrega: somenteRetiradaHoje ? null : cidadeEntrega,
           vasilhame_confirmado: vasilhameConfirmado,
           itens: carrinho.map((item) => ({
             produto_id: item.id,
@@ -706,7 +738,9 @@ export default function Catalogo({
           pagamento: pagamentosFormatados,
           tempo_entrega: tempoEntrega,
           observacao: [
-            `Cidade de entrega: ${cidadeEntrega}.`,
+            somenteRetiradaHoje
+              ? "Atendimento: retirada na loja."
+              : `Cidade de entrega: ${cidadeEntrega}.`,
             "Cliente confirmou ter 18 anos ou mais.",
             ...(quantidadeGarrafas300 > 0 ? ["Vasilhame confirmado pelo cliente."] : []),
           ].join(" "),
@@ -773,6 +807,24 @@ export default function Catalogo({
     compacto?: boolean;
   }) {
     if (carrinho.length === 0) return null;
+
+    if (somenteRetiradaHoje) {
+      return (
+        <div className="rounded-xl border border-yellow-400/40 bg-yellow-400/10 p-3 text-sm text-yellow-100">
+          <div className="flex items-start gap-2">
+            <Store className="mt-0.5 shrink-0 text-yellow-400" size={17} />
+            <div>
+              <p className="font-bold">Somente retirada na loja</p>
+              {!compacto && (
+                <p className="mt-0.5 text-xs text-zinc-300">
+                  Hoje não realizamos delivery e não há mínimo de entrega.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div
@@ -847,7 +899,11 @@ export default function Catalogo({
               Cardápio
             </h2>
             <p className="mt-1 text-xs text-zinc-400 sm:text-sm">
-              {atendimentoAberto ? "Aberto agora" : "Fechado agora"}
+              {atendimentoAberto
+                ? somenteRetiradaHoje
+                  ? "Aberto · somente retirada"
+                  : "Aberto agora"
+                : "Fechado agora"}
             </p>
           </div>
           <div className="flex w-full items-stretch gap-2 sm:w-auto sm:items-center">
@@ -880,14 +936,28 @@ export default function Catalogo({
         <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 lg:grid-cols-[1fr_auto] lg:items-end">
           <div className="grid grid-cols-3 gap-2 text-xs sm:text-sm">
             <div className="rounded-xl bg-zinc-900/80 p-3">
-              <Truck className="mb-1 text-yellow-400" size={18} />
-              <strong className="block text-white">Entrega grátis</strong>
-              <span className="text-zinc-400">Sem taxa</span>
+              {somenteRetiradaHoje ? (
+                <Store className="mb-1 text-yellow-400" size={18} />
+              ) : (
+                <Truck className="mb-1 text-yellow-400" size={18} />
+              )}
+              <strong className="block text-white">
+                {somenteRetiradaHoje ? "Retirada na loja" : "Entrega grátis"}
+              </strong>
+              <span className="text-zinc-400">
+                {somenteRetiradaHoje ? "Sem delivery hoje" : "Sem taxa"}
+              </span>
             </div>
             <div className="rounded-xl bg-zinc-900/80 p-3">
               <Clock3 className="mb-1 text-yellow-400" size={18} />
-              <strong className="block text-white">Até {tempoEntrega} min</strong>
-              <span className="text-zinc-400">Após confirmar</span>
+              <strong className="block text-white">
+                {somenteRetiradaHoje
+                  ? "Aviso pelo WhatsApp"
+                  : `Até ${tempoEntrega} min`}
+              </strong>
+              <span className="text-zinc-400">
+                {somenteRetiradaHoje ? "Quando estiver pronto" : "Após confirmar"}
+              </span>
             </div>
             <a
               href="https://wa.me/554491271708?text=Olá!%20Preciso%20de%20ajuda%20com%20meu%20pedido."
@@ -901,34 +971,56 @@ export default function Catalogo({
             </a>
           </div>
 
-          <label className="block text-sm font-bold text-zinc-200 lg:min-w-80">
-            <span className="mb-1.5 flex items-center gap-2">
-              <MapPin size={17} className="text-yellow-400" />
-              Onde vamos entregar?
-            </span>
-            <select
-              value={cidadeEntrega}
-              onChange={(event) =>
-                setCidadeEntrega(
-                  event.target.value as
-                    | ""
-                    | "Paranacity"
-                    | "Cruzeiro do Sul"
-                )
-              }
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3 font-semibold text-white outline-none focus:border-yellow-400"
-            >
-              <option value="">Escolha sua cidade</option>
-              <option value="Paranacity">
-                Paranacity · mínimo R$ 25,00
-              </option>
-              <option value="Cruzeiro do Sul">
-                Cruzeiro do Sul · mínimo R$ 35,00
-              </option>
-            </select>
-          </label>
+          {somenteRetiradaHoje ? (
+            <div className="rounded-xl border border-yellow-400/40 bg-yellow-400/10 p-3 text-sm lg:min-w-80">
+              <strong className="flex items-center gap-2 text-yellow-300">
+                <Store size={17} /> Somente retirada na loja
+              </strong>
+              <p className="mt-1 text-zinc-300">
+                Faça o pedido normalmente e aguarde a confirmação pelo WhatsApp.
+              </p>
+            </div>
+          ) : (
+            <label className="block text-sm font-bold text-zinc-200 lg:min-w-80">
+              <span className="mb-1.5 flex items-center gap-2">
+                <MapPin size={17} className="text-yellow-400" />
+                Onde vamos entregar?
+              </span>
+              <select
+                value={cidadeEntrega}
+                onChange={(event) =>
+                  setCidadeEntrega(
+                    event.target.value as
+                      | ""
+                      | "Paranacity"
+                      | "Cruzeiro do Sul"
+                  )
+                }
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3 font-semibold text-white outline-none focus:border-yellow-400"
+              >
+                <option value="">Escolha sua cidade</option>
+                <option value="Paranacity">
+                  Paranacity · mínimo R$ 25,00
+                </option>
+                <option value="Cruzeiro do Sul">
+                  Cruzeiro do Sul · mínimo R$ 35,00
+                </option>
+              </select>
+            </label>
+          )}
         </div>
       </div>
+
+      {somenteRetiradaHoje && (
+        <div className="mb-4 rounded-xl border border-yellow-400/50 bg-yellow-400/10 p-4 text-yellow-100">
+          <p className="flex items-center gap-2 font-bold">
+            <Store size={19} /> Hoje não haverá delivery.
+          </p>
+          <p className="mt-1 text-sm">
+            Os pedidos feitos pelo site serão somente para retirada na loja.
+          </p>
+        </div>
+      )}
 
       {!atendimentoAberto && (
         <div className="mb-4 rounded-xl border border-red-500/50 bg-red-950/50 p-4 text-red-100">
@@ -1369,11 +1461,13 @@ export default function Catalogo({
               Carrinho ({quantidadeTotal})
             </span>
             <span className="text-xs font-semibold">
-              {pedidoMinimoAtual === null
-                ? "Escolha a cidade para ver o mínimo"
-                : faltaPedidoMinimo === 0
-                  ? "Pedido mínimo atingido"
-                  : `Faltam ${formatarPreco(faltaPedidoMinimo ?? 0)}`}
+              {somenteRetiradaHoje
+                ? "Somente retirada na loja"
+                : pedidoMinimoAtual === null
+                  ? "Escolha a cidade para ver o mínimo"
+                  : faltaPedidoMinimo === 0
+                    ? "Pedido mínimo atingido"
+                    : `Faltam ${formatarPreco(faltaPedidoMinimo ?? 0)}`}
             </span>
           </span>
           <span>{formatarPreco(valorTotal)}</span>
@@ -1399,7 +1493,12 @@ export default function Catalogo({
             </div>
 
             <ol className="mt-5 grid grid-cols-4 gap-1 rounded-xl bg-zinc-900 p-3 text-center text-[10px] font-bold">
-              {["Entrega", "Pagamento", "Revisão", "WhatsApp"].map(
+              {[
+                somenteRetiradaHoje ? "Retirada" : "Entrega",
+                "Pagamento",
+                "Revisão",
+                "WhatsApp",
+              ].map(
                 (etapa, indice) => (
                   <li
                     key={etapa}
@@ -1448,8 +1547,14 @@ export default function Catalogo({
             <div className="mt-5 rounded-xl border border-zinc-800 p-4 text-sm text-zinc-300">
               <p className="font-bold text-white">{nome.trim()} {sobrenome.trim()}</p>
               <p>{telefone.trim()}</p>
-              <p>{rua.trim()}, {numeroEndereco.trim()} — {cidadeEntrega}</p>
-              {referencia.trim() && <p>Referência: {referencia.trim()}</p>}
+              {somenteRetiradaHoje ? (
+                <p className="font-bold text-yellow-300">Retirada na loja</p>
+              ) : (
+                <>
+                  <p>{rua.trim()}, {numeroEndereco.trim()} — {cidadeEntrega}</p>
+                  {referencia.trim() && <p>Referência: {referencia.trim()}</p>}
+                </>
+              )}
             </div>
 
             <div className="mt-5 rounded-xl border-2 border-yellow-400 bg-yellow-400/10 p-4">
@@ -1545,7 +1650,12 @@ export default function Catalogo({
               </button>
             </div>
             <ol className="grid grid-cols-4 gap-1 border-b border-zinc-800 py-3 text-center text-[10px] font-bold text-zinc-500">
-              {["Entrega", "Pagamento", "Revisão", "WhatsApp"].map(
+              {[
+                somenteRetiradaHoje ? "Retirada" : "Entrega",
+                "Pagamento",
+                "Revisão",
+                "WhatsApp",
+              ].map(
                 (etapa, indice) => (
                   <li
                     key={etapa}
@@ -1610,16 +1720,21 @@ export default function Catalogo({
                       1
                     </span>
                     <div>
-                      <h3 className="font-black text-white">Entrega</h3>
+                      <h3 className="font-black text-white">
+                        {somenteRetiradaHoje ? "Retirada" : "Entrega"}
+                      </h3>
                       <p className="text-xs text-zinc-400">
-                        Seus dados e o endereço do pedido
+                        {somenteRetiradaHoje
+                          ? "Seus dados para confirmar a retirada"
+                          : "Seus dados e o endereço do pedido"}
                       </p>
                     </div>
                   </div>
                   {dadosClienteRecuperados && (
                     <div className="rounded-lg border border-yellow-400/40 bg-yellow-400/10 px-3 py-2 text-sm text-yellow-100">
-                      Preenchemos seu último endereço. Você pode editar qualquer
-                      campo antes de finalizar.
+                      {somenteRetiradaHoje
+                        ? "Preenchemos seus dados salvos neste aparelho."
+                        : "Preenchemos seu último endereço. Você pode editar qualquer campo antes de finalizar."}
                     </div>
                   )}
                   <div className="grid grid-cols-2 gap-3">
@@ -1627,16 +1742,28 @@ export default function Catalogo({
                     <input value={sobrenome} onChange={(event) => setSobrenome(event.target.value)} placeholder="Sobrenome" className="min-w-0 rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2" />
                   </div>
                   <input value={telefone} onChange={(event) => setTelefone(event.target.value)} inputMode="tel" placeholder="Telefone com DDD" className="w-full rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2" />
-                  <div className="grid grid-cols-[1fr_7rem] gap-3">
-                    <input value={rua} onChange={(event) => setRua(event.target.value)} placeholder="Rua / Avenida" className="min-w-0 rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2" />
-                    <input value={numeroEndereco} onChange={(event) => setNumeroEndereco(event.target.value)} placeholder="Número" className="min-w-0 rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2" />
-                  </div>
-                  <input value={referencia} onChange={(event) => setReferencia(event.target.value)} placeholder="Ponto de referência (opcional)" className="w-full rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2" />
-                  <select value={cidadeEntrega} onChange={(event) => setCidadeEntrega(event.target.value as "" | "Paranacity" | "Cruzeiro do Sul")} className="w-full rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2">
-                    <option value="">Escolha a cidade de entrega</option>
-                    <option value="Paranacity">Paranacity — pedido mínimo R$ 25,00</option>
-                    <option value="Cruzeiro do Sul">Cruzeiro do Sul — pedido mínimo R$ 35,00</option>
-                  </select>
+                  {somenteRetiradaHoje ? (
+                    <div className="rounded-xl border border-yellow-400/40 bg-yellow-400/10 p-4 text-sm text-yellow-100">
+                      <strong>Pedido para retirada na loja</strong>
+                      <p className="mt-1 text-zinc-300">
+                        Não é necessário informar endereço. Avisaremos pelo
+                        WhatsApp quando estiver pronto.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-[1fr_7rem] gap-3">
+                        <input value={rua} onChange={(event) => setRua(event.target.value)} placeholder="Rua / Avenida" className="min-w-0 rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2" />
+                        <input value={numeroEndereco} onChange={(event) => setNumeroEndereco(event.target.value)} placeholder="Número" className="min-w-0 rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2" />
+                      </div>
+                      <input value={referencia} onChange={(event) => setReferencia(event.target.value)} placeholder="Ponto de referência (opcional)" className="w-full rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2" />
+                      <select value={cidadeEntrega} onChange={(event) => setCidadeEntrega(event.target.value as "" | "Paranacity" | "Cruzeiro do Sul")} className="w-full rounded-lg bg-zinc-900 p-3 outline-none ring-yellow-400 focus:ring-2">
+                        <option value="">Escolha a cidade de entrega</option>
+                        <option value="Paranacity">Paranacity — pedido mínimo R$ 25,00</option>
+                        <option value="Cruzeiro do Sul">Cruzeiro do Sul — pedido mínimo R$ 35,00</option>
+                      </select>
+                    </>
+                  )}
 
                   <div className="rounded-xl border border-zinc-700 bg-zinc-900/70 p-4 text-sm">
                     <label className="flex cursor-pointer items-start gap-3">

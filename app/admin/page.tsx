@@ -93,6 +93,7 @@ export default function AdminPage() {
   const [salvandoEntrega, setSalvandoEntrega] = useState(false);
   const [horarioAbertura, setHorarioAbertura] = useState("");
   const [horarioFechamento, setHorarioFechamento] = useState("");
+  const [somenteRetirada, setSomenteRetirada] = useState(false);
   const [salvandoHorario, setSalvandoHorario] = useState(false);
 
   useEffect(() => {
@@ -355,7 +356,7 @@ export default function AdminPage() {
           <div class="separador"></div>
           <p><strong>Cliente:</strong> ${textoSeguro(pedido.cliente_nome)}</p>
           <p><strong>Telefone:</strong> ${textoSeguro(pedido.telefone)}</p>
-          <p><strong>Endereço:</strong> ${textoSeguro(pedido.endereco)}</p>
+          <p><strong>${pedido.endereco === "Retirada na loja" ? "Atendimento" : "Endereço"}:</strong> ${textoSeguro(pedido.endereco)}</p>
           ${pedido.referencia ? `<p><strong>Referência:</strong> ${textoSeguro(pedido.referencia)}</p>` : ""}
           <div class="separador"></div>
           ${detalhesItens}
@@ -364,7 +365,7 @@ export default function AdminPage() {
           <div class="separador"></div>
           ${(pedido.pagamento ?? []).map((pagamento) => `<div class="pagamento ${/troco/i.test(pagamento) ? "troco" : ""}"><span class="pagamento-titulo">FORMA DE PAGAMENTO${/troco/i.test(pagamento) ? " / TROCO" : ""}</span>${textoSeguro(pagamento)}</div>`).join("")}
           ${pedido.observacao ? `<p><strong>Observação:</strong> ${textoSeguro(pedido.observacao)}</p>` : ""}
-          <p class="rodape">Separar e conferir antes da entrega</p>
+          <p class="rodape">Separar e conferir antes da ${pedido.endereco === "Retirada na loja" ? "retirada" : "entrega"}</p>
           <script>window.addEventListener("load", () => setTimeout(() => window.print(), 200));<\/script>
         </body>
       </html>`);
@@ -443,11 +444,19 @@ export default function AdminPage() {
     const { data, error } = await supabase
       .from("configuracoes")
       .select("chave, valor")
-      .in("chave", ["horario_abertura", "horario_fechamento"]);
+      .in("chave", [
+        "horario_abertura",
+        "horario_fechamento",
+        "somente_retirada",
+      ]);
 
     if (error) return;
     setHorarioAbertura(data?.find((configuracao) => configuracao.chave === "horario_abertura")?.valor ?? "");
     setHorarioFechamento(data?.find((configuracao) => configuracao.chave === "horario_fechamento")?.valor ?? "");
+    setSomenteRetirada(
+      data?.find((configuracao) => configuracao.chave === "somente_retirada")
+        ?.valor === "true"
+    );
   }
 
   async function salvarHorarioAtendimento() {
@@ -460,6 +469,7 @@ export default function AdminPage() {
     const { error } = await supabase.from("configuracoes").upsert([
       { chave: "horario_abertura", valor: horarioAbertura },
       { chave: "horario_fechamento", valor: horarioFechamento },
+      { chave: "somente_retirada", valor: String(somenteRetirada) },
     ]);
     setSalvandoHorario(false);
 
@@ -468,7 +478,11 @@ export default function AdminPage() {
       return;
     }
 
-    alert(`Atendimento definido: das ${horarioAbertura} às ${horarioFechamento}.`);
+    alert(
+      `Atendimento definido: das ${horarioAbertura} às ${horarioFechamento}. ${
+        somenteRetirada ? "Somente retirada na loja." : "Delivery disponível."
+      }`
+    );
   }
 
   async function otimizarImagem(file: File) {
@@ -834,13 +848,20 @@ export default function AdminPage() {
                       className="mt-2 rounded-lg bg-zinc-800 p-2"
                       aria-label={`Status do pedido de ${pedido.cliente_nome}`}
                     >
-                      {statusPedido.map((status) => (
+                      {statusPedido
+                        .filter(
+                          (status) =>
+                            pedido.endereco !== "Retirada na loja" ||
+                            status.valor !== "saiu_para_entrega"
+                        )
+                        .map((status) => (
                         <option key={status.valor} value={status.valor}>{status.rotulo}</option>
-                      ))}
+                        ))}
                     </select>
                     {pedido.status !== "saiu_para_entrega" &&
                       pedido.status !== "concluido" &&
-                      pedido.status !== "cancelado" && (
+                      pedido.status !== "cancelado" &&
+                      pedido.endereco !== "Retirada na loja" && (
                         <button
                           type="button"
                           onClick={() =>
@@ -947,12 +968,30 @@ export default function AdminPage() {
         <details className="group mb-8 rounded-xl border border-zinc-800 bg-zinc-900">
           <summary className="cursor-pointer list-none rounded-xl px-6 py-5 text-xl font-bold hover:bg-zinc-800">
             <span className="flex items-center justify-between">
-              Horário de atendimento de hoje
+              Horário e tipo de atendimento
               <span className="text-yellow-400 transition group-open:rotate-180">⌄</span>
             </span>
           </summary>
           <div className="border-t border-zinc-800 p-6">
           <p className="mt-1 text-zinc-400">Fora deste intervalo, o catálogo bloqueia novos pedidos automaticamente.</p>
+          <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-yellow-400/40 bg-yellow-400/10 p-4">
+            <input
+              type="checkbox"
+              checked={somenteRetirada}
+              onChange={(event) => setSomenteRetirada(event.target.checked)}
+              className="mt-1"
+            />
+            <span>
+              <strong className="block text-yellow-300">
+                Somente retirada na loja
+              </strong>
+              <span className="text-sm text-zinc-300">
+                Bloqueia delivery e permite pedidos apenas para retirada. Às
+                terças-feiras isso acontece automaticamente, mesmo com esta
+                opção desmarcada.
+              </span>
+            </span>
+          </label>
           <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-end">
             <label className="flex flex-col gap-2">
               <span className="text-sm text-zinc-300">Abre às</span>

@@ -17,6 +17,60 @@ const normalizar = (valor: string) =>
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const itens: ItemRecebido[] = Array.isArray(body?.itens) ? body.itens : [];
+  const tipoAtendimento =
+    body?.tipo_atendimento === undefined
+      ? "delivery"
+      : body?.tipo_atendimento === "delivery" ||
+          body?.tipo_atendimento === "retirada"
+        ? body.tipo_atendimento
+        : "";
+  const tercaFeira =
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Sao_Paulo",
+      weekday: "short",
+    }).format(new Date()) === "Tue";
+  const { data: configuracaoRetirada, error: erroConfiguracaoRetirada } =
+    await supabaseAdmin
+      .from("configuracoes")
+      .select("valor")
+      .eq("chave", "somente_retirada")
+      .maybeSingle();
+
+  if (erroConfiguracaoRetirada) {
+    return NextResponse.json(
+      { error: "Não foi possível verificar o tipo de atendimento." },
+      { status: 503 }
+    );
+  }
+
+  const somenteRetiradaHoje =
+    tercaFeira || configuracaoRetirada?.valor === "true";
+
+  if (!tipoAtendimento) {
+    return NextResponse.json(
+      { error: "Tipo de atendimento inválido." },
+      { status: 400 }
+    );
+  }
+
+  if (somenteRetiradaHoje && tipoAtendimento !== "retirada") {
+    return NextResponse.json(
+      {
+        error:
+          "Hoje não realizamos delivery. Faça o pedido para retirada na loja.",
+      },
+      { status: 403 }
+    );
+  }
+
+  if (!somenteRetiradaHoje && tipoAtendimento !== "delivery") {
+    return NextResponse.json(
+      { error: "Atualize a página para conferir o atendimento disponível." },
+      { status: 409 }
+    );
+  }
+
+  const retiradaNaLoja = tipoAtendimento === "retirada";
   const cidadeEntrega =
     body?.cidade_entrega === "Paranacity" ||
     body?.cidade_entrega === "Cruzeiro do Sul"
@@ -26,11 +80,12 @@ export async function POST(request: Request) {
   if (
     typeof body?.cliente_nome !== "string" ||
     typeof body?.telefone !== "string" ||
-    typeof body?.endereco !== "string" ||
     !body.cliente_nome.trim() ||
     !body.telefone.trim() ||
-    !body.endereco.trim() ||
-    !cidadeEntrega ||
+    (!retiradaNaLoja &&
+      (typeof body?.endereco !== "string" ||
+        !body.endereco.trim() ||
+        !cidadeEntrega)) ||
     !Array.isArray(body?.pagamento) ||
     body.pagamento.length < 1 ||
     body.pagamento.length > 3 ||
@@ -131,7 +186,7 @@ export async function POST(request: Request) {
       ? 25
       : 35;
 
-  if (valorTotal < pedidoMinimo) {
+  if (!retiradaNaLoja && valorTotal < pedidoMinimo) {
     return NextResponse.json(
       {
         error: `O pedido mínimo para entrega em ${cidadeEntrega} é de R$ ${pedidoMinimo.toFixed(2).replace(".", ",")}.`,
@@ -167,8 +222,11 @@ export async function POST(request: Request) {
   const { data: pedidoId, error } = await supabaseAdmin.rpc("criar_pedido_seguro", {
     p_cliente_nome: body.cliente_nome,
     p_telefone: body.telefone,
-    p_endereco: body.endereco,
-    p_referencia: typeof body.referencia === "string" ? body.referencia : "",
+    p_endereco: retiradaNaLoja ? "Retirada na loja" : body.endereco,
+    p_referencia:
+      !retiradaNaLoja && typeof body.referencia === "string"
+        ? body.referencia
+        : "",
     p_itens: itens,
     p_pagamento: Array.isArray(body.pagamento) ? body.pagamento.slice(0, 3) : [],
     p_tempo_entrega: Number(body.tempo_entrega) || 20,

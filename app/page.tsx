@@ -45,6 +45,7 @@ export default async function Home() {
         "tempo_entrega",
         "horario_abertura",
         "horario_fechamento",
+        "somente_retirada",
       ]),
   ]);
 
@@ -52,6 +53,14 @@ export default async function Home() {
     (configuracoes ?? []).map((item) => [item.chave, item.valor])
   );
   const tempoEntrega = Number(configuracao.get("tempo_entrega")) || 20;
+  const somenteRetiradaConfigurada =
+    configuracao.get("somente_retirada") === "true";
+  const tercaFeira =
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Sao_Paulo",
+      weekday: "short",
+    }).format(new Date()) === "Tue";
+  const somenteRetiradaHoje = somenteRetiradaConfigurada || tercaFeira;
 
   return (
     <main className="min-h-screen text-white">
@@ -67,7 +76,7 @@ export default async function Home() {
           />
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-yellow-400 sm:text-sm">
-              Delivery
+              {somenteRetiradaHoje ? "Retirada na loja" : "Delivery"}
             </p>
             <h1 className="mt-1 text-lg font-black leading-tight sm:text-3xl">
               Bebidas, conveniência e mais
@@ -85,14 +94,23 @@ export default async function Home() {
         tempoEntrega={tempoEntrega}
         horarioAbertura={configuracao.get("horario_abertura") ?? ""}
         horarioFechamento={configuracao.get("horario_fechamento") ?? ""}
+        somenteRetiradaConfigurada={somenteRetiradaConfigurada}
       />
 
       <footer className="border-t border-white/10 bg-black/35 px-5 py-8 xl:pr-[21rem]">
         <div className="mx-auto grid max-w-6xl gap-6 text-sm text-zinc-300 sm:grid-cols-3">
           <div>
-            <p className="font-black text-yellow-400">Entrega</p>
-            <p className="mt-2">Paranacity e Cruzeiro do Sul</p>
-            <p>Sem taxa de entrega · respeitando o pedido mínimo</p>
+            <p className="font-black text-yellow-400">
+              {somenteRetiradaHoje ? "Retirada" : "Entrega"}
+            </p>
+            {somenteRetiradaHoje ? (
+              <p className="mt-2">Hoje, os pedidos devem ser retirados na loja.</p>
+            ) : (
+              <>
+                <p className="mt-2">Paranacity e Cruzeiro do Sul</p>
+                <p>Sem taxa de entrega · respeitando o pedido mínimo</p>
+              </>
+            )}
           </div>
           <div>
             <p className="font-black text-yellow-400">Pagamento</p>
