@@ -95,6 +95,7 @@ export default function AdminPage() {
   const [estoquesOpcoesSalvando, setEstoquesOpcoesSalvando] = useState<Set<string>>(
     new Set()
   );
+  const [fotosSalvando, setFotosSalvando] = useState<Set<string>>(new Set());
 
   const [salvando, setSalvando] = useState(false);
   const [tempoEntrega, setTempoEntrega] = useState("20");
@@ -224,7 +225,7 @@ export default function AdminPage() {
 
   async function atualizarProdutoRapido(
     id: string,
-    alteracoes: Partial<Pick<Produto, "preco" | "estoque">>
+    alteracoes: Partial<Pick<Produto, "preco" | "estoque" | "descricao" | "imagem">>
   ) {
     const { error } = await supabase
       .from("produtos")
@@ -241,6 +242,43 @@ export default function AdminPage() {
         produto.id === id ? { ...produto, ...alteracoes } : produto
       )
     );
+  }
+
+  async function atualizarFotoProduto(produto: Produto, file: File) {
+    if (!file.type.startsWith("image/")) {
+      alert("Selecione um arquivo de imagem.");
+      return;
+    }
+
+    setFotosSalvando((atuais) => new Set(atuais).add(produto.id));
+
+    try {
+      const arquivoOtimizado = await otimizarImagem(file);
+      const extensao = arquivoOtimizado.type === "image/webp"
+        ? "webp"
+        : arquivoOtimizado.name.split(".").pop();
+      const nomeArquivo = `${crypto.randomUUID()}.${extensao}`;
+      const { error: erroUpload } = await supabase.storage
+        .from("produtos")
+        .upload(nomeArquivo, arquivoOtimizado);
+
+      if (erroUpload) {
+        alert(erroUpload.message);
+        return;
+      }
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("produtos").getPublicUrl(nomeArquivo);
+
+      await atualizarProdutoRapido(produto.id, { imagem: publicUrl });
+    } finally {
+      setFotosSalvando((atuais) => {
+        const proximos = new Set(atuais);
+        proximos.delete(produto.id);
+        return proximos;
+      });
+    }
   }
 
   const normalizarTexto = (valor: string) =>
@@ -1505,19 +1543,44 @@ export default function AdminPage() {
             >
               <div className="flex w-full min-w-0 items-start gap-5">
 
-                {produto.imagem ? (
-                  <Image
-                    src={produto.imagem}
-                    alt={produto.nome}
-                    width={90}
-                    height={90}
-                    className="aspect-square rounded-lg bg-white object-contain p-1"
-                  />
-                ) : (
-                  <div className="w-[90px] h-[90px] rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-500">
-                    Sem imagem
-                  </div>
-                )}
+                <div className="w-[90px] shrink-0">
+                  {produto.imagem ? (
+                    <Image
+                      src={produto.imagem}
+                      alt={produto.nome}
+                      width={90}
+                      height={90}
+                      className="aspect-square rounded-lg bg-white object-contain p-1"
+                    />
+                  ) : (
+                    <div className="flex h-[90px] w-[90px] items-center justify-center rounded-lg bg-zinc-800 text-center text-xs text-zinc-500">
+                      Sem imagem
+                    </div>
+                  )}
+                  <label
+                    className={`mt-2 block cursor-pointer rounded-md border border-zinc-600 px-2 py-1.5 text-center text-xs font-semibold hover:bg-zinc-800 ${
+                      fotosSalvando.has(produto.id) ? "pointer-events-none opacity-50" : ""
+                    }`}
+                  >
+                    {fotosSalvando.has(produto.id)
+                      ? "Salvando..."
+                      : produto.imagem
+                        ? "Trocar foto"
+                        : "Adicionar foto"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={fotosSalvando.has(produto.id)}
+                      onChange={(event) => {
+                        const foto = event.target.files?.[0];
+                        event.target.value = "";
+                        if (foto) void atualizarFotoProduto(produto, foto);
+                      }}
+                      className="sr-only"
+                      aria-label={`${produto.imagem ? "Trocar" : "Adicionar"} foto de ${produto.nome}`}
+                    />
+                  </label>
+                </div>
 
                 <div className="min-w-0 flex-1">
                   <span className="mb-2 inline-block rounded-full bg-zinc-800 px-3 py-1 text-xs font-semibold text-zinc-300">
@@ -1528,9 +1591,28 @@ export default function AdminPage() {
                     {produto.nome}
                   </h3>
 
-                  <p className="text-zinc-400">
-                    {produto.descricao}
-                  </p>
+                  <label className="mt-3 flex max-w-2xl flex-col gap-1 text-sm">
+                    <span className="font-semibold text-zinc-300">
+                      Observação / descrição
+                    </span>
+                    <textarea
+                      defaultValue={produto.descricao ?? ""}
+                      placeholder="Adicione uma observação sobre o produto"
+                      onBlur={(event) => {
+                        const novaDescricao = event.target.value.trim();
+                        if (novaDescricao !== (produto.descricao ?? "")) {
+                          void atualizarProdutoRapido(produto.id, {
+                            descricao: novaDescricao,
+                          });
+                        }
+                      }}
+                      className="min-h-20 w-full resize-y rounded-md bg-zinc-800 px-3 py-2 text-zinc-200"
+                      aria-label={`Observação de ${produto.nome}`}
+                    />
+                    <span className="text-xs text-zinc-500">
+                      Salva automaticamente ao sair do campo.
+                    </span>
+                  </label>
 
                   <div className="mt-3 flex flex-wrap items-center gap-4">
                     <label className="flex items-center gap-2 text-sm">
