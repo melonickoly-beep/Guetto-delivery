@@ -20,6 +20,7 @@ type Produto = {
   imagem: string;
   destaque: boolean;
   tipo_venda: "caixa" | "avulso" | null;
+  estoque_opcoes?: Record<string, number> | null;
 };
 
 type Pedido = {
@@ -87,6 +88,10 @@ export default function AdminPage() {
   const [abaEstoque, setAbaEstoque] = useState<AbaEstoque>("com-estoque");
   const [categoriaFiltro, setCategoriaFiltro] = useState("todas");
   const [buscaEstoque, setBuscaEstoque] = useState("");
+  const [novosSabores, setNovosSabores] = useState<Record<string, string>>({});
+  const [estoquesOpcoesSalvando, setEstoquesOpcoesSalvando] = useState<Set<string>>(
+    new Set()
+  );
 
   const [salvando, setSalvando] = useState(false);
   const [tempoEntrega, setTempoEntrega] = useState("20");
@@ -202,6 +207,119 @@ export default function AdminPage() {
         produto.id === id ? { ...produto, ...alteracoes } : produto
       )
     );
+  }
+
+  const normalizarTexto = (valor: string) =>
+    valor
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+
+  async function salvarEstoqueOpcoes(
+    produto: Produto,
+    estoqueOpcoes: Record<string, number>
+  ) {
+    const chaveSalvamento = produto.id;
+    if (estoquesOpcoesSalvando.has(chaveSalvamento)) return false;
+
+    const opcoesOrdenadas = Object.entries(estoqueOpcoes)
+      .map(
+        ([nomeOpcao, quantidade]): [string, number] => [
+          nomeOpcao.trim(),
+          Math.max(0, Math.floor(Number(quantidade) || 0)),
+        ]
+      )
+      .filter(([nomeOpcao]) => Boolean(nomeOpcao))
+      .sort(([opcaoA], [opcaoB]) => opcaoA.localeCompare(opcaoB, "pt-BR"))
+      .reduce<Record<string, number>>(
+        (opcoes, [nomeOpcao, quantidade]) => ({
+          ...opcoes,
+          [nomeOpcao]: quantidade,
+        }),
+        {}
+      );
+    const estoqueTotal = Object.values(opcoesOrdenadas).reduce(
+      (total, quantidade) => total + Number(quantidade),
+      0
+    );
+    const produtoEhEssencia = normalizarTexto(produto.nome).startsWith(
+      "essencia"
+    );
+    const alteracoes = {
+      estoque_opcoes: opcoesOrdenadas,
+      estoque: estoqueTotal,
+      ...(produtoEhEssencia
+        ? { descricao: Object.keys(opcoesOrdenadas).join(", ") }
+        : {}),
+    };
+
+    setEstoquesOpcoesSalvando((atuais) =>
+      new Set(atuais).add(chaveSalvamento)
+    );
+    const { error } = await supabase
+      .from("produtos")
+      .update(alteracoes)
+      .eq("id", produto.id);
+    setEstoquesOpcoesSalvando((atuais) => {
+      const proximos = new Set(atuais);
+      proximos.delete(chaveSalvamento);
+      return proximos;
+    });
+
+    if (error) {
+      alert(error.message);
+      return false;
+    }
+
+    setProdutos((atuais) =>
+      atuais.map((item) =>
+        item.id === produto.id ? { ...item, ...alteracoes } : item
+      )
+    );
+    return true;
+  }
+
+  async function alterarEstoqueOpcao(
+    produto: Produto,
+    nomeOpcao: string,
+    alteracao: number
+  ) {
+    const estoqueOpcoes = produto.estoque_opcoes ?? {};
+    await salvarEstoqueOpcoes(produto, {
+      ...estoqueOpcoes,
+      [nomeOpcao]: Math.max(0, (estoqueOpcoes[nomeOpcao] ?? 0) + alteracao),
+    });
+  }
+
+  async function adicionarOpcaoEstoque(produto: Produto) {
+    const novaOpcao = (novosSabores[produto.id] ?? "").trim();
+    if (!novaOpcao) return;
+
+    const estoqueOpcoes = produto.estoque_opcoes ?? {};
+    const opcaoExistente = Object.keys(estoqueOpcoes).find(
+      (opcao) => normalizarTexto(opcao) === normalizarTexto(novaOpcao)
+    );
+    if (opcaoExistente) {
+      alert("Este sabor já está cadastrado.");
+      return;
+    }
+
+    const salvou = await salvarEstoqueOpcoes(produto, {
+      ...estoqueOpcoes,
+      [novaOpcao]: 1,
+    });
+    if (salvou) {
+      setNovosSabores((atuais) => ({ ...atuais, [produto.id]: "" }));
+    }
+  }
+
+  async function removerOpcaoEstoque(produto: Produto, nomeOpcao: string) {
+    if (!confirm(`Remover o sabor “${nomeOpcao}” de ${produto.nome}?`)) return;
+
+    const estoqueOpcoes = { ...(produto.estoque_opcoes ?? {}) };
+    delete estoqueOpcoes[nomeOpcao];
+    await salvarEstoqueOpcoes(produto, estoqueOpcoes);
   }
 
   async function carregarPedidos() {
@@ -1261,9 +1379,9 @@ export default function AdminPage() {
           {produtosVisiveis.map((produto) => (
             <div
               key={produto.id}
-              className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 flex flex-col md:flex-row items-center justify-between gap-6"
+              className="flex flex-col items-start justify-between gap-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5 md:flex-row"
             >
-              <div className="flex items-center gap-5">
+              <div className="flex w-full min-w-0 items-start gap-5">
 
                 {produto.imagem ? (
                   <Image
@@ -1279,7 +1397,7 @@ export default function AdminPage() {
                   </div>
                 )}
 
-                <div>
+                <div className="min-w-0 flex-1">
                   <span className="mb-2 inline-block rounded-full bg-zinc-800 px-3 py-1 text-xs font-semibold text-zinc-300">
                     {categorias.find((categoria) => categoria.id === produto.categoria_id)?.nome ?? "Sem categoria"}
                   </span>
@@ -1317,59 +1435,167 @@ export default function AdminPage() {
                       />
                     </label>
 
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="font-semibold">Estoque</span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void atualizarProdutoRapido(produto.id, {
-                            estoque: Math.max(0, produto.estoque - 1),
-                          })
-                        }
-                        className="grid h-8 w-8 place-items-center rounded-md bg-zinc-800 text-lg hover:bg-zinc-700"
-                        aria-label={`Diminuir estoque de ${produto.nome}`}
-                      >
-                        −
-                      </button>
-                      <input
-                        type="number"
-                        min="0"
-                        value={produto.estoque}
-                        onChange={(event) => {
-                          const novoEstoque = Math.max(
-                            0,
-                            Number(event.target.value)
-                          );
-                          setProdutos((atuais) =>
-                            atuais.map((item) =>
-                              item.id === produto.id
-                                ? { ...item, estoque: novoEstoque }
-                                : item
-                            )
-                          );
-                        }}
-                        onBlur={(event) =>
-                          void atualizarProdutoRapido(produto.id, {
-                            estoque: Math.max(0, Number(event.target.value)),
-                          })
-                        }
-                        className="w-16 rounded-md bg-zinc-800 px-2 py-1.5 text-center"
-                        aria-label={`Estoque de ${produto.nome}`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void atualizarProdutoRapido(produto.id, {
-                            estoque: produto.estoque + 1,
-                          })
-                        }
-                        className="grid h-8 w-8 place-items-center rounded-md bg-zinc-800 text-lg hover:bg-zinc-700"
-                        aria-label={`Aumentar estoque de ${produto.nome}`}
-                      >
-                        +
-                      </button>
-                    </div>
+                    {produto.estoque_opcoes ? (
+                      <span className="rounded-md bg-zinc-800 px-3 py-1.5 text-sm font-semibold text-yellow-300">
+                        Estoque total: {produto.estoque}
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-semibold">Estoque</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void atualizarProdutoRapido(produto.id, {
+                              estoque: Math.max(0, produto.estoque - 1),
+                            })
+                          }
+                          className="grid h-8 w-8 place-items-center rounded-md bg-zinc-800 text-lg hover:bg-zinc-700"
+                          aria-label={`Diminuir estoque de ${produto.nome}`}
+                        >
+                          −
+                        </button>
+                        <input
+                          type="number"
+                          min="0"
+                          value={produto.estoque}
+                          onChange={(event) => {
+                            const novoEstoque = Math.max(
+                              0,
+                              Number(event.target.value)
+                            );
+                            setProdutos((atuais) =>
+                              atuais.map((item) =>
+                                item.id === produto.id
+                                  ? { ...item, estoque: novoEstoque }
+                                  : item
+                              )
+                            );
+                          }}
+                          onBlur={(event) =>
+                            void atualizarProdutoRapido(produto.id, {
+                              estoque: Math.max(0, Number(event.target.value)),
+                            })
+                          }
+                          className="w-16 rounded-md bg-zinc-800 px-2 py-1.5 text-center"
+                          aria-label={`Estoque de ${produto.nome}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void atualizarProdutoRapido(produto.id, {
+                              estoque: produto.estoque + 1,
+                            })
+                          }
+                          className="grid h-8 w-8 place-items-center rounded-md bg-zinc-800 text-lg hover:bg-zinc-700"
+                          aria-label={`Aumentar estoque de ${produto.nome}`}
+                        >
+                          +
+                        </button>
+                      </div>
+                    )}
                   </div>
+
+                  {produto.estoque_opcoes && (
+                    <div className="mt-4 rounded-xl border border-zinc-700 bg-black/20 p-3">
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-bold text-yellow-300">
+                          Sabores e quantidades
+                        </p>
+                        {estoquesOpcoesSalvando.has(produto.id) && (
+                          <span className="text-xs text-zinc-400">Salvando...</span>
+                        )}
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        {Object.entries(produto.estoque_opcoes)
+                          .sort(([saborA], [saborB]) =>
+                            saborA.localeCompare(saborB, "pt-BR")
+                          )
+                          .map(([sabor, quantidade]) => (
+                            <div
+                              key={sabor}
+                              className="flex items-center justify-between gap-2 rounded-lg bg-zinc-800 p-2"
+                            >
+                              <span className="min-w-0 flex-1 truncate text-sm" title={sabor}>
+                                {sabor}
+                              </span>
+                              <div className="flex shrink-0 items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void alterarEstoqueOpcao(produto, sabor, -1)
+                                  }
+                                  disabled={
+                                    quantidade <= 0 ||
+                                    estoquesOpcoesSalvando.has(produto.id)
+                                  }
+                                  className="grid h-7 w-7 place-items-center rounded bg-zinc-700 font-bold hover:bg-zinc-600 disabled:opacity-40"
+                                  aria-label={`Diminuir estoque de ${sabor}`}
+                                >
+                                  −
+                                </button>
+                                <strong className="w-7 text-center text-yellow-300">
+                                  {quantidade}
+                                </strong>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void alterarEstoqueOpcao(produto, sabor, 1)
+                                  }
+                                  disabled={estoquesOpcoesSalvando.has(produto.id)}
+                                  className="grid h-7 w-7 place-items-center rounded bg-zinc-700 font-bold hover:bg-zinc-600 disabled:opacity-40"
+                                  aria-label={`Aumentar estoque de ${sabor}`}
+                                >
+                                  +
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void removerOpcaoEstoque(produto, sabor)
+                                  }
+                                  disabled={estoquesOpcoesSalvando.has(produto.id)}
+                                  className="grid h-7 w-7 place-items-center rounded text-red-300 hover:bg-red-950 disabled:opacity-40"
+                                  aria-label={`Remover sabor ${sabor}`}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                        <input
+                          type="text"
+                          value={novosSabores[produto.id] ?? ""}
+                          onChange={(event) =>
+                            setNovosSabores((atuais) => ({
+                              ...atuais,
+                              [produto.id]: event.target.value,
+                            }))
+                          }
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              void adicionarOpcaoEstoque(produto);
+                            }
+                          }}
+                          placeholder="Adicionar novo sabor"
+                          className="min-w-0 flex-1 rounded-lg bg-zinc-800 px-3 py-2 text-sm"
+                          aria-label={`Novo sabor de ${produto.nome}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void adicionarOpcaoEstoque(produto)}
+                          disabled={
+                            !(novosSabores[produto.id] ?? "").trim() ||
+                            estoquesOpcoesSalvando.has(produto.id)
+                          }
+                          className="rounded-lg bg-yellow-400 px-4 py-2 text-sm font-bold text-black hover:bg-yellow-300 disabled:opacity-50"
+                        >
+                          Adicionar sabor
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {produto.destaque && (
                     <span className="inline-block mt-2 bg-yellow-400 text-black px-3 py-1 rounded-full text-sm font-bold">

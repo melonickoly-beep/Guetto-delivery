@@ -1246,6 +1246,7 @@ export default function Catalogo({
               produto.nome.trim().toLowerCase()
             );
             const eJackDaniels = produto.nome.trim().toLowerCase() === "whisky jack daniels";
+            const produtoEhEssencia = ehEssencia(produto);
             const exigeEscolhaDeSabor =
               eCombo ||
               eGeloDeSabor ||
@@ -1292,8 +1293,19 @@ export default function Catalogo({
                   <h3 className="line-clamp-2 min-h-12 text-lg font-bold sm:min-h-14 sm:text-xl">
                     {formatarNomeProduto(produto.nome)}
                   </h3>
-                  {produto.descricao && (
-                    <p className="mt-2 line-clamp-2 min-h-10 text-sm text-zinc-400">{produto.descricao}</p>
+                  {produtoEhEssencia && produto.estoque_opcoes ? (
+                    <div className="mt-2 min-h-10 text-sm text-zinc-400">
+                      <span className="font-bold text-zinc-300">
+                        Sabores disponíveis:
+                      </span>{" "}
+                      {saboresDoProduto(produto).join(", ")}
+                    </div>
+                  ) : (
+                    produto.descricao && (
+                      <p className="mt-2 line-clamp-2 min-h-10 text-sm text-zinc-400">
+                        {produto.descricao}
+                      </p>
+                    )
                   )}
                   <div className="mt-auto flex items-end justify-between gap-3 pt-5">
                     <div>
@@ -1388,7 +1400,12 @@ export default function Catalogo({
                 className="mt-2 w-full rounded-lg bg-zinc-800 p-3 font-normal"
               >
                 {saboresDoProduto(geloEmConfiguracao).map((sabor) => (
-                  <option key={sabor} value={sabor}>{sabor}</option>
+                  <option key={sabor} value={sabor}>
+                    {sabor}
+                    {geloEmConfiguracao.estoque_opcoes
+                      ? ` — ${geloEmConfiguracao.estoque_opcoes[sabor]} em estoque`
+                      : ""}
+                  </option>
                 ))}
               </select>
             </label>
