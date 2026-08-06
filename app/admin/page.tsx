@@ -184,8 +184,29 @@ export default function AdminPage() {
     return () => window.removeEventListener("focus", sincronizarPermissao);
   }, []);
 
+  useEffect(() => {
+    if (!painelDesbloqueado || paginaEstoque) return;
+
+    const removerEventos = () => {
+      window.removeEventListener("pointerdown", tentarAtivarSom);
+      window.removeEventListener("keydown", tentarAtivarSom);
+      window.removeEventListener("touchstart", tentarAtivarSom);
+    };
+    const tentarAtivarSom = async () => {
+      if (await prepararAlertaSonoro()) removerEventos();
+    };
+
+    void tentarAtivarSom();
+    window.addEventListener("pointerdown", tentarAtivarSom);
+    window.addEventListener("keydown", tentarAtivarSom);
+    window.addEventListener("touchstart", tentarAtivarSom, { passive: true });
+
+    return removerEventos;
+  }, [painelDesbloqueado, paginaEstoque]);
+
   async function desbloquearPainel(event: FormEvent) {
     event.preventDefault();
+    void prepararAlertaSonoro();
     setErroAcesso("");
 
     if (!emailAdmin) {
@@ -748,6 +769,7 @@ export default function AdminPage() {
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
       tag,
+      silent: false,
       data: { url: "/admin" },
     };
 
@@ -1261,10 +1283,10 @@ export default function AdminPage() {
             </div>
             <button type="button" onClick={ativarNotificacoes} className="rounded-lg bg-yellow-400 px-4 py-3 font-bold text-black hover:bg-yellow-300">
               {notificacoesAtivadas && alertaSonoroAtivado
-                ? "Notificações e som ativados"
+                ? "Alertas automáticos ativados"
                 : notificacoesAtivadas
-                  ? "Ativar som dos pedidos"
-                  : "Ativar notificações e som"}
+                  ? "Som automático ao usar o painel"
+                  : "Permitir notificações"}
             </button>
           </div>
           {pedidosNovos.length > 0 && (
