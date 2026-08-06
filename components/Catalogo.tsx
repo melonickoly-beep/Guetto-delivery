@@ -101,6 +101,16 @@ const formatarPreco = (valor: number) =>
     currency: "BRL",
   }).format(valor);
 
+const normalizarTexto = (valor: string) =>
+  valor
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+const ehEssencia = (produto: Pick<Produto, "nome">) =>
+  normalizarTexto(produto.nome).startsWith("essencia");
+
 const formatarNomeProduto = (nome: string) =>
   nome
     .replace(/\bcarvao\b/gi, "Carvão")
@@ -319,26 +329,50 @@ export default function Catalogo({
 
   const produtosFiltrados = useMemo(
     () => {
-      const termo = busca
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLowerCase()
-        .trim();
+      const termo = normalizarTexto(busca);
       return produtos.filter((produto) => {
         const correspondeCategoria =
           termo.length > 0 ||
           (categoriaAtiva === "destaques"
             ? produto.destaque
             : produto.categoria_id === categoriaAtiva);
-        const textoProduto = `${produto.nome} ${produto.descricao ?? ""}`
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .toLowerCase();
+        const textoProduto = normalizarTexto(
+          `${produto.nome} ${produto.descricao ?? ""}`
+        );
         return correspondeCategoria && (!termo || textoProduto.includes(termo));
       });
     },
     [busca, categoriaAtiva, produtos]
   );
+  const categoriaTabacariaId = categorias.find(
+    (categoria) => normalizarTexto(categoria.nome) === "tabacaria"
+  )?.id;
+  const exibirSubsecoesTabacaria =
+    !busca.trim() && categoriaAtiva === categoriaTabacariaId;
+  const secoesProdutos = exibirSubsecoesTabacaria
+    ? [
+        {
+          id: "essencias",
+          titulo: "Essências",
+          descricao:
+            "Escolha a marca e depois o sabor. Cada essência pode ter sua própria foto cadastrada.",
+          produtos: produtosFiltrados.filter(ehEssencia),
+        },
+        {
+          id: "outros-tabacaria",
+          titulo: "Outros produtos de tabacaria",
+          descricao: "Acessórios, carvão, sedas e outros itens.",
+          produtos: produtosFiltrados.filter((produto) => !ehEssencia(produto)),
+        },
+      ].filter((secao) => secao.produtos.length > 0)
+    : [
+        {
+          id: "produtos",
+          titulo: "",
+          descricao: "",
+          produtos: produtosFiltrados,
+        },
+      ];
 
   const quantidadeTotal = carrinho.reduce(
     (total, item) => total + item.quantidade,
@@ -1168,8 +1202,43 @@ export default function Catalogo({
           Nenhum produto encontrado nesta categoria.
         </div>
       ) : (
-        <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {produtosFiltrados.map((produto) => {
+        <div className="mt-8 space-y-10">
+          {secoesProdutos.map((secao) => (
+            <section
+              key={secao.id}
+              aria-labelledby={secao.titulo ? `secao-${secao.id}` : undefined}
+            >
+              {secao.titulo && (
+                <div className="rounded-2xl border border-yellow-400/30 bg-yellow-400/10 px-5 py-4">
+                  <p className="text-xs font-black uppercase tracking-[0.2em] text-yellow-400">
+                    Tabacaria
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                      <h2
+                        id={`secao-${secao.id}`}
+                        className="text-2xl font-black text-white"
+                      >
+                        {secao.id === "essencias" ? "🌿 " : ""}
+                        {secao.titulo}
+                      </h2>
+                      <p className="mt-1 text-sm text-zinc-300">
+                        {secao.descricao}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-zinc-950/70 px-3 py-1 text-xs font-bold text-yellow-300">
+                      {secao.produtos.length}{" "}
+                      {secao.produtos.length === 1 ? "produto" : "produtos"}
+                    </span>
+                  </div>
+                </div>
+              )}
+              <div
+                className={`grid gap-5 sm:grid-cols-2 lg:grid-cols-3 ${
+                  secao.titulo ? "mt-4" : ""
+                }`}
+              >
+          {secao.produtos.map((produto) => {
             const item = carrinho.find((itemCarrinho) => itemCarrinho.id === produto.id);
             const semEstoque = estoqueDisponivel(produto) <= 0;
             const eCombo = categorias.find((categoria) => categoria.id === produto.categoria_id)?.nome === "Combos";
@@ -1290,6 +1359,9 @@ export default function Catalogo({
               </article>
             );
           })}
+              </div>
+            </section>
+          ))}
         </div>
       )}
 

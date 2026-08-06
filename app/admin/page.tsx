@@ -1067,6 +1067,22 @@ export default function AdminPage() {
               required
             />
 
+            {categorias.find(
+              (categoria) => categoria.id === categoriaId
+            )?.nome.toLowerCase() === "tabacaria" &&
+              nome
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .toLowerCase()
+                .trim()
+                .startsWith("essencia") && (
+                <p className="rounded-lg border border-yellow-400/30 bg-yellow-400/10 p-3 text-sm text-yellow-100 md:col-span-2">
+                  Este produto aparecerá na subseção <strong>Essências</strong>.
+                  Use o campo “Imagem do produto” abaixo para cadastrar a foto
+                  individual dele.
+                </p>
+              )}
+
             <textarea
               placeholder="Descrição"
               value={descricao}
