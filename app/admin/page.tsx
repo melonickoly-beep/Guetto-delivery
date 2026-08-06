@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, ChangeEvent, ClipboardEvent, FormEvent } from "react";
 import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type Categoria = {
@@ -60,6 +62,7 @@ const statusPedido = [
 ];
 
 export default function AdminPage() {
+  const paginaEstoque = usePathname() === "/admin/estoque";
   const [painelDesbloqueado, setPainelDesbloqueado] = useState(false);
   const [verificandoAcesso, setVerificandoAcesso] = useState(true);
   const [emailAdmin, setEmailAdmin] = useState("");
@@ -120,8 +123,12 @@ export default function AdminPage() {
   useEffect(() => {
     if (!painelDesbloqueado) return;
 
-    carregarCategorias();
-    carregarProdutos();
+    if (paginaEstoque) {
+      carregarCategorias();
+      carregarProdutos();
+      return;
+    }
+
     carregarTempoEntrega();
     carregarHorarioAtendimento();
     carregarPedidos();
@@ -147,7 +154,7 @@ export default function AdminPage() {
       window.clearInterval(intervaloPedidos);
       void supabase.removeChannel(canalPedidos);
     };
-  }, [painelDesbloqueado]); // eslint-disable-line react-hooks/exhaustive-deps -- Atualiza somente ao entrar ou sair do painel.
+  }, [painelDesbloqueado, paginaEstoque]); // eslint-disable-line react-hooks/exhaustive-deps -- Atualiza somente ao entrar ou sair de uma área do painel.
 
   useEffect(() => {
     const sincronizarPermissao = () => {
@@ -982,13 +989,32 @@ export default function AdminPage() {
     <main className="min-h-screen text-white">
       <div className="max-w-7xl mx-auto p-8">
 
-        <div className="mb-8 flex items-center justify-between gap-4">
-          <h1 className="text-4xl font-bold text-yellow-400">Painel Administrativo</h1>
-          <button type="button" onClick={sair} className="rounded-lg border border-zinc-700 px-4 py-2 font-semibold hover:bg-zinc-800">
-            Sair
-          </button>
+        <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div>
+            <h1 className="text-4xl font-bold text-yellow-400">
+              {paginaEstoque ? "Estoque" : "Painel Administrativo"}
+            </h1>
+            {paginaEstoque && (
+              <p className="mt-2 text-zinc-400">
+                Cadastre produtos e atualize preços, quantidades e sabores.
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href={paginaEstoque ? "/admin" : "/admin/estoque"}
+              className="rounded-lg bg-yellow-400 px-4 py-2 font-bold text-black hover:bg-yellow-300"
+            >
+              {paginaEstoque ? "Voltar ao painel" : "Estoque"}
+            </Link>
+            <button type="button" onClick={sair} className="rounded-lg border border-zinc-700 px-4 py-2 font-semibold hover:bg-zinc-800">
+              Sair
+            </button>
+          </div>
         </div>
 
+        {!paginaEstoque && (
+          <>
         <section className="mb-8 rounded-xl border border-yellow-400/50 bg-yellow-400/10 p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -1220,7 +1246,11 @@ export default function AdminPage() {
           </div>
           </div>
         </details>
+          </>
+        )}
 
+        {paginaEstoque && (
+          <>
         <form
           onSubmit={salvarProduto}
           className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 mb-10"
@@ -1765,6 +1795,8 @@ export default function AdminPage() {
           </div>
 
         </div>
+          </>
+        )}
 
       </div>
 
