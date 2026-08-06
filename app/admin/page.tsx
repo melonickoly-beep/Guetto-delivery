@@ -643,6 +643,31 @@ export default function AdminPage() {
     return true;
   }
 
+  async function excluirPedidoCancelado(pedido: Pedido) {
+    if (
+      !confirm(
+        `Excluir definitivamente o pedido cancelado de ${pedido.cliente_nome}?`
+      )
+    ) {
+      return;
+    }
+
+    const resposta = await fetch(`/api/admin/pedidos/${pedido.id}`, {
+      method: "DELETE",
+    });
+
+    if (!resposta.ok) {
+      const erro = await resposta.json().catch(() => null);
+      alert(erro?.error ?? "Não foi possível excluir o pedido.");
+      return;
+    }
+
+    setPedidos((atuais) =>
+      atuais.filter((pedidoAtual) => pedidoAtual.id !== pedido.id)
+    );
+    await carregarResumoPedidos();
+  }
+
   function textoSeguro(valor: unknown) {
     return String(valor ?? "")
       .replaceAll("&", "&amp;")
@@ -1424,6 +1449,15 @@ export default function AdminPage() {
                   >
                     Avisar cliente no WhatsApp
                   </button>
+                  {pedido.status === "cancelado" && (
+                    <button
+                      type="button"
+                      onClick={() => void excluirPedidoCancelado(pedido)}
+                      className="rounded-lg bg-red-700 px-3 py-2 text-sm font-bold text-white hover:bg-red-600"
+                    >
+                      Excluir pedido
+                    </button>
+                  )}
                 </div>
               </article>
             ))}

@@ -41,3 +41,52 @@ export async function PATCH(
 
   return NextResponse.json({ sucesso: true });
 }
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  if (!(await obterAdministrador())) {
+    return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
+  }
+
+  const { id } = await params;
+  const { data: pedido, error: erroBusca } = await supabaseAdmin
+    .from("pedidos")
+    .select("id,status")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (erroBusca) {
+    return NextResponse.json(
+      { error: erroBusca.message || "Não foi possível localizar o pedido." },
+      { status: 500 }
+    );
+  }
+
+  if (!pedido) {
+    return NextResponse.json({ error: "Pedido não encontrado." }, { status: 404 });
+  }
+
+  if (pedido.status !== "cancelado") {
+    return NextResponse.json(
+      { error: "Apenas pedidos cancelados podem ser excluídos." },
+      { status: 400 }
+    );
+  }
+
+  const { error: erroExclusao } = await supabaseAdmin
+    .from("pedidos")
+    .delete()
+    .eq("id", id)
+    .eq("status", "cancelado");
+
+  if (erroExclusao) {
+    return NextResponse.json(
+      { error: erroExclusao.message || "Não foi possível excluir o pedido." },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({ sucesso: true });
+}
