@@ -5,6 +5,7 @@ import {
   mensagemPedidoMinimo,
   type CidadeEntrega,
 } from "@/lib/pedido-minimo";
+import { registrarPedidoNoResumo } from "@/lib/resumo-sorteio";
 
 type ItemRecebido = {
   produto_id?: unknown;
@@ -248,6 +249,12 @@ export async function POST(request: Request) {
       { error: conflito ? error.message : "Não foi possível registrar o pedido." },
       { status: conflito ? 409 : 500 }
     );
+  }
+
+  try {
+    await registrarPedidoNoResumo(String(pedidoId));
+  } catch (erroResumo) {
+    console.error("Pedido criado, mas não entrou no resumo do sorteio:", erroResumo);
   }
 
   return NextResponse.json({ id: pedidoId }, { status: 201 });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { obterAdministrador } from "@/lib/supabase-server";
+import { removerPedidoDoResumo } from "@/lib/resumo-sorteio";
 
 const STATUS_VALIDOS = [
   "novo",
@@ -39,6 +40,14 @@ export async function PATCH(
     );
   }
 
+  if (body.status === "cancelado") {
+    try {
+      await removerPedidoDoResumo(id);
+    } catch (erroResumo) {
+      console.error("Pedido cancelado, mas permaneceu no resumo do sorteio:", erroResumo);
+    }
+  }
+
   return NextResponse.json({ sucesso: true });
 }
 
@@ -72,6 +81,16 @@ export async function DELETE(
     return NextResponse.json(
       { error: "Apenas pedidos cancelados podem ser excluídos." },
       { status: 400 }
+    );
+  }
+
+  try {
+    await removerPedidoDoResumo(id);
+  } catch (erroResumo) {
+    console.error("Erro ao remover pedido do resumo do sorteio:", erroResumo);
+    return NextResponse.json(
+      { error: "Não foi possível remover o pedido do resumo do sorteio." },
+      { status: 500 }
     );
   }
 

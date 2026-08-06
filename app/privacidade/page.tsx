@@ -24,7 +24,7 @@ export default function PrivacidadePage() {
         <h1 className="mt-2 text-3xl font-black">
           Privacidade e dados armazenados
         </h1>
-        <p className="mt-3 text-zinc-400">Última atualização: 03/08/2026.</p>
+        <p className="mt-3 text-zinc-400">Última atualização: 06/08/2026.</p>
 
         <div className="mt-8 space-y-8 leading-7 text-zinc-300">
           <section>
@@ -41,13 +41,18 @@ export default function PrivacidadePage() {
 
           <section>
             <h2 className="text-xl font-black text-white">
-              Exclusão após a entrega
+              Exclusão após a entrega e resumo promocional
             </h2>
             <p className="mt-2">
-              Quando o pedido é marcado como concluído, os dados do cliente e
-              os detalhes da compra são excluídos automaticamente do sistema.
-              Mantemos somente uma contagem anônima de pedidos por dia, sem
-              nome, telefone, endereço ou itens comprados.
+              Quando o pedido é marcado como concluído, o registro operacional
+              com endereço, referência e pagamento é excluído automaticamente.
+              Para ações promocionais e sorteios, mantemos em uma área privada
+              do painel um resumo separado com data e horário, nome, telefone,
+              itens e total do pedido. Esse resumo não guarda endereço,
+              referência ou forma de pagamento e pode ser excluído por dia
+              pelo administrador após o encerramento da ação.
+            </p>
+            <p className="mt-2">
               Isso não apaga os dados que o cliente escolheu salvar no próprio
               aparelho para preencher pedidos futuros.
             </p>
