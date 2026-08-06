@@ -82,7 +82,9 @@ export default function AdminPage() {
   const [resumoPedidosHoje, setResumoPedidosHoje] =
     useState<ResumoPedidosHoje | null>(null);
   const [notificacoesAtivadas, setNotificacoesAtivadas] = useState(false);
+  const [alertaSonoroAtivado, setAlertaSonoroAtivado] = useState(false);
   const idsPedidosConhecidos = useRef<Set<string> | null>(null);
+  const contextoAudioRef = useRef<AudioContext | null>(null);
 
   const [categoriaId, setCategoriaId] = useState("");
   const [nome, setNome] = useState("");
@@ -536,11 +538,13 @@ export default function AdminPage() {
         lista.map((pedido) => pedido.id)
       );
     } else {
+      let recebeuPedidoNovo = false;
       for (const pedido of lista) {
         if (
           pedido.status === "novo" &&
           !idsPedidosConhecidos.current.has(pedido.id)
         ) {
+          recebeuPedidoNovo = true;
           idsPedidosConhecidos.current.add(pedido.id);
           void exibirNotificacao(
             "Novo pedido na Guetto Delivery",
@@ -551,6 +555,10 @@ export default function AdminPage() {
             `pedido-${pedido.id}`
           );
         }
+      }
+
+      if (recebeuPedidoNovo) {
+        void tocarAlertaSonoro();
       }
 
       for (const pedido of lista) {
@@ -763,9 +771,69 @@ export default function AdminPage() {
     }
   }
 
+  async function prepararAlertaSonoro() {
+    try {
+      const JanelaComAudio = window as typeof window & {
+        webkitAudioContext?: typeof AudioContext;
+      };
+      const CriadorAudio =
+        window.AudioContext ?? JanelaComAudio.webkitAudioContext;
+      if (!CriadorAudio) return false;
+
+      const contexto =
+        contextoAudioRef.current ?? new CriadorAudio();
+      contextoAudioRef.current = contexto;
+      if (contexto.state === "suspended") await contexto.resume();
+      const ativado = contexto.state === "running";
+      setAlertaSonoroAtivado(ativado);
+      return ativado;
+    } catch {
+      setAlertaSonoroAtivado(false);
+      return false;
+    }
+  }
+
+  async function tocarAlertaSonoro() {
+    const contexto = contextoAudioRef.current;
+    if (!contexto) return false;
+
+    try {
+      if (contexto.state === "suspended") await contexto.resume();
+      if (contexto.state !== "running") return false;
+
+      const inicio = contexto.currentTime;
+      [740, 988, 740].forEach((frequencia, indice) => {
+        const oscilador = contexto.createOscillator();
+        const volume = contexto.createGain();
+        const comecoNota = inicio + indice * 0.22;
+        const fimNota = comecoNota + 0.17;
+
+        oscilador.type = "sine";
+        oscilador.frequency.setValueAtTime(frequencia, comecoNota);
+        volume.gain.setValueAtTime(0.001, comecoNota);
+        volume.gain.exponentialRampToValueAtTime(0.24, comecoNota + 0.025);
+        volume.gain.exponentialRampToValueAtTime(0.001, fimNota);
+        oscilador.connect(volume);
+        volume.connect(contexto.destination);
+        oscilador.start(comecoNota);
+        oscilador.stop(fimNota);
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async function ativarNotificacoes() {
+    const somAtivado = await prepararAlertaSonoro();
+
     if (!("Notification" in window)) {
-      alert("Este navegador não oferece notificações.");
+      if (somAtivado) {
+        await tocarAlertaSonoro();
+        alert("Alerta sonoro ativado. Este navegador não oferece notificações visuais.");
+      } else {
+        alert("Este navegador não oferece notificações.");
+      }
       return;
     }
 
@@ -781,6 +849,7 @@ export default function AdminPage() {
       "Você será avisado quando chegar um novo pedido.",
       "notificacoes-ativadas"
     );
+    if (somAtivado) await tocarAlertaSonoro();
     if (!exibiuTeste) {
       alert(
         "A permissão foi concedida, mas o navegador bloqueou o aviso. Confira as configurações de notificação do site."
@@ -1191,7 +1260,11 @@ export default function AdminPage() {
               </p>
             </div>
             <button type="button" onClick={ativarNotificacoes} className="rounded-lg bg-yellow-400 px-4 py-3 font-bold text-black hover:bg-yellow-300">
-              {notificacoesAtivadas ? "Notificações ativadas" : "Ativar notificações"}
+              {notificacoesAtivadas && alertaSonoroAtivado
+                ? "Notificações e som ativados"
+                : notificacoesAtivadas
+                  ? "Ativar som dos pedidos"
+                  : "Ativar notificações e som"}
             </button>
           </div>
           {pedidosNovos.length > 0 && (
