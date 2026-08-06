@@ -16,6 +16,11 @@ import {
   Truck,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import {
+  avaliarPedidoMinimo,
+  mensagemPedidoMinimo,
+  type CidadeEntrega,
+} from "@/lib/pedido-minimo";
 
 type Categoria = {
   id: string;
@@ -68,6 +73,7 @@ type DadosClienteSalvos = {
   telefone: string;
   rua: string;
   numeroEndereco: string;
+  bairro: string;
   referencia: string;
   cidadeEntrega: "" | "Paranacity" | "Cruzeiro do Sul";
 };
@@ -157,6 +163,7 @@ export default function Catalogo({
   const [telefone, setTelefone] = useState("");
   const [rua, setRua] = useState("");
   const [numeroEndereco, setNumeroEndereco] = useState("");
+  const [bairro, setBairro] = useState("");
   const [referencia, setReferencia] = useState("");
   const [cidadeEntrega, setCidadeEntrega] = useState<"" | "Paranacity" | "Cruzeiro do Sul">("");
   const [quantidadePagamentos, setQuantidadePagamentos] =
@@ -284,6 +291,7 @@ export default function Catalogo({
       setTelefone(dados.telefone ?? "");
       setRua(dados.rua ?? "");
       setNumeroEndereco(dados.numeroEndereco ?? "");
+      setBairro(dados.bairro ?? "");
       setReferencia(dados.referencia ?? "");
       setCidadeEntrega(dados.cidadeEntrega ?? "");
       setDadosClienteRecuperados(true);
@@ -360,33 +368,31 @@ export default function Catalogo({
       categoria.nome.trim().toLowerCase(),
     ])
   );
-  const itensTabacariaAtual = carrinho.filter(
-    (item) => categoriaPorIdAtual.get(item.categoria_id) === "tabacaria"
+  const avaliacaoPedidoMinimo = avaliarPedidoMinimo(
+    carrinho.map((item) => ({
+      categoria: categoriaPorIdAtual.get(item.categoria_id) ?? "",
+      tipoVenda: item.tipo_venda,
+      nome: item.nome,
+      descricao: item.descricao,
+      subtotal: calcularSubtotalItem(item),
+    })),
+    cidadeEntrega || null
   );
-  const somenteTabacariaAtual =
-    carrinho.length > 0 && itensTabacariaAtual.length === carrinho.length;
-  const pedidoMinimoCidadeAtual =
-    somenteRetiradaHoje
-      ? 0
-      : cidadeEntrega === ""
-      ? null
-      : somenteTabacariaAtual
-        ? 20
-        : cidadeEntrega === "Paranacity"
-          ? 25
-          : 35;
-  const faltaMinimoCidade =
-    pedidoMinimoCidadeAtual === null
-      ? null
-      : Math.max(0, pedidoMinimoCidadeAtual - valorTotal);
-  const pedidoMinimoAtual = pedidoMinimoCidadeAtual;
-  const faltaPedidoMinimo = faltaMinimoCidade;
+  const pedidoMinimoAtual = somenteRetiradaHoje
+    ? 0
+    : avaliacaoPedidoMinimo.minimoReferencia;
+  const faltaPedidoMinimo = somenteRetiradaHoje
+    ? 0
+    : avaliacaoPedidoMinimo.falta;
   const progressoPedidoMinimo =
     pedidoMinimoAtual === null
       ? 0
       : pedidoMinimoAtual === 0
         ? 100
-      : Math.min(100, (valorTotal / pedidoMinimoAtual) * 100);
+      : Math.min(
+          100,
+          (avaliacaoPedidoMinimo.valorConsiderado / pedidoMinimoAtual) * 100
+        );
   const totalPagamentosInformado = [
     primeiroPagamento,
     segundoPagamento,
@@ -618,25 +624,22 @@ export default function Catalogo({
     }
     if (
       !somenteRetiradaHoje &&
-      (!rua.trim() || !numeroEndereco.trim() || !cidadeEntrega)
+      (!rua.trim() ||
+        !numeroEndereco.trim() ||
+        !bairro.trim() ||
+        !cidadeEntrega)
     ) {
-      alert("Preencha o endereço e a cidade para continuar.");
+      alert("Preencha o endereço, o bairro e a cidade para continuar.");
       return;
     }
 
-    const categoriaPorId = new Map(categorias.map((categoria) => [categoria.id, categoria.nome.toLowerCase()]));
-    const itensPorCategoria = (nomeCategoria: string) =>
-      carrinho.filter((item) => categoriaPorId.get(item.categoria_id) === nomeCategoria);
-    const itensTabacaria = itensPorCategoria("tabacaria");
-    const somenteTabacaria =
-      itensTabacaria.length > 0 && itensTabacaria.length === carrinho.length;
-    const pedidoMinimoCidade = somenteTabacaria
-      ? 20
-      : cidadeEntrega === "Paranacity"
-        ? 25
-        : 35;
-    if (!somenteRetiradaHoje && valorTotal < pedidoMinimoCidade) {
-      alert(`O pedido mínimo para entrega em ${cidadeEntrega} é de ${formatarPreco(pedidoMinimoCidade)}.`);
+    if (!somenteRetiradaHoje && !avaliacaoPedidoMinimo.atingido) {
+      alert(
+        mensagemPedidoMinimo(
+          avaliacaoPedidoMinimo,
+          cidadeEntrega as CidadeEntrega
+        )
+      );
       return;
     }
 
@@ -714,6 +717,7 @@ export default function Catalogo({
         ? [
             `Cidade: ${cidadeEntrega}`,
             `Endereço: ${rua.trim()}, ${numeroEndereco.trim()}`,
+            `Bairro: ${bairro.trim()}`,
             ...(referencia.trim()
               ? [`Referência: ${referencia.trim()}`]
               : []),
@@ -744,6 +748,7 @@ export default function Catalogo({
           endereco: somenteRetiradaHoje
             ? "Retirada na loja"
             : `${rua.trim()}, ${numeroEndereco.trim()}`,
+          bairro: somenteRetiradaHoje ? null : bairro.trim(),
           referencia: somenteRetiradaHoje ? null : referencia.trim() || null,
           cidade_entrega: somenteRetiradaHoje ? null : cidadeEntrega,
           vasilhame_confirmado: vasilhameConfirmado,
@@ -782,6 +787,7 @@ export default function Catalogo({
         telefone: telefone.trim(),
         rua: rua.trim(),
         numeroEndereco: numeroEndereco.trim(),
+        bairro: bairro.trim(),
         referencia: referencia.trim(),
         cidadeEntrega,
       };
@@ -900,6 +906,13 @@ export default function Catalogo({
                 style={{ width: `${progressoPedidoMinimo}%` }}
               />
             </div>
+            {!compacto && avaliacaoPedidoMinimo.temLataCervejaAvulsa && (
+              <p className="mt-2 text-xs text-zinc-300">
+                {avaliacaoPedidoMinimo.liberadoPor === "caixa_cerveja"
+                  ? "Latas avulsas liberadas pela caixa/pack fechado de cerveja."
+                  : "Latas avulsas não entram nessa soma. Também liberamos com R$ 20,00 em tabacaria ou uma caixa/pack fechado de cerveja."}
+              </p>
+            )}
           </>
         )}
       </div>
@@ -1624,7 +1637,7 @@ export default function Catalogo({
                 <p className="font-bold text-yellow-300">Retirada na loja</p>
               ) : (
                 <>
-                  <p>{rua.trim()}, {numeroEndereco.trim()} — {cidadeEntrega}</p>
+                  <p>{rua.trim()}, {numeroEndereco.trim()} — {bairro.trim()} — {cidadeEntrega}</p>
                   {referencia.trim() && <p>Referência: {referencia.trim()}</p>}
                 </>
               )}
@@ -1889,6 +1902,19 @@ export default function Catalogo({
                           />
                         </label>
                       </div>
+                      <label className="space-y-1.5 text-sm font-bold text-zinc-200">
+                        <span>Bairro <span aria-hidden="true">*</span></span>
+                        <input
+                          name="bairro"
+                          autoComplete="address-level3"
+                          value={bairro}
+                          onChange={(event) => setBairro(event.target.value)}
+                          placeholder="Ex.: Centro"
+                          maxLength={100}
+                          required
+                          className="w-full rounded-lg bg-zinc-900 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2"
+                        />
+                      </label>
                       <label className="space-y-1.5 text-sm font-bold text-zinc-200">
                         <span>Ponto de referência <span className="font-normal text-zinc-400">(opcional)</span></span>
                         <input

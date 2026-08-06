@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import {
+  avaliarPedidoMinimo,
+  mensagemPedidoMinimo,
+  type CidadeEntrega,
+} from "@/lib/pedido-minimo";
 
 type ItemRecebido = {
   produto_id?: unknown;
@@ -75,14 +80,23 @@ export async function POST(request: Request) {
     body?.cidade_entrega === "Cruzeiro do Sul"
       ? body.cidade_entrega
       : "";
+  const endereco =
+    typeof body?.endereco === "string" ? body.endereco.trim() : "";
+  const bairro = typeof body?.bairro === "string" ? body.bairro.trim() : "";
+
+  if (!bairro || bairro.length > 100) {
+    return NextResponse.json(
+      { error: "Informe o bairro para continuar." },
+      { status: 400 }
+    );
+  }
 
   if (
     typeof body?.cliente_nome !== "string" ||
     typeof body?.telefone !== "string" ||
     !body.cliente_nome.trim() ||
     !body.telefone.trim() ||
-    typeof body?.endereco !== "string" ||
-    !body.endereco.trim() ||
+    !endereco ||
     !cidadeEntrega ||
     !Array.isArray(body?.pagamento) ||
     body.pagamento.length < 1 ||
@@ -116,7 +130,9 @@ export async function POST(request: Request) {
     await Promise.all([
       supabaseAdmin
         .from("produtos")
-        .select("id,nome,preco,categoria_id,disponivel")
+        .select(
+          "id,nome,descricao,preco,categoria_id,disponivel,tipo_venda"
+        )
         .in("id", idsProdutos),
       supabaseAdmin.from("categorias").select("id,nome"),
     ]);
@@ -168,26 +184,24 @@ export async function POST(request: Request) {
     );
   }
 
-  const valorTotal = itensValidados.reduce(
-    (total, item) => total + item.subtotal,
-    0
+  const avaliacaoPedidoMinimo = avaliarPedidoMinimo(
+    itensValidados.map((item) => ({
+      categoria: item.categoria,
+      tipoVenda: item.produto.tipo_venda,
+      nome: item.produto.nome,
+      descricao: item.produto.descricao,
+      subtotal: item.subtotal,
+    })),
+    cidadeEntrega as CidadeEntrega
   );
-  const itensTabacaria = itensValidados.filter(
-    (item) => item.categoria === "tabacaria"
-  );
-  const somenteTabacaria =
-    itensTabacaria.length > 0 &&
-    itensTabacaria.length === itensValidados.length;
-  const pedidoMinimo = somenteTabacaria
-    ? 20
-    : cidadeEntrega === "Paranacity"
-      ? 25
-      : 35;
 
-  if (valorTotal < pedidoMinimo) {
+  if (!avaliacaoPedidoMinimo.atingido) {
     return NextResponse.json(
       {
-        error: `O pedido mínimo para entrega em ${cidadeEntrega} é de R$ ${pedidoMinimo.toFixed(2).replace(".", ",")}.`,
+        error: mensagemPedidoMinimo(
+          avaliacaoPedidoMinimo,
+          cidadeEntrega as CidadeEntrega
+        ),
       },
       { status: 400 }
     );
@@ -220,7 +234,7 @@ export async function POST(request: Request) {
   const { data: pedidoId, error } = await supabaseAdmin.rpc("criar_pedido_seguro", {
     p_cliente_nome: body.cliente_nome,
     p_telefone: body.telefone,
-    p_endereco: body.endereco,
+    p_endereco: `${endereco} — Bairro: ${bairro}`,
     p_referencia: typeof body.referencia === "string" ? body.referencia : "",
     p_itens: itens,
     p_pagamento: Array.isArray(body.pagamento) ? body.pagamento.slice(0, 3) : [],
