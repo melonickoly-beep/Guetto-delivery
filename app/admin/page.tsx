@@ -72,7 +72,7 @@ export default function AdminPage() {
   const [resumoPedidosHoje, setResumoPedidosHoje] =
     useState<ResumoPedidosHoje | null>(null);
   const [notificacoesAtivadas, setNotificacoesAtivadas] = useState(false);
-  const quantidadeNovosAnterior = useRef<number | null>(null);
+  const idsPedidosConhecidos = useRef<Set<string> | null>(null);
 
   const [categoriaId, setCategoriaId] = useState("");
   const [nome, setNome] = useState("");
@@ -130,9 +130,36 @@ export default function AdminPage() {
     const intervaloPedidos = window.setInterval(() => {
       carregarPedidos();
       carregarResumoPedidos();
-    }, 30_000);
-    return () => window.clearInterval(intervaloPedidos);
-  }, [painelDesbloqueado]);
+    }, 15_000);
+    const canalPedidos = supabase
+      .channel("pedidos-admin")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "pedidos" },
+        () => {
+          void carregarPedidos();
+          void carregarResumoPedidos();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      window.clearInterval(intervaloPedidos);
+      void supabase.removeChannel(canalPedidos);
+    };
+  }, [painelDesbloqueado]); // eslint-disable-line react-hooks/exhaustive-deps -- Atualiza somente ao entrar ou sair do painel.
+
+  useEffect(() => {
+    const sincronizarPermissao = () => {
+      setNotificacoesAtivadas(
+        "Notification" in window && Notification.permission === "granted"
+      );
+    };
+
+    sincronizarPermissao();
+    window.addEventListener("focus", sincronizarPermissao);
+    return () => window.removeEventListener("focus", sincronizarPermissao);
+  }, []);
 
   async function desbloquearPainel(event: FormEvent) {
     event.preventDefault();
@@ -332,19 +359,33 @@ export default function AdminPage() {
     if (error) return;
 
     const lista = data ?? [];
-    const novos = lista.filter((pedido) => pedido.status === "novo").length;
+    if (idsPedidosConhecidos.current === null) {
+      idsPedidosConhecidos.current = new Set(
+        lista.map((pedido) => pedido.id)
+      );
+    } else {
+      for (const pedido of lista) {
+        if (
+          pedido.status === "novo" &&
+          !idsPedidosConhecidos.current.has(pedido.id)
+        ) {
+          idsPedidosConhecidos.current.add(pedido.id);
+          void exibirNotificacao(
+            "Novo pedido na Guetto Delivery",
+            `Pedido de ${pedido.cliente_nome} no valor de ${new Intl.NumberFormat(
+              "pt-BR",
+              { style: "currency", currency: "BRL" }
+            ).format(Number(pedido.total))}.`,
+            `pedido-${pedido.id}`
+          );
+        }
+      }
 
-    if (
-      quantidadeNovosAnterior.current !== null &&
-      novos > quantidadeNovosAnterior.current &&
-      Notification.permission === "granted"
-    ) {
-      new Notification("Novo pedido na Guetto Delivery", {
-        body: "Você recebeu um novo pedido pelo site.",
-      });
+      for (const pedido of lista) {
+        idsPedidosConhecidos.current.add(pedido.id);
+      }
     }
 
-    quantidadeNovosAnterior.current = novos;
     setPedidos(lista);
   }
 
@@ -513,6 +554,43 @@ export default function AdminPage() {
     window.location.href = "/login";
   }
 
+  async function exibirNotificacao(
+    titulo: string,
+    corpo: string,
+    tag: string
+  ) {
+    if (!("Notification" in window) || Notification.permission !== "granted") {
+      return false;
+    }
+
+    const opcoes: NotificationOptions = {
+      body: corpo,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag,
+      data: { url: "/admin" },
+    };
+
+    try {
+      if ("serviceWorker" in navigator) {
+        const registro =
+          (await navigator.serviceWorker.getRegistration("/")) ??
+          (await navigator.serviceWorker.register("/sw.js", { scope: "/" }));
+        await registro.showNotification(titulo, opcoes);
+        return true;
+      }
+    } catch {
+      // Alguns navegadores aceitam apenas a notificação direta.
+    }
+
+    try {
+      new Notification(titulo, opcoes);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async function ativarNotificacoes() {
     if (!("Notification" in window)) {
       alert("Este navegador não oferece notificações.");
@@ -521,7 +599,21 @@ export default function AdminPage() {
 
     const permissao = await Notification.requestPermission();
     setNotificacoesAtivadas(permissao === "granted");
-    if (permissao !== "granted") alert("Você pode liberar as notificações nas configurações do navegador depois.");
+    if (permissao !== "granted") {
+      alert("Você pode liberar as notificações nas configurações do navegador depois.");
+      return;
+    }
+
+    const exibiuTeste = await exibirNotificacao(
+      "Notificações ativadas",
+      "Você será avisado quando chegar um novo pedido.",
+      "notificacoes-ativadas"
+    );
+    if (!exibiuTeste) {
+      alert(
+        "A permissão foi concedida, mas o navegador bloqueou o aviso. Confira as configurações de notificação do site."
+      );
+    }
   }
 
   async function carregarTempoEntrega() {

@@ -1,4 +1,4 @@
-const CACHE = "guetto-delivery-v2";
+const CACHE = "guetto-delivery-v3";
 const ESSENCIAIS = [
   "/offline",
   "/icons/icon-192.png",
@@ -51,5 +51,27 @@ self.addEventListener("fetch", (event) => {
 
       return cached ?? atualizacao;
     })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const destino = new URL(event.notification.data?.url || "/admin", self.location.origin).href;
+
+  event.waitUntil(
+    clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then(async (janelas) => {
+        const painelAberto = janelas.find(
+          (janela) => new URL(janela.url).origin === self.location.origin
+        );
+
+        if (painelAberto) {
+          if ("navigate" in painelAberto) await painelAberto.navigate(destino);
+          return painelAberto.focus();
+        }
+
+        return clients.openWindow(destino);
+      })
   );
 });
