@@ -151,7 +151,7 @@ export default function AdminPage() {
     const intervaloPedidos = window.setInterval(() => {
       carregarPedidos();
       carregarResumoPedidos();
-    }, 15_000);
+    }, 45_000);
     const canalPedidos = supabase
       .channel("pedidos-admin")
       .on(
@@ -1212,6 +1212,9 @@ export default function AdminPage() {
           <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="text-zinc-400">Acompanhe e atualize o andamento dos pedidos.</p>
+              <p className="mt-1 text-xs text-zinc-500">
+                Atualização automática a cada 45 segundos.
+              </p>
             </div>
             <button type="button" onClick={() => void carregarPainelPedidos()} className="rounded-lg border border-zinc-600 px-4 py-2 hover:bg-zinc-800">
               Atualizar
