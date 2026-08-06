@@ -53,6 +53,13 @@ type ResumoPedidosHoje = {
   total: number;
 };
 
+type DetalheSabor = {
+  descricao?: string;
+  imagem?: string;
+};
+
+type DetalhesEssencias = Record<string, Record<string, DetalheSabor>>;
+
 const statusPedido = [
   { valor: "novo", rotulo: "Novo" },
   { valor: "em_preparo", rotulo: "Em preparo" },
@@ -96,6 +103,11 @@ export default function AdminPage() {
     new Set()
   );
   const [fotosSalvando, setFotosSalvando] = useState<Set<string>>(new Set());
+  const [detalhesEssencias, setDetalhesEssencias] = useState<DetalhesEssencias>({});
+  const detalhesEssenciasRef = useRef<DetalhesEssencias>({});
+  const [detalhesSaboresSalvando, setDetalhesSaboresSalvando] = useState<Set<string>>(
+    new Set()
+  );
 
   const [salvando, setSalvando] = useState(false);
   const [tempoEntrega, setTempoEntrega] = useState("20");
@@ -127,6 +139,7 @@ export default function AdminPage() {
     if (paginaEstoque) {
       carregarCategorias();
       carregarProdutos();
+      carregarDetalhesEssencias();
       return;
     }
 
@@ -223,6 +236,76 @@ export default function AdminPage() {
     setProdutos(data ?? []);
   }
 
+  async function carregarDetalhesEssencias() {
+    const { data, error } = await supabase
+      .from("configuracoes")
+      .select("valor")
+      .eq("chave", "detalhes_essencias")
+      .maybeSingle();
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    if (!data?.valor) {
+      detalhesEssenciasRef.current = {};
+      setDetalhesEssencias({});
+      return;
+    }
+
+    try {
+      const detalhesCarregados = JSON.parse(data.valor) as DetalhesEssencias;
+      detalhesEssenciasRef.current = detalhesCarregados;
+      setDetalhesEssencias(detalhesCarregados);
+    } catch {
+      detalhesEssenciasRef.current = {};
+      setDetalhesEssencias({});
+    }
+  }
+
+  async function salvarDetalheSabor(
+    produtoId: string,
+    sabor: string,
+    alteracoes: DetalheSabor
+  ) {
+    const chaveSalvamento = `${produtoId}:${sabor}`;
+    const detalhesAtuais = detalhesEssenciasRef.current;
+    const detalhesAtualizados: DetalhesEssencias = {
+      ...detalhesAtuais,
+      [produtoId]: {
+        ...(detalhesAtuais[produtoId] ?? {}),
+        [sabor]: {
+          ...(detalhesAtuais[produtoId]?.[sabor] ?? {}),
+          ...alteracoes,
+        },
+      },
+    };
+
+    detalhesEssenciasRef.current = detalhesAtualizados;
+    setDetalhesEssencias(detalhesAtualizados);
+    setDetalhesSaboresSalvando((atuais) =>
+      new Set(atuais).add(chaveSalvamento)
+    );
+    const { error } = await supabase.from("configuracoes").upsert({
+      chave: "detalhes_essencias",
+      valor: JSON.stringify(detalhesAtualizados),
+    });
+    setDetalhesSaboresSalvando((atuais) => {
+      const proximos = new Set(atuais);
+      proximos.delete(chaveSalvamento);
+      return proximos;
+    });
+
+    if (error) {
+      alert(error.message);
+      void carregarDetalhesEssencias();
+      return false;
+    }
+
+    return true;
+  }
+
   async function atualizarProdutoRapido(
     id: string,
     alteracoes: Partial<Pick<Produto, "preco" | "estoque" | "descricao" | "imagem">>
@@ -276,6 +359,50 @@ export default function AdminPage() {
       setFotosSalvando((atuais) => {
         const proximos = new Set(atuais);
         proximos.delete(produto.id);
+        return proximos;
+      });
+    }
+  }
+
+  async function atualizarFotoSabor(
+    produto: Produto,
+    sabor: string,
+    file: File
+  ) {
+    if (!file.type.startsWith("image/")) {
+      alert("Selecione um arquivo de imagem.");
+      return;
+    }
+
+    const chaveSalvamento = `${produto.id}:${sabor}`;
+    setDetalhesSaboresSalvando((atuais) =>
+      new Set(atuais).add(chaveSalvamento)
+    );
+
+    try {
+      const arquivoOtimizado = await otimizarImagem(file);
+      const extensao = arquivoOtimizado.type === "image/webp"
+        ? "webp"
+        : arquivoOtimizado.name.split(".").pop();
+      const nomeArquivo = `${crypto.randomUUID()}.${extensao}`;
+      const { error: erroUpload } = await supabase.storage
+        .from("produtos")
+        .upload(nomeArquivo, arquivoOtimizado);
+
+      if (erroUpload) {
+        alert(erroUpload.message);
+        return;
+      }
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("produtos").getPublicUrl(nomeArquivo);
+
+      await salvarDetalheSabor(produto.id, sabor, { imagem: publicUrl });
+    } finally {
+      setDetalhesSaboresSalvando((atuais) => {
+        const proximos = new Set(atuais);
+        proximos.delete(chaveSalvamento);
         return proximos;
       });
     }
@@ -1543,7 +1670,23 @@ export default function AdminPage() {
             >
               <div className="flex w-full min-w-0 items-start gap-5">
 
-                <div className="w-[90px] shrink-0">
+                <div
+                  className="w-[90px] shrink-0 rounded-md outline-none focus:ring-2 focus:ring-yellow-400"
+                  onPaste={(event) => {
+                    const foto = Array.from(event.clipboardData.items)
+                      .find(
+                        (item) =>
+                          item.kind === "file" && item.type.startsWith("image/")
+                      )
+                      ?.getAsFile();
+                    if (!foto) return;
+                    event.preventDefault();
+                    void atualizarFotoProduto(produto, foto);
+                  }}
+                  tabIndex={0}
+                  role="group"
+                  aria-label={`Foto de ${produto.nome}. Cole uma imagem com Control V.`}
+                >
                   {produto.imagem ? (
                     <Image
                       src={produto.imagem}
@@ -1580,6 +1723,9 @@ export default function AdminPage() {
                       aria-label={`${produto.imagem ? "Trocar" : "Adicionar"} foto de ${produto.nome}`}
                     />
                   </label>
+                  <p className="mt-1 text-center text-[10px] text-zinc-500">
+                    ou cole com Ctrl+V
+                  </p>
                 </div>
 
                 <div className="min-w-0 flex-1">
@@ -1709,62 +1855,181 @@ export default function AdminPage() {
                           <span className="text-xs text-zinc-400">Salvando...</span>
                         )}
                       </div>
-                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      <div
+                        className={`grid gap-2 ${
+                          normalizarTexto(produto.nome).startsWith("essencia")
+                            ? "lg:grid-cols-2"
+                            : "sm:grid-cols-2 xl:grid-cols-3"
+                        }`}
+                      >
                         {Object.entries(produto.estoque_opcoes)
                           .sort(([saborA], [saborB]) =>
                             saborA.localeCompare(saborB, "pt-BR")
                           )
-                          .map(([sabor, quantidade]) => (
-                            <div
-                              key={sabor}
-                              className="flex items-center justify-between gap-2 rounded-lg bg-zinc-800 p-2"
-                            >
-                              <span className="min-w-0 flex-1 truncate text-sm" title={sabor}>
-                                {sabor}
-                              </span>
-                              <div className="flex shrink-0 items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    void alterarEstoqueOpcao(produto, sabor, -1)
-                                  }
-                                  disabled={
-                                    quantidade <= 0 ||
-                                    estoquesOpcoesSalvando.has(produto.id)
-                                  }
-                                  className="grid h-7 w-7 place-items-center rounded bg-zinc-700 font-bold hover:bg-zinc-600 disabled:opacity-40"
-                                  aria-label={`Diminuir estoque de ${sabor}`}
-                                >
-                                  −
-                                </button>
-                                <strong className="w-7 text-center text-yellow-300">
-                                  {quantidade}
-                                </strong>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    void alterarEstoqueOpcao(produto, sabor, 1)
-                                  }
-                                  disabled={estoquesOpcoesSalvando.has(produto.id)}
-                                  className="grid h-7 w-7 place-items-center rounded bg-zinc-700 font-bold hover:bg-zinc-600 disabled:opacity-40"
-                                  aria-label={`Aumentar estoque de ${sabor}`}
-                                >
-                                  +
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    void removerOpcaoEstoque(produto, sabor)
-                                  }
-                                  disabled={estoquesOpcoesSalvando.has(produto.id)}
-                                  className="grid h-7 w-7 place-items-center rounded text-red-300 hover:bg-red-950 disabled:opacity-40"
-                                  aria-label={`Remover sabor ${sabor}`}
-                                >
-                                  ×
-                                </button>
+                          .map(([sabor, quantidade]) => {
+                            const detalheSabor =
+                              detalhesEssencias[produto.id]?.[sabor] ?? {};
+                            const chaveDetalhe = `${produto.id}:${sabor}`;
+                            const produtoEhEssencia = normalizarTexto(
+                              produto.nome
+                            ).startsWith("essencia");
+
+                            return (
+                              <div
+                                key={sabor}
+                                className="rounded-lg bg-zinc-800 p-3"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="min-w-0 flex-1 truncate text-sm font-semibold" title={sabor}>
+                                    {sabor}
+                                  </span>
+                                  <div className="flex shrink-0 items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        void alterarEstoqueOpcao(produto, sabor, -1)
+                                      }
+                                      disabled={
+                                        quantidade <= 0 ||
+                                        estoquesOpcoesSalvando.has(produto.id)
+                                      }
+                                      className="grid h-7 w-7 place-items-center rounded bg-zinc-700 font-bold hover:bg-zinc-600 disabled:opacity-40"
+                                      aria-label={`Diminuir estoque de ${sabor}`}
+                                    >
+                                      −
+                                    </button>
+                                    <strong className="w-7 text-center text-yellow-300">
+                                      {quantidade}
+                                    </strong>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        void alterarEstoqueOpcao(produto, sabor, 1)
+                                      }
+                                      disabled={estoquesOpcoesSalvando.has(produto.id)}
+                                      className="grid h-7 w-7 place-items-center rounded bg-zinc-700 font-bold hover:bg-zinc-600 disabled:opacity-40"
+                                      aria-label={`Aumentar estoque de ${sabor}`}
+                                    >
+                                      +
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        void removerOpcaoEstoque(produto, sabor)
+                                      }
+                                      disabled={estoquesOpcoesSalvando.has(produto.id)}
+                                      className="grid h-7 w-7 place-items-center rounded text-red-300 hover:bg-red-950 disabled:opacity-40"
+                                      aria-label={`Remover sabor ${sabor}`}
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {produtoEhEssencia && (
+                                  <div className="mt-3 grid grid-cols-[72px_1fr] gap-3 border-t border-zinc-700 pt-3">
+                                    <div
+                                      className="rounded-md outline-none focus:ring-2 focus:ring-yellow-400"
+                                      onPaste={(event) => {
+                                        event.stopPropagation();
+                                        const foto = Array.from(
+                                          event.clipboardData.items
+                                        )
+                                          .find(
+                                            (item) =>
+                                              item.kind === "file" &&
+                                              item.type.startsWith("image/")
+                                          )
+                                          ?.getAsFile();
+                                        if (!foto) return;
+                                        event.preventDefault();
+                                        void atualizarFotoSabor(
+                                          produto,
+                                          sabor,
+                                          foto
+                                        );
+                                      }}
+                                      tabIndex={0}
+                                      role="group"
+                                      aria-label={`Foto do sabor ${sabor}. Cole uma imagem com Control V.`}
+                                    >
+                                      {detalheSabor.imagem ? (
+                                        <Image
+                                          src={detalheSabor.imagem}
+                                          alt={`${sabor} - ${produto.nome}`}
+                                          width={72}
+                                          height={72}
+                                          className="aspect-square rounded-md bg-white object-contain p-1"
+                                        />
+                                      ) : (
+                                        <div className="grid h-[72px] w-[72px] place-items-center rounded-md bg-zinc-700 px-1 text-center text-[10px] text-zinc-400">
+                                          Sem foto
+                                        </div>
+                                      )}
+                                      <label
+                                        className={`mt-1 block cursor-pointer rounded border border-zinc-600 px-1 py-1 text-center text-[10px] font-semibold hover:bg-zinc-700 ${
+                                          detalhesSaboresSalvando.has(chaveDetalhe)
+                                            ? "pointer-events-none opacity-50"
+                                            : ""
+                                        }`}
+                                      >
+                                        {detalheSabor.imagem ? "Trocar foto" : "Adicionar foto"}
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          disabled={detalhesSaboresSalvando.has(chaveDetalhe)}
+                                          onChange={(event) => {
+                                            const foto = event.target.files?.[0];
+                                            event.target.value = "";
+                                            if (foto) {
+                                              void atualizarFotoSabor(
+                                                produto,
+                                                sabor,
+                                                foto
+                                              );
+                                            }
+                                          }}
+                                          className="sr-only"
+                                          aria-label={`Foto do sabor ${sabor}`}
+                                        />
+                                      </label>
+                                      <p className="mt-1 text-center text-[9px] text-zinc-500">
+                                        ou Ctrl+V
+                                      </p>
+                                    </div>
+                                    <label className="flex min-w-0 flex-col gap-1 text-xs">
+                                      <span className="font-semibold text-zinc-300">
+                                        Descrição do sabor
+                                      </span>
+                                      <textarea
+                                        defaultValue={detalheSabor.descricao ?? ""}
+                                        placeholder="Ex.: sabor refrescante e frutado"
+                                        onBlur={(event) => {
+                                          const descricaoSabor =
+                                            event.target.value.trim();
+                                          if (
+                                            descricaoSabor !==
+                                            (detalheSabor.descricao ?? "")
+                                          ) {
+                                            void salvarDetalheSabor(
+                                              produto.id,
+                                              sabor,
+                                              { descricao: descricaoSabor }
+                                            );
+                                          }
+                                        }}
+                                        className="min-h-[72px] w-full resize-y rounded-md bg-zinc-900 px-2 py-2 text-xs text-zinc-200"
+                                        aria-label={`Descrição do sabor ${sabor}`}
+                                      />
+                                      {detalhesSaboresSalvando.has(chaveDetalhe) && (
+                                        <span className="text-zinc-400">Salvando...</span>
+                                      )}
+                                    </label>
+                                  </div>
+                                )}
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                       </div>
                       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                         <input

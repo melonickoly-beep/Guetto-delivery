@@ -46,12 +46,28 @@ export default async function Home() {
         "horario_abertura",
         "horario_fechamento",
         "somente_retirada",
+        "detalhes_essencias",
       ]),
   ]);
 
   const configuracao = new Map(
     (configuracoes ?? []).map((item) => [item.chave, item.valor])
   );
+  let detalhesEssencias: Record<
+    string,
+    Record<string, { descricao?: string; imagem?: string }>
+  > = {};
+  try {
+    detalhesEssencias = JSON.parse(
+      configuracao.get("detalhes_essencias") ?? "{}"
+    );
+  } catch {
+    detalhesEssencias = {};
+  }
+  const produtosComDetalhes = (produtos ?? []).map((produto) => ({
+    ...produto,
+    detalhes_opcoes: detalhesEssencias[produto.id] ?? null,
+  }));
   const tempoEntrega = Number(configuracao.get("tempo_entrega")) || 20;
   const somenteRetiradaConfigurada =
     configuracao.get("somente_retirada") === "true";
@@ -96,7 +112,7 @@ export default async function Home() {
 
       <Catalogo
         categorias={categorias ?? []}
-        produtos={produtos ?? []}
+        produtos={produtosComDetalhes}
         tempoEntrega={tempoEntrega}
         horarioAbertura={configuracao.get("horario_abertura") ?? ""}
         horarioFechamento={configuracao.get("horario_fechamento") ?? ""}

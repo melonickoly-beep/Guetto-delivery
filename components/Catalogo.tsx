@@ -42,6 +42,10 @@ type Produto = {
   unidades_por_venda: number | null;
   estoque_unidades: number | null;
   estoque_opcoes?: Record<string, number> | null;
+  detalhes_opcoes?: Record<
+    string,
+    { descricao?: string; imagem?: string }
+  > | null;
 };
 
 type EscolhasCombo = {
@@ -953,6 +957,9 @@ export default function Catalogo({
     );
   }
 
+  const detalheSaborSelecionado =
+    geloEmConfiguracao?.detalhes_opcoes?.[saborGeloAvulso];
+
   return (
     <section
       className={`mx-auto max-w-[90rem] px-4 py-5 sm:px-5 sm:py-8 ${
@@ -1409,6 +1416,31 @@ export default function Catalogo({
                 ))}
               </select>
             </label>
+
+            {(detalheSaborSelecionado?.imagem ||
+              detalheSaborSelecionado?.descricao) && (
+              <div className="mt-4 flex gap-4 rounded-xl border border-zinc-800 bg-zinc-900 p-3">
+                {detalheSaborSelecionado.imagem && (
+                  <Image
+                    src={detalheSaborSelecionado.imagem}
+                    alt={`${saborGeloAvulso} - ${geloEmConfiguracao.nome}`}
+                    width={88}
+                    height={88}
+                    className="h-[88px] w-[88px] shrink-0 rounded-lg bg-white object-contain p-1"
+                  />
+                )}
+                <div className="min-w-0">
+                  <p className="font-bold text-yellow-300">
+                    {saborGeloAvulso}
+                  </p>
+                  {detalheSaborSelecionado.descricao && (
+                    <p className="mt-1 text-sm text-zinc-300">
+                      {detalheSaborSelecionado.descricao}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
 
             <label className="mt-4 block text-sm font-bold">
               Quantidade
