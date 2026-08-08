@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import {
   Search,
   ShoppingBag,
@@ -166,6 +167,7 @@ export default function Catalogo({
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
   const [carrinhoCarregado, setCarrinhoCarregado] = useState(false);
   const [ultimoPedido, setUltimoPedido] = useState<ItemCarrinho[]>([]);
+  const [ultimoPedidoId, setUltimoPedidoId] = useState("");
   const [ultimoPedidoFoiAjustado, setUltimoPedidoFoiAjustado] = useState(false);
   const [dadosClienteRecuperados, setDadosClienteRecuperados] = useState(false);
   const [salvarDadosNoAparelho, setSalvarDadosNoAparelho] = useState(false);
@@ -275,6 +277,11 @@ export default function Catalogo({
         setUltimoPedido(itensAtualizados);
         setUltimoPedidoFoiAjustado(foiAjustado);
       }
+
+      const ultimoPedidoIdSalvo = window.localStorage.getItem(
+        "guetto_ultimo_pedido_id"
+      );
+      if (ultimoPedidoIdSalvo) setUltimoPedidoId(ultimoPedidoIdSalvo);
 
       if (window.localStorage.getItem("guetto_abrir_carrinho") === "1") {
         setCarrinhoAberto(true);
@@ -816,7 +823,8 @@ export default function Catalogo({
       }
 
       const pedidoRegistrado = await respostaPedido.json();
-      const linkAcompanhamento = `${window.location.origin}/acompanhar/${pedidoRegistrado.id}`;
+      const pedidoId = String(pedidoRegistrado.id);
+      const linkAcompanhamento = `${window.location.origin}/acompanhar/${pedidoId}`;
       const pedidoFinal = `${pedido}\n\nAcompanhe seu pedido:\n${linkAcompanhamento}`;
 
       const dadosCliente: DadosClienteSalvos = {
@@ -841,7 +849,9 @@ export default function Catalogo({
         "guetto_ultimo_pedido",
         JSON.stringify(carrinho)
       );
+      window.localStorage.setItem("guetto_ultimo_pedido_id", pedidoId);
       setUltimoPedido(carrinho);
+      setUltimoPedidoId(pedidoId);
       setUltimoPedidoFoiAjustado(false);
       window.localStorage.setItem("guetto_carrinho", "[]");
       setCarrinho([]);
@@ -984,7 +994,7 @@ export default function Catalogo({
             </p>
           </div>
           {!somenteRetiradaHoje && (
-            <div className="flex w-full items-stretch gap-2 sm:w-auto sm:items-center">
+            <div className="flex w-full flex-wrap items-stretch gap-2 sm:w-auto sm:items-center">
             {ultimoPedido.length > 0 && (
               <button
                 type="button"
@@ -995,6 +1005,16 @@ export default function Catalogo({
                 <RotateCcw size={18} aria-hidden="true" />
                 <span>Refazer último pedido</span>
               </button>
+            )}
+            {ultimoPedidoId && (
+              <Link
+                href={`/acompanhar/${ultimoPedidoId}`}
+                className="inline-flex min-w-[9rem] flex-1 items-center justify-center gap-2 rounded-lg border border-blue-400 px-3 py-2 text-sm font-bold text-blue-200 transition hover:bg-blue-400/10 sm:flex-none"
+                aria-label="Acompanhar meu último pedido"
+              >
+                <Clock3 size={18} aria-hidden="true" />
+                <span>Acompanhar pedido</span>
+              </Link>
             )}
             <button
               onClick={() => setCarrinhoAberto(true)}
