@@ -39,7 +39,7 @@ const escaparCsv = (valor: unknown) =>
 function escolhasDoItem(item: ItemResumo) {
   return Object.entries(item.escolhas_combo ?? {})
     .map(([nome, valor]) =>
-      `${nome}: ${Array.isArray(valor) ? valor.join(", ") : valor}`
+      `${nome === "whisky" && item.nome.toLowerCase().includes("gin eternity") ? "gin" : nome}: ${Array.isArray(valor) ? valor.join(", ") : valor}`
     )
     .join("; ");
 }

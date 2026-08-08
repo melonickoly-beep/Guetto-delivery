@@ -695,7 +695,12 @@ export default function AdminPage() {
         const escolhas = Object.entries(item.escolhas_combo ?? {})
           .map(([nomeEscolha, valor]) => {
             const escolha = Array.isArray(valor) ? valor.join(", ") : valor;
-            return `<div class="detalhe">${textoSeguro(nomeEscolha)}: ${textoSeguro(escolha)}</div>`;
+            const rotuloEscolha =
+              nomeEscolha === "whisky" &&
+              item.nome.toLowerCase().includes("gin eternity")
+                ? "gin"
+                : nomeEscolha;
+            return `<div class="detalhe">${textoSeguro(rotuloEscolha)}: ${textoSeguro(escolha)}</div>`;
           })
           .join("");
         const subtotalItem = Number(item.preco_unitario) * item.quantidade;

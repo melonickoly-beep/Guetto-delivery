@@ -209,6 +209,7 @@ export default function Catalogo({
   const [vasilhameConfirmado, setVasilhameConfirmado] = useState(false);
   const [comboEmConfiguracao, setComboEmConfiguracao] = useState<Produto | null>(null);
   const [saborAskov, setSaborAskov] = useState("");
+  const [saborGinEternity, setSaborGinEternity] = useState("");
   const [saborEnergetico, setSaborEnergetico] = useState("");
   const [saboresGelo, setSaboresGelo] = useState<string[]>(Array(6).fill("Laranja"));
   const [saborWhisky, setSaborWhisky] = useState("Tradicional");
@@ -492,6 +493,14 @@ export default function Catalogo({
   const saboresAskov = produtos
     .filter((produto) => produto.nome.startsWith("Askov 1L - "))
     .map((produto) => produto.nome.replace("Askov 1L - ", ""));
+  const ginEternity = produtos.find(
+    (produto) => normalizarTexto(produto.nome) === "gin eternity"
+  );
+  const saboresGinEternity = Object.entries(
+    ginEternity?.estoque_opcoes ?? {}
+  )
+    .filter(([, estoque]) => estoque > 0)
+    .map(([sabor]) => sabor);
   const saboresEnergetico = produtos
     .filter(
       (produto) =>
@@ -579,9 +588,16 @@ export default function Catalogo({
     setCarrinho((itens) => {
       const chave = chaveItem(produto);
       const itemAtual = itens.find((item) => chaveItem(item) === chave);
-      const estoqueMaximo = produto.sabor
-        ? produto.estoque_opcoes?.[produto.sabor] ?? estoqueDisponivel(produto)
-        : estoqueDisponivel(produto);
+      const estoqueGinSelecionado =
+        produto.nome.toLowerCase().includes("gin eternity") &&
+        produto.escolhasCombo?.whisky
+          ? ginEternity?.estoque_opcoes?.[produto.escolhasCombo.whisky]
+          : undefined;
+      const estoqueMaximo =
+        estoqueGinSelecionado ??
+        (produto.sabor
+          ? produto.estoque_opcoes?.[produto.sabor] ?? estoqueDisponivel(produto)
+          : estoqueDisponivel(produto));
 
       if (!itemAtual && alteracao > 0) {
         return [...itens, { ...produto, quantidade: 1 }];
@@ -658,7 +674,7 @@ export default function Catalogo({
           ? {
               ...item,
               quantidade: Math.min(
-                estoqueDisponivel(geloEmConfiguracao),
+                estoqueDoSabor,
                 item.quantidade + quantidade
               ),
             }
@@ -671,6 +687,7 @@ export default function Catalogo({
   function abrirConfiguracaoCombo(produto: Produto) {
     if (somenteRetiradaHoje) return;
     setSaborAskov(saboresAskov[0] ?? "Tradicional");
+    setSaborGinEternity(saboresGinEternity[0] ?? "");
     setSaborEnergetico(saboresEnergetico[0] ?? "Tradicional");
     setSaboresGelo(Array(6).fill(saboresDeGelo[0]));
     setSaborWhisky(saboresWhiskyJack[0] ?? "");
@@ -678,11 +695,22 @@ export default function Catalogo({
   }
 
   function confirmarCombo() {
-    if (!comboEmConfiguracao || !saborEnergetico || (comboEmConfiguracao.nome.toLowerCase().includes("askov") && !saborAskov)) return;
+    if (
+      !comboEmConfiguracao ||
+      !saborEnergetico ||
+      (comboEmConfiguracao.nome.toLowerCase().includes("askov") &&
+        !saborAskov) ||
+      (comboEmConfiguracao.nome.toLowerCase().includes("gin eternity") &&
+        !saborGinEternity)
+    )
+      return;
     const escolhas: EscolhasCombo = {
       energetico: saborEnergetico,
       gelos: saboresGelo,
       ...(comboEmConfiguracao.nome.toLowerCase().includes("askov") ? { askov: saborAskov } : {}),
+      ...(comboEmConfiguracao.nome.toLowerCase().includes("gin eternity")
+        ? { whisky: saborGinEternity }
+        : {}),
       ...(comboEmConfiguracao.nome.toLowerCase().includes("jack daniel") ? { whisky: saborWhisky } : {}),
     };
     setCarrinho((itens) => [...itens, { ...comboEmConfiguracao, quantidade: 1, escolhasCombo: escolhas }]);
@@ -797,9 +825,14 @@ export default function Catalogo({
           calcularSubtotalItem(item)
         )}${item.sabor ? `\n   Sabor: ${item.sabor}` : ""}${item.escolhasCombo ? `\n   Escolhas: ${[
           item.escolhasCombo.askov ? `Askov ${item.escolhasCombo.askov}` : "",
+          item.escolhasCombo.whisky && item.nome.toLowerCase().includes("gin eternity")
+            ? `Gin Eternity ${item.escolhasCombo.whisky}`
+            : "",
           `Energético ${item.escolhasCombo.energetico}`,
           `6 gelos: ${item.escolhasCombo.gelos.join(", ")}`,
-          item.escolhasCombo.whisky ? `Whisky Jack Daniel's ${item.escolhasCombo.whisky}` : "",
+          item.escolhasCombo.whisky && item.nome.toLowerCase().includes("jack daniel")
+            ? `Whisky Jack Daniel's ${item.escolhasCombo.whisky}`
+            : "",
         ].filter(Boolean).join(" | ")}` : ""}`
     );
     const pagamentosFormatados = pagamentos.map((pagamento) =>
@@ -1743,6 +1776,14 @@ export default function Catalogo({
                 </label>
               )}
 
+              {comboEmConfiguracao.nome.toLowerCase().includes("gin eternity") && (
+                <label className="block text-sm font-bold">Sabor do Gin Eternity
+                  <select value={saborGinEternity} onChange={(event) => setSaborGinEternity(event.target.value)} className="mt-2 w-full rounded-lg bg-zinc-800 p-3 font-normal">
+                    {saboresGinEternity.map((sabor) => <option key={sabor} value={sabor}>{sabor}</option>)}
+                  </select>
+                </label>
+              )}
+
               <label className="block text-sm font-bold">Sabor do energético 2 L
                 <select value={saborEnergetico} onChange={(event) => setSaborEnergetico(event.target.value)} className="mt-2 w-full rounded-lg bg-zinc-800 p-3 font-normal">
                   {saboresEnergetico.map((sabor) => <option key={sabor} value={sabor}>{sabor}</option>)}
@@ -1881,8 +1922,13 @@ export default function Catalogo({
                   {item.escolhasCombo && (
                     <p className="mt-1 text-sm text-zinc-300">
                       {item.escolhasCombo.askov ? `Askov ${item.escolhasCombo.askov} · ` : ""}
+                      {item.escolhasCombo.whisky && item.nome.toLowerCase().includes("gin eternity")
+                        ? `Gin Eternity ${item.escolhasCombo.whisky} · `
+                        : ""}
                       Energético {item.escolhasCombo.energetico} · 6 gelos
-                      {item.escolhasCombo.whisky ? ` · Jack Daniel’s ${item.escolhasCombo.whisky}` : ""}
+                      {item.escolhasCombo.whisky && item.nome.toLowerCase().includes("jack daniel")
+                        ? ` · Jack Daniel’s ${item.escolhasCombo.whisky}`
+                        : ""}
                     </p>
                   )}
                 </div>
@@ -2034,7 +2080,7 @@ export default function Catalogo({
                         <p className="truncate font-bold">{formatarNomeProduto(item.nome)}</p>
                         {item.sabor && <p className="text-xs text-zinc-300">Sabor: {item.sabor}</p>}
                         <p className="text-sm text-yellow-400">{formatarPreco(item.preco)}</p>
-                        {item.escolhasCombo && <p className="mt-1 text-xs text-zinc-400">{item.escolhasCombo.askov ? `Askov: ${item.escolhasCombo.askov} · ` : ""}Energético: {item.escolhasCombo.energetico} · 6 gelos</p>}
+                        {item.escolhasCombo && <p className="mt-1 text-xs text-zinc-400">{item.escolhasCombo.askov ? `Askov: ${item.escolhasCombo.askov} · ` : ""}{item.escolhasCombo.whisky && item.nome.toLowerCase().includes("gin eternity") ? `Gin Eternity: ${item.escolhasCombo.whisky} · ` : ""}Energético: {item.escolhasCombo.energetico} · 6 gelos{item.escolhasCombo.whisky && item.nome.toLowerCase().includes("jack daniel") ? ` · Jack Daniel’s: ${item.escolhasCombo.whisky}` : ""}</p>}
                       </div>
                       <div className="flex items-center gap-1">
                         <button onClick={() => alterarQuantidade(item, -1)} className="p-1 text-zinc-300"><Minus size={16} /></button>

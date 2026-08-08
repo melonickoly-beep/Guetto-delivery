@@ -71,7 +71,13 @@ function detalhesItem(item: ItemHistorico) {
     detalhes.push(`Energético: ${escolhas.energetico}`);
   if (escolhas?.gelos?.length)
     detalhes.push(`Gelos: ${escolhas.gelos.join(", ")}`);
-  if (escolhas?.whisky) detalhes.push(`Whisky: ${escolhas.whisky}`);
+  if (escolhas?.whisky) {
+    detalhes.push(
+      item.nome.toLowerCase().includes("gin eternity")
+        ? `Gin Eternity: ${escolhas.whisky}`
+        : `Whisky: ${escolhas.whisky}`
+    );
+  }
 
   return detalhes;
 }
