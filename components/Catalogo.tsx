@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import {
   Search,
   ShoppingBag,
@@ -521,6 +520,30 @@ export default function Catalogo({
     }
   }
 
+  function acompanharPedido() {
+    if (ultimoPedidoId) {
+      window.location.assign(`/acompanhar/${ultimoPedidoId}`);
+      return;
+    }
+
+    const linkOuCodigo = window.prompt(
+      "Cole aqui o link de acompanhamento recebido no WhatsApp:"
+    );
+    if (!linkOuCodigo) return;
+
+    const pedidoId = linkOuCodigo.match(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i
+    )?.[0];
+    if (!pedidoId) {
+      alert("Link de acompanhamento inválido.");
+      return;
+    }
+
+    window.localStorage.setItem("guetto_ultimo_pedido_id", pedidoId);
+    setUltimoPedidoId(pedidoId);
+    window.location.assign(`/acompanhar/${pedidoId}`);
+  }
+
   function alterarQuantidade(produto: Produto & { sabor?: string; escolhasCombo?: EscolhasCombo }, alteracao: number) {
     if (somenteRetiradaHoje) return;
     setCarrinho((itens) => {
@@ -1006,16 +1029,15 @@ export default function Catalogo({
                 <span>Refazer último pedido</span>
               </button>
             )}
-            {ultimoPedidoId && (
-              <Link
-                href={`/acompanhar/${ultimoPedidoId}`}
-                className="inline-flex min-w-[9rem] flex-1 items-center justify-center gap-2 rounded-lg border border-blue-400 px-3 py-2 text-sm font-bold text-blue-200 transition hover:bg-blue-400/10 sm:flex-none"
-                aria-label="Acompanhar meu último pedido"
-              >
-                <Clock3 size={18} aria-hidden="true" />
-                <span>Acompanhar pedido</span>
-              </Link>
-            )}
+            <button
+              type="button"
+              onClick={acompanharPedido}
+              className="inline-flex min-w-[9rem] flex-1 items-center justify-center gap-2 rounded-lg border border-blue-400 px-3 py-2 text-sm font-bold text-blue-200 transition hover:bg-blue-400/10 sm:flex-none"
+              aria-label="Acompanhar meu pedido"
+            >
+              <Clock3 size={18} aria-hidden="true" />
+              <span>Acompanhar pedido</span>
+            </button>
             <button
               onClick={() => setCarrinhoAberto(true)}
               className="relative inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-yellow-400 px-3 py-2 text-sm font-bold text-black hover:bg-yellow-300 sm:flex-none sm:px-4"
