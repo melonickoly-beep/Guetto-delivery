@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import {
   Search,
   ShoppingBag,
@@ -14,6 +15,7 @@ import {
   MessageCircle,
   Store,
   Truck,
+  History,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -82,6 +84,20 @@ type DadosClienteSalvos = {
   bairro: string;
   referencia: string;
   cidadeEntrega: "" | "Paranacity" | "Cruzeiro do Sul";
+};
+
+type PedidoHistorico = {
+  id: string;
+  criado_em: string;
+  total: number;
+  itens: Array<{
+    id: string;
+    nome: string;
+    quantidade: number;
+    preco: number;
+    sabor?: string;
+    escolhasCombo?: EscolhasCombo;
+  }>;
 };
 
 const formasPagamento: Array<{ valor: FormaPagamento; rotulo: string }> = [
@@ -861,6 +877,7 @@ export default function Catalogo({
 
       const pedidoRegistrado = await respostaPedido.json();
       const pedidoId = String(pedidoRegistrado.id);
+      const pedidoCriadoEm = new Date().toISOString();
       const linkAcompanhamento = `${window.location.origin}/acompanhar/${pedidoId}`;
       const pedidoFinal = `${pedido}\n\nAcompanhe seu pedido:\n${linkAcompanhamento}`;
 
@@ -887,6 +904,40 @@ export default function Catalogo({
         JSON.stringify(carrinho)
       );
       window.localStorage.setItem("guetto_ultimo_pedido_id", pedidoId);
+      window.localStorage.setItem(
+        "guetto_ultimo_pedido_criado_em",
+        pedidoCriadoEm
+      );
+      try {
+        const historicoSalvo = JSON.parse(
+          window.localStorage.getItem("guetto_historico_pedidos") ?? "[]"
+        ) as PedidoHistorico[];
+        const novoRegistro: PedidoHistorico = {
+          id: pedidoId,
+          criado_em: pedidoCriadoEm,
+          total: valorTotal,
+          itens: carrinho.map((item) => ({
+            id: item.id,
+            nome: item.nome,
+            quantidade: item.quantidade,
+            preco: item.preco,
+            sabor: item.sabor,
+            escolhasCombo: item.escolhasCombo,
+          })),
+        };
+        const historicoAtualizado = [
+          novoRegistro,
+          ...(Array.isArray(historicoSalvo)
+            ? historicoSalvo.filter((registro) => registro.id !== pedidoId)
+            : []),
+        ];
+        window.localStorage.setItem(
+          "guetto_historico_pedidos",
+          JSON.stringify(historicoAtualizado)
+        );
+      } catch {
+        // O histórico local é uma conveniência e não pode impedir o pedido.
+      }
       setUltimoPedido(carrinho);
       setUltimoPedidoId(pedidoId);
       setUltimoPedidoFoiAjustado(false);
@@ -1030,9 +1081,8 @@ export default function Catalogo({
                 : "Fechado agora"}
             </p>
           </div>
-          {!somenteRetiradaHoje && (
-            <div className="flex w-full flex-wrap items-stretch gap-2 sm:w-auto sm:items-center">
-            {ultimoPedido.length > 0 && (
+          <div className="flex w-full flex-wrap items-stretch gap-2 sm:w-auto sm:items-center">
+            {!somenteRetiradaHoje && ultimoPedido.length > 0 && (
               <button
                 type="button"
                 onClick={repetirUltimoPedido}
@@ -1052,20 +1102,29 @@ export default function Catalogo({
               <Clock3 size={18} aria-hidden="true" />
               <span>Acompanhar pedido</span>
             </button>
-            <button
-              onClick={() => setCarrinhoAberto(true)}
-              className="relative inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-yellow-400 px-3 py-2 text-sm font-bold text-black hover:bg-yellow-300 sm:flex-none sm:px-4"
-              aria-label="Abrir carrinho"
+            <Link
+              href="/historico"
+              className="inline-flex min-w-[9rem] flex-1 items-center justify-center gap-2 rounded-lg border border-zinc-600 px-3 py-2 text-sm font-bold text-zinc-200 transition hover:bg-zinc-800 sm:flex-none"
+              aria-label="Abrir meu histórico de pedidos"
             >
-              <ShoppingBag size={19} /> Carrinho
-              {quantidadeTotal > 0 && (
-                <span className="absolute -right-2 -top-2 grid h-6 min-w-6 place-items-center rounded-full bg-red-600 px-1 text-xs text-white">
-                  {quantidadeTotal}
-                </span>
-              )}
-            </button>
-            </div>
-          )}
+              <History size={18} aria-hidden="true" />
+              <span>Meus pedidos</span>
+            </Link>
+            {!somenteRetiradaHoje && (
+              <button
+                onClick={() => setCarrinhoAberto(true)}
+                className="relative inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-yellow-400 px-3 py-2 text-sm font-bold text-black hover:bg-yellow-300 sm:flex-none sm:px-4"
+                aria-label="Abrir carrinho"
+              >
+                <ShoppingBag size={19} /> Carrinho
+                {quantidadeTotal > 0 && (
+                  <span className="absolute -right-2 -top-2 grid h-6 min-w-6 place-items-center rounded-full bg-red-600 px-1 text-xs text-white">
+                    {quantidadeTotal}
+                  </span>
+                )}
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 lg:grid-cols-[1fr_auto] lg:items-end">

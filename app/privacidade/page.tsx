@@ -69,9 +69,10 @@ export default function PrivacidadePage() {
               pedidos futuros e pode ser desativada a qualquer momento.
             </p>
             <p className="mt-2">
-              O carrinho e os itens do último pedido também podem ser mantidos
-              no navegador para permitir continuar ou repetir uma compra. Esses
-              dados não incluem senha ou informação de cartão.
+              O carrinho e o histórico de pedidos também podem ser mantidos no
+              navegador. O histórico guarda data, itens, total e código de
+              acompanhamento para permitir consultar ou repetir uma compra.
+              Esses dados não incluem senha, endereço ou informação de cartão.
             </p>
           </section>
 
@@ -93,8 +94,10 @@ export default function PrivacidadePage() {
             </h2>
             <p className="mt-2">
               No carrinho, desmarque a opção de salvar ou use o botão “Apagar
-              meus dados salvos”. Também é possível limpar os dados deste site
-              nas configurações do navegador.
+              meus dados salvos”. Na página “Meus pedidos”, use “Limpar
+              histórico” para apagar os pedidos guardados neste aparelho.
+              Também é possível limpar os dados deste site nas configurações do
+              navegador.
             </p>
           </section>
 
