@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { Check, ChefHat, Clock3, PackageCheck, Truck } from "lucide-react";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
@@ -17,6 +16,33 @@ const etapas = [
   { valor: "concluido", rotulo: "Entregue", icone: PackageCheck },
 ];
 
+function PedidoCancelado() {
+  return (
+    <main className="grid min-h-screen place-items-center px-5 py-10 text-white">
+      <section className="w-full max-w-xl rounded-3xl border border-red-500/40 bg-zinc-950/95 p-7 text-center shadow-2xl sm:p-10">
+        <p className="text-sm font-bold tracking-[0.2em] text-yellow-400">
+          GUETTO DELIVERY
+        </p>
+        <div className="mx-auto mt-6 grid h-20 w-20 place-items-center rounded-full bg-red-600/20 text-4xl">
+          ×
+        </div>
+        <h1 className="mt-5 text-3xl font-black text-red-300">
+          Pedido cancelado
+        </h1>
+        <p className="mt-3 text-zinc-300">
+          Este pedido foi cancelado e não está mais em andamento.
+        </p>
+        <Link
+          href="/"
+          className="mt-7 inline-flex rounded-xl bg-yellow-400 px-6 py-3 font-black text-black transition hover:bg-yellow-300"
+        >
+          Fazer outro pedido
+        </Link>
+      </section>
+    </main>
+  );
+}
+
 export default async function AcompanharPedido({
   params,
 }: {
@@ -29,7 +55,7 @@ export default async function AcompanharPedido({
     .eq("id", id)
     .maybeSingle();
 
-  if (!pedido) notFound();
+  if (!pedido) return <PedidoCancelado />;
 
   const indiceAtual = etapas.findIndex((etapa) => etapa.valor === pedido.status);
   const cancelado = pedido.status === "cancelado";
@@ -60,6 +86,12 @@ export default async function AcompanharPedido({
               <p className="mt-1 text-sm text-red-100/80">
                 Entre em contato com a Guetto Delivery se precisar de ajuda.
               </p>
+              <Link
+                href="/"
+                className="mt-5 inline-flex rounded-xl bg-yellow-400 px-5 py-3 font-black text-black transition hover:bg-yellow-300"
+              >
+                Fazer outro pedido
+              </Link>
             </div>
           ) : (
             <ol className="mt-8 space-y-3">
