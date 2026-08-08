@@ -41,6 +41,8 @@ type Produto = {
   grupo_estoque: string | null;
   unidades_por_venda: number | null;
   estoque_unidades: number | null;
+  mais_vendido?: boolean;
+  posicao_mais_vendido?: number | null;
   estoque_opcoes?: Record<string, number> | null;
   detalhes_opcoes?: Record<
     string,
@@ -151,8 +153,10 @@ export default function Catalogo({
   somenteRetiradaConfigurada: boolean;
 }) {
   const categoriaInicial =
-    produtos.some((produto) => produto.destaque)
-      ? "destaques"
+    produtos.some((produto) => produto.mais_vendido)
+      ? "mais-vendidos"
+      : produtos.some((produto) => produto.destaque)
+        ? "destaques"
       : categorias.find((categoria) => categoria.nome === "Combos")?.id ??
     categorias[0]?.id ??
     null;
@@ -340,17 +344,27 @@ export default function Catalogo({
   const produtosFiltrados = useMemo(
     () => {
       const termo = normalizarTexto(busca);
-      return produtos.filter((produto) => {
+      const filtrados = produtos.filter((produto) => {
         const correspondeCategoria =
           termo.length > 0 ||
-          (categoriaAtiva === "destaques"
-            ? produto.destaque
-            : produto.categoria_id === categoriaAtiva);
+          (categoriaAtiva === "mais-vendidos"
+            ? produto.mais_vendido
+            : categoriaAtiva === "destaques"
+              ? produto.destaque
+              : produto.categoria_id === categoriaAtiva);
         const textoProduto = normalizarTexto(
           `${produto.nome} ${produto.descricao ?? ""}`
         );
         return correspondeCategoria && (!termo || textoProduto.includes(termo));
       });
+
+      return categoriaAtiva === "mais-vendidos" && !termo
+        ? filtrados.sort(
+            (produtoA, produtoB) =>
+              Number(produtoA.posicao_mais_vendido ?? 999) -
+              Number(produtoB.posicao_mais_vendido ?? 999)
+          )
+        : filtrados;
     },
     [busca, categoriaAtiva, produtos]
   );
@@ -1201,8 +1215,11 @@ export default function Catalogo({
           className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 p-2.5 font-bold text-white outline-none focus:border-yellow-400 sm:hidden"
         >
           {busca && <option value="">Resultados da busca</option>}
+          {produtos.some((produto) => produto.mais_vendido) && (
+            <option value="mais-vendidos">🔥 Mais vendidos</option>
+          )}
           {produtos.some((produto) => produto.destaque) && (
-            <option value="destaques">⭐ Mais pedidos e ofertas</option>
+            <option value="destaques">⭐ Ofertas e destaques</option>
           )}
           {categorias.map((categoria) => (
             <option key={categoria.id} value={categoria.id}>
@@ -1211,6 +1228,22 @@ export default function Catalogo({
           ))}
         </select>
         <div className="mt-2 hidden gap-2 overflow-x-auto pb-1 sm:flex">
+          {produtos.some((produto) => produto.mais_vendido) && (
+            <button
+              type="button"
+              onClick={() => {
+                setBusca("");
+                setCategoriaAtiva("mais-vendidos");
+              }}
+              className={`whitespace-nowrap rounded-full border px-4 py-2 font-semibold transition ${
+                categoriaAtiva === "mais-vendidos" && !busca
+                  ? "border-yellow-400 bg-yellow-400 text-black"
+                  : "border-zinc-700 bg-zinc-900 hover:border-yellow-400"
+              }`}
+            >
+              🔥 Mais vendidos
+            </button>
+          )}
           {produtos.some((produto) => produto.destaque) && (
             <button
               type="button"
@@ -1224,7 +1257,7 @@ export default function Catalogo({
                   : "border-zinc-700 bg-zinc-900 hover:border-yellow-400"
               }`}
             >
-              ⭐ Mais pedidos e ofertas
+              ⭐ Ofertas e destaques
             </button>
           )}
           {categorias.map((categoria) => (
@@ -1327,11 +1360,15 @@ export default function Catalogo({
                       Sem imagem
                     </div>
                   )}
-                  {produto.destaque && (
+                  {produto.mais_vendido ? (
+                    <span className="absolute left-3 top-3 rounded-full bg-red-600 px-3 py-1 text-xs font-bold text-white">
+                      🔥 #{produto.posicao_mais_vendido} mais vendido
+                    </span>
+                  ) : produto.destaque ? (
                     <span className="absolute left-3 top-3 rounded-full bg-yellow-400 px-3 py-1 text-xs font-bold text-black">
                       Destaque
                     </span>
-                  )}
+                  ) : null}
                   {semEstoque && (
                     <span className="absolute right-3 top-3 rounded-full bg-zinc-950 px-3 py-1 text-xs font-bold text-zinc-200">
                       Esgotado

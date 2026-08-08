@@ -1,8 +1,10 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const BUCKET_RESUMOS = "resumos-sorteio";
+const ARQUIVO_RANKING = "ranking/produtos.json";
 
 export type ItemResumoSorteio = {
+  produto_id?: string;
   nome: string;
   quantidade: number;
   preco_unitario: number;
@@ -59,6 +61,65 @@ async function buscarPedidoParaResumo(pedidoId: string) {
   return data;
 }
 
+async function baixarRankingProdutos() {
+  const { data, error } = await supabaseAdmin.storage
+    .from(BUCKET_RESUMOS)
+    .download(ARQUIVO_RANKING);
+
+  if (error) {
+    if (/not found|object not found/i.test(error.message)) return {};
+    throw error;
+  }
+
+  try {
+    return JSON.parse(await data.text()) as Record<string, number>;
+  } catch {
+    return {};
+  }
+}
+
+async function atualizarRankingProdutos(
+  itens: ItemResumoSorteio[],
+  multiplicador: 1 | -1
+) {
+  const ranking = await baixarRankingProdutos();
+
+  for (const item of itens) {
+    if (!item.produto_id) continue;
+    ranking[item.produto_id] = Math.max(
+      0,
+      Number(ranking[item.produto_id] ?? 0) +
+        Number(item.quantidade || 0) * multiplicador
+    );
+  }
+
+  const arquivo = Buffer.from(JSON.stringify(ranking, null, 2), "utf8");
+  const { error } = await supabaseAdmin.storage
+    .from(BUCKET_RESUMOS)
+    .upload(ARQUIVO_RANKING, arquivo, {
+      contentType: "application/json",
+      upsert: true,
+    });
+  if (error) throw error;
+}
+
+export async function obterProdutosMaisVendidos(limite = 12) {
+  try {
+    await garantirBucketResumos();
+    const ranking = await baixarRankingProdutos();
+    return Object.entries(ranking)
+      .filter(([, quantidade]) => Number(quantidade) > 0)
+      .sort(([, quantidadeA], [, quantidadeB]) =>
+        Number(quantidadeB) - Number(quantidadeA)
+      )
+      .slice(0, limite)
+      .map(([produtoId]) => produtoId);
+  } catch (error) {
+    console.error("Erro ao carregar produtos mais vendidos:", error);
+    return [];
+  }
+}
+
 export async function registrarPedidoNoResumo(pedidoId: string) {
   const pedido = await buscarPedidoParaResumo(pedidoId);
   if (!pedido || pedido.status === "cancelado") return;
@@ -74,15 +135,20 @@ export async function registrarPedidoNoResumo(pedidoId: string) {
       : [],
     total: Number(pedido.total),
   };
+  const caminho = caminhoResumo(pedido.id, pedido.created_at);
+  const { data: resumoExistente } = await supabaseAdmin.storage
+    .from(BUCKET_RESUMOS)
+    .download(caminho);
   const arquivo = Buffer.from(JSON.stringify(participante, null, 2), "utf8");
   const { error } = await supabaseAdmin.storage
     .from(BUCKET_RESUMOS)
-    .upload(caminhoResumo(pedido.id, pedido.created_at), arquivo, {
+    .upload(caminho, arquivo, {
       contentType: "application/json",
       upsert: true,
     });
 
   if (error) throw error;
+  if (!resumoExistente) await atualizarRankingProdutos(participante.itens, 1);
 }
 
 export async function removerPedidoDoResumo(pedidoId: string) {
@@ -90,9 +156,19 @@ export async function removerPedidoDoResumo(pedidoId: string) {
   if (!pedido) return;
 
   await garantirBucketResumos();
+  const caminho = caminhoResumo(pedido.id, pedido.created_at);
+  const { data: resumoExistente } = await supabaseAdmin.storage
+    .from(BUCKET_RESUMOS)
+    .download(caminho);
+  if (resumoExistente) {
+    const participante = JSON.parse(
+      await resumoExistente.text()
+    ) as ParticipanteSorteio;
+    await atualizarRankingProdutos(participante.itens, -1);
+  }
   const { error } = await supabaseAdmin.storage
     .from(BUCKET_RESUMOS)
-    .remove([caminhoResumo(pedido.id, pedido.created_at)]);
+    .remove([caminho]);
 
   if (error) throw error;
 }
