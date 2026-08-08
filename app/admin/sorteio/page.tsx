@@ -113,7 +113,7 @@ export default function SorteioPage() {
     const url = URL.createObjectURL(arquivo);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `sorteio-${dataSelecionada}.csv`;
+    link.download = `resumo-diario-${dataSelecionada}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -157,7 +157,7 @@ export default function SorteioPage() {
               Área privada
             </p>
             <h1 className="mt-1 text-3xl font-black sm:text-4xl">
-              Resumo para sorteio
+              Resumo diário
             </h1>
             <p className="mt-2 text-zinc-400">
               Clientes numerados por ordem de horário, separados por dia.
@@ -182,7 +182,7 @@ export default function SorteioPage() {
         <section className="mb-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-5 print:border-black print:bg-white print:text-black">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <label className="flex flex-col gap-2 font-bold print:hidden">
-              Dia do sorteio
+              Dia do resumo
               <input
                 type="date"
                 value={dataSelecionada}

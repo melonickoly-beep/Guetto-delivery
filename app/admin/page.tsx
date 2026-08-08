@@ -1292,7 +1292,7 @@ export default function AdminPage() {
               href="/admin/sorteio"
               className="rounded-lg border border-yellow-400 px-4 py-2 font-bold text-yellow-300 hover:bg-yellow-400/10"
             >
-              Resumo do sorteio
+              Resumo diário
             </Link>
             <button type="button" onClick={sair} className="rounded-lg border border-zinc-700 px-4 py-2 font-semibold hover:bg-zinc-800">
               Sair
