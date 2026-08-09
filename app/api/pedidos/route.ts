@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import {
   avaliarPedidoMinimo,
+  avaliarPedidoMinimoLongNeck,
+  ehCidadeEntrega,
   mensagemPedidoMinimo,
+  mensagemPedidoMinimoLongNeck,
   type CidadeEntrega,
 } from "@/lib/pedido-minimo";
 import { registrarPedidoNoResumo } from "@/lib/resumo-sorteio";
@@ -76,11 +79,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const cidadeEntrega =
-    body?.cidade_entrega === "Paranacity" ||
-    body?.cidade_entrega === "Cruzeiro do Sul"
-      ? body.cidade_entrega
-      : "";
+  const cidadeEntrega = ehCidadeEntrega(body?.cidade_entrega)
+    ? body.cidade_entrega
+    : "";
   const endereco =
     typeof body?.endereco === "string" ? body.endereco.trim() : "";
   const bairro = typeof body?.bairro === "string" ? body.bairro.trim() : "";
@@ -185,14 +186,16 @@ export async function POST(request: Request) {
     );
   }
 
+  const itensParaPedidoMinimo = itensValidados.map((item) => ({
+    categoria: item.categoria,
+    tipoVenda: item.produto.tipo_venda,
+    nome: item.produto.nome,
+    descricao: item.produto.descricao,
+    subtotal: item.subtotal,
+    quantidade: item.quantidade,
+  }));
   const avaliacaoPedidoMinimo = avaliarPedidoMinimo(
-    itensValidados.map((item) => ({
-      categoria: item.categoria,
-      tipoVenda: item.produto.tipo_venda,
-      nome: item.produto.nome,
-      descricao: item.produto.descricao,
-      subtotal: item.subtotal,
-    })),
+    itensParaPedidoMinimo,
     cidadeEntrega as CidadeEntrega
   );
 
@@ -203,6 +206,20 @@ export async function POST(request: Request) {
           avaliacaoPedidoMinimo,
           cidadeEntrega as CidadeEntrega
         ),
+      },
+      { status: 400 }
+    );
+  }
+
+  const avaliacaoPedidoMinimoLongNeck = avaliarPedidoMinimoLongNeck(
+    itensParaPedidoMinimo,
+    cidadeEntrega as CidadeEntrega
+  );
+
+  if (!avaliacaoPedidoMinimoLongNeck.atingido) {
+    return NextResponse.json(
+      {
+        error: mensagemPedidoMinimoLongNeck(avaliacaoPedidoMinimoLongNeck),
       },
       { status: 400 }
     );

@@ -20,7 +20,12 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import {
   avaliarPedidoMinimo,
+  avaliarPedidoMinimoLongNeck,
+  CIDADES_ENTREGA,
+  ehCervejaLongNeckAvulsa,
   mensagemPedidoMinimo,
+  mensagemPedidoMinimoLongNeck,
+  PEDIDO_MINIMO_LONG_NECK,
   type CidadeEntrega,
 } from "@/lib/pedido-minimo";
 
@@ -83,7 +88,7 @@ type DadosClienteSalvos = {
   numeroEndereco: string;
   bairro: string;
   referencia: string;
-  cidadeEntrega: "" | "Paranacity" | "Cruzeiro do Sul";
+  cidadeEntrega: "" | CidadeEntrega;
 };
 
 type PedidoHistorico = {
@@ -200,7 +205,7 @@ export default function Catalogo({
   const [numeroEndereco, setNumeroEndereco] = useState("");
   const [bairro, setBairro] = useState("");
   const [referencia, setReferencia] = useState("");
-  const [cidadeEntrega, setCidadeEntrega] = useState<"" | "Paranacity" | "Cruzeiro do Sul">("");
+  const [cidadeEntrega, setCidadeEntrega] = useState<"" | CidadeEntrega>("");
   const [quantidadePagamentos, setQuantidadePagamentos] =
     useState<QuantidadePagamentos>(1);
   const [primeiroPagamento, setPrimeiroPagamento] = useState<Pagamento>(pagamentoVazio);
@@ -450,6 +455,17 @@ export default function Catalogo({
       nome: item.nome,
       descricao: item.descricao,
       subtotal: calcularSubtotalItem(item),
+    })),
+    cidadeEntrega || null
+  );
+  const avaliacaoPedidoMinimoLongNeck = avaliarPedidoMinimoLongNeck(
+    carrinho.map((item) => ({
+      categoria: categoriaPorIdAtual.get(item.categoria_id) ?? "",
+      tipoVenda: item.tipo_venda,
+      nome: item.nome,
+      descricao: item.descricao,
+      subtotal: calcularSubtotalItem(item),
+      quantidade: item.quantidade,
     })),
     cidadeEntrega || null
   );
@@ -769,6 +785,11 @@ export default function Catalogo({
       return;
     }
 
+    if (!avaliacaoPedidoMinimoLongNeck.atingido) {
+      alert(mensagemPedidoMinimoLongNeck(avaliacaoPedidoMinimoLongNeck));
+      return;
+    }
+
     if (!primeiroPagamento.forma) {
       alert("Escolha uma forma de pagamento.");
       return;
@@ -843,7 +864,7 @@ export default function Catalogo({
       "",
       `Cliente: ${nome.trim()} ${sobrenome.trim()}`,
       `Telefone: ${telefone.trim()}`,
-      `Atendimento: ${somenteRetiradaHoje ? "Retirada na loja" : "Delivery"}`,
+      ...(somenteRetiradaHoje ? ["Atendimento: Retirada na loja"] : []),
       ...(!somenteRetiradaHoje
         ? [
             `Cidade: ${cidadeEntrega}`,
@@ -1238,22 +1259,16 @@ export default function Catalogo({
               <select
                 value={cidadeEntrega}
                 onChange={(event) =>
-                  setCidadeEntrega(
-                    event.target.value as
-                      | ""
-                      | "Paranacity"
-                      | "Cruzeiro do Sul"
-                  )
+                  setCidadeEntrega(event.target.value as "" | CidadeEntrega)
                 }
                 className="w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3 font-semibold text-white outline-none focus:border-yellow-400"
               >
                 <option value="">Escolha sua cidade</option>
-                <option value="Paranacity">
-                  Paranacity · mínimo R$ 25,00
-                </option>
-                <option value="Cruzeiro do Sul">
-                  Cruzeiro do Sul · mínimo R$ 35,00
-                </option>
+                {CIDADES_ENTREGA.map((cidade) => (
+                  <option key={cidade.nome} value={cidade.nome}>
+                    {cidade.nome} · mínimo {formatarPreco(cidade.pedidoMinimo)}
+                  </option>
+                ))}
               </select>
             </label>
           )}
@@ -1415,7 +1430,15 @@ export default function Catalogo({
           {secao.produtos.map((produto) => {
             const item = carrinho.find((itemCarrinho) => itemCarrinho.id === produto.id);
             const semEstoque = estoqueDisponivel(produto) <= 0;
-            const eCombo = categorias.find((categoria) => categoria.id === produto.categoria_id)?.nome === "Combos";
+            const categoriaProduto = categorias.find(
+              (categoria) => categoria.id === produto.categoria_id
+            )?.nome;
+            const eCombo = categoriaProduto === "Combos";
+            const produtoEhLongNeckAvulsa = ehCervejaLongNeckAvulsa({
+              categoria: categoriaProduto ?? "",
+              tipoVenda: produto.tipo_venda,
+              nome: produto.nome,
+            });
             const eGeloDeSabor = ["gelinho gourmet", "gelo de sabor"].includes(
               produto.nome.trim().toLowerCase()
             );
@@ -1484,6 +1507,12 @@ export default function Catalogo({
                         {produto.descricao}
                       </p>
                     )
+                  )}
+                  {produtoEhLongNeckAvulsa && (
+                    <p className="mt-2 text-xs font-bold text-yellow-300">
+                      Mínimo de {PEDIDO_MINIMO_LONG_NECK} unidades, ou liberada
+                      quando os outros produtos atingirem o pedido mínimo.
+                    </p>
                   )}
                   <div className="mt-auto flex items-end justify-between gap-3 pt-5">
                     <div>
@@ -2096,6 +2125,57 @@ export default function Catalogo({
               {carrinho.length > 0 && (
                 <div className="mt-7 space-y-4 border-t border-zinc-800 pt-6">
                   <IndicadorPedidoMinimo />
+                  {avaliacaoPedidoMinimoLongNeck.temLongNeckAvulsa && (
+                    <div
+                      className={`rounded-xl border p-4 text-sm ${
+                        avaliacaoPedidoMinimoLongNeck.atingido
+                          ? "border-green-500/50 bg-green-500/10"
+                          : "border-yellow-400/50 bg-yellow-400/10"
+                      }`}
+                    >
+                      <p
+                        className={`font-bold ${
+                          avaliacaoPedidoMinimoLongNeck.atingido
+                            ? "text-green-300"
+                            : "text-yellow-300"
+                        }`}
+                      >
+                        Cervejas long neck
+                      </p>
+                      <p className="mt-1 text-zinc-200">
+                        Mínimo de {PEDIDO_MINIMO_LONG_NECK} unidades avulsas
+                        enquanto os outros produtos não atingirem o pedido
+                        mínimo. Pode misturar as marcas. Você adicionou{" "}
+                        {avaliacaoPedidoMinimoLongNeck.quantidade}.
+                      </p>
+                      {avaliacaoPedidoMinimoLongNeck.liberadoPorOutrosProdutos ? (
+                        <p className="mt-1 font-semibold text-green-200">
+                          Long neck avulsa liberada: os outros produtos atingiram
+                          o pedido mínimo.
+                        </p>
+                      ) : avaliacaoPedidoMinimoLongNeck.atingido ? (
+                        <p className="mt-1 font-semibold text-green-200">
+                          Quantidade mínima de long neck atingida.
+                        </p>
+                      ) : (
+                        <p className="mt-1 font-semibold text-yellow-200">
+                          {avaliacaoPedidoMinimoLongNeck.falta === 1
+                            ? "Falta 1 unidade de long neck."
+                            : `Faltam ${avaliacaoPedidoMinimoLongNeck.falta} unidades de long neck.`}
+                          {avaliacaoPedidoMinimoLongNeck.faltaEmOutrosProdutos !==
+                            null && (
+                            <>
+                              {" "}Ou complete mais{" "}
+                              {formatarPreco(
+                                avaliacaoPedidoMinimoLongNeck.faltaEmOutrosProdutos
+                              )}{" "}
+                              em outros produtos.
+                            </>
+                          )}
+                        </p>
+                      )}
+                    </div>
+                  )}
                   {quantidadeGarrafas300 > 0 && (
                     <div className="rounded-xl border border-yellow-400/50 bg-yellow-400/10 p-4 text-sm">
                       <p className="font-bold text-yellow-300">Garrafinhas de 300 ml</p>
@@ -2235,13 +2315,21 @@ export default function Catalogo({
                         <select
                           name="cidade-entrega"
                           value={cidadeEntrega}
-                          onChange={(event) => setCidadeEntrega(event.target.value as "" | "Paranacity" | "Cruzeiro do Sul")}
+                          onChange={(event) =>
+                            setCidadeEntrega(
+                              event.target.value as "" | CidadeEntrega
+                            )
+                          }
                           required
                           className="w-full rounded-lg bg-zinc-900 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2"
                         >
                           <option value="">Selecione sua cidade</option>
-                          <option value="Paranacity">Paranacity — pedido mínimo R$ 25,00</option>
-                          <option value="Cruzeiro do Sul">Cruzeiro do Sul — pedido mínimo R$ 35,00</option>
+                          {CIDADES_ENTREGA.map((cidade) => (
+                            <option key={cidade.nome} value={cidade.nome}>
+                              {cidade.nome} — pedido mínimo{" "}
+                              {formatarPreco(cidade.pedidoMinimo)}
+                            </option>
+                          ))}
                         </select>
                       </label>
                     </>
