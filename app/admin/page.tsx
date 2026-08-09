@@ -105,6 +105,11 @@ export default function AdminPage() {
     new Set()
   );
   const [fotosSalvando, setFotosSalvando] = useState<Set<string>>(new Set());
+  const [produtosSalvando, setProdutosSalvando] = useState<Set<string>>(
+    new Set()
+  );
+  const [produtosSalvos, setProdutosSalvos] = useState<Set<string>>(new Set());
+  const confirmacoesSalvasRef = useRef<Record<string, number>>({});
   const [detalhesEssencias, setDetalhesEssencias] = useState<DetalhesEssencias>({});
   const detalhesEssenciasRef = useRef<DetalhesEssencias>({});
   const [detalhesSaboresSalvando, setDetalhesSaboresSalvando] = useState<Set<string>>(
@@ -134,6 +139,15 @@ export default function AdminPage() {
       setVerificandoAcesso(false);
     });
   }, []);
+
+  useEffect(
+    () => () => {
+      Object.values(confirmacoesSalvasRef.current).forEach((temporizador) =>
+        window.clearTimeout(temporizador)
+      );
+    },
+    []
+  );
 
   useEffect(() => {
     if (!painelDesbloqueado) return;
@@ -331,23 +345,58 @@ export default function AdminPage() {
 
   async function atualizarProdutoRapido(
     id: string,
-    alteracoes: Partial<Pick<Produto, "preco" | "estoque" | "descricao" | "imagem">>
+    alteracoes: Partial<
+      Pick<Produto, "preco" | "estoque" | "descricao" | "imagem" | "estoque_opcoes">
+    >
   ) {
-    const { error } = await supabase
-      .from("produtos")
-      .update(alteracoes)
-      .eq("id", id);
+    setProdutosSalvos((atuais) => {
+      const proximos = new Set(atuais);
+      proximos.delete(id);
+      return proximos;
+    });
+    setProdutosSalvando((atuais) => new Set(atuais).add(id));
 
-    if (error) {
-      alert(error.message);
-      return;
+    try {
+      const resposta = await fetch("/api/produtos", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, alteracoes }),
+      });
+      const resultado = (await resposta.json()) as Produto & { error?: string };
+
+      if (!resposta.ok) {
+        throw new Error(resultado.error ?? "Não foi possível salvar o produto.");
+      }
+
+      setProdutos((atuais) =>
+        atuais.map((produto) =>
+          produto.id === id ? { ...produto, ...resultado } : produto
+        )
+      );
+      setProdutosSalvos((atuais) => new Set(atuais).add(id));
+
+      window.clearTimeout(confirmacoesSalvasRef.current[id]);
+      confirmacoesSalvasRef.current[id] = window.setTimeout(() => {
+        setProdutosSalvos((atuais) => {
+          const proximos = new Set(atuais);
+          proximos.delete(id);
+          return proximos;
+        });
+        delete confirmacoesSalvasRef.current[id];
+      }, 2500);
+
+      return true;
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Não foi possível salvar o produto.");
+      void carregarProdutos();
+      return false;
+    } finally {
+      setProdutosSalvando((atuais) => {
+        const proximos = new Set(atuais);
+        proximos.delete(id);
+        return proximos;
+      });
     }
-
-    setProdutos((atuais) =>
-      atuais.map((produto) =>
-        produto.id === id ? { ...produto, ...alteracoes } : produto
-      )
-    );
   }
 
   async function atualizarFotoProduto(produto: Produto, file: File) {
@@ -479,27 +528,14 @@ export default function AdminPage() {
     setEstoquesOpcoesSalvando((atuais) =>
       new Set(atuais).add(chaveSalvamento)
     );
-    const { error } = await supabase
-      .from("produtos")
-      .update(alteracoes)
-      .eq("id", produto.id);
+    const salvou = await atualizarProdutoRapido(produto.id, alteracoes);
     setEstoquesOpcoesSalvando((atuais) => {
       const proximos = new Set(atuais);
       proximos.delete(chaveSalvamento);
       return proximos;
     });
 
-    if (error) {
-      alert(error.message);
-      return false;
-    }
-
-    setProdutos((atuais) =>
-      atuais.map((item) =>
-        item.id === produto.id ? { ...item, ...alteracoes } : item
-      )
-    );
-    return true;
+    return salvou;
   }
 
   async function alterarEstoqueOpcao(
@@ -1962,6 +1998,7 @@ export default function AdminPage() {
                               estoque: Math.max(0, produto.estoque - 1),
                             })
                           }
+                          disabled={produtosSalvando.has(produto.id)}
                           className="grid h-8 w-8 place-items-center rounded-md bg-zinc-800 text-lg hover:bg-zinc-700"
                           aria-label={`Diminuir estoque de ${produto.nome}`}
                         >
@@ -1989,6 +2026,9 @@ export default function AdminPage() {
                               estoque: Math.max(0, Number(event.target.value)),
                             })
                           }
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") event.currentTarget.blur();
+                          }}
                           className="w-16 rounded-md bg-zinc-800 px-2 py-1.5 text-center"
                           aria-label={`Estoque de ${produto.nome}`}
                         />
@@ -1999,11 +2039,21 @@ export default function AdminPage() {
                               estoque: produto.estoque + 1,
                             })
                           }
+                          disabled={produtosSalvando.has(produto.id)}
                           className="grid h-8 w-8 place-items-center rounded-md bg-zinc-800 text-lg hover:bg-zinc-700"
                           aria-label={`Aumentar estoque de ${produto.nome}`}
                         >
                           +
                         </button>
+                        <span className="min-w-20 text-xs" aria-live="polite">
+                          {produtosSalvando.has(produto.id) ? (
+                            <span className="text-yellow-300">Salvando...</span>
+                          ) : produtosSalvos.has(produto.id) ? (
+                            <span className="text-green-300">Salvo</span>
+                          ) : (
+                            <span className="text-zinc-500">Salva ao sair</span>
+                          )}
+                        </span>
                       </div>
                     )}
                   </div>
