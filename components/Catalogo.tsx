@@ -524,7 +524,7 @@ export default function Catalogo({
         estoqueDisponivel(produto) > 0
     )
     .map((produto) => produto.nome.replace("Furioso 2L - ", ""));
-  const saboresDeGelo = ["Laranja", "Maca Verde", "Limao", "Morango", "Coco", "Maracuja", "Melancia", "Uva Verde", "Amora", "Abacaxi", "Sal e Limao"];
+  const saboresDeGelo = ["Laranja", "Maca Verde", "Limao", "Morango", "Coco", "Maracuja", "Melancia", "Uva Verde", "Amora", "Abacaxi", "Sal e Limao", "Brisa"];
   const produtoJackDaniels = produtos.find(
     (produto) => produto.nome.trim().toLowerCase() === "whisky jack daniels"
   );
