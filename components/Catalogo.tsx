@@ -22,10 +22,8 @@ import {
   avaliarPedidoMinimo,
   avaliarPedidoMinimoLongNeck,
   CIDADES_ENTREGA,
-  ehCervejaLongNeckAvulsa,
   mensagemPedidoMinimo,
   mensagemPedidoMinimoLongNeck,
-  PEDIDO_MINIMO_LONG_NECK,
   type CidadeEntrega,
 } from "@/lib/pedido-minimo";
 
@@ -775,6 +773,11 @@ export default function Catalogo({
       return;
     }
 
+    if (!avaliacaoPedidoMinimoLongNeck.atingido) {
+      alert(mensagemPedidoMinimoLongNeck(avaliacaoPedidoMinimoLongNeck));
+      return;
+    }
+
     if (!somenteRetiradaHoje && !avaliacaoPedidoMinimo.atingido) {
       alert(
         mensagemPedidoMinimo(
@@ -782,11 +785,6 @@ export default function Catalogo({
           cidadeEntrega as CidadeEntrega
         )
       );
-      return;
-    }
-
-    if (!avaliacaoPedidoMinimoLongNeck.atingido) {
-      alert(mensagemPedidoMinimoLongNeck(avaliacaoPedidoMinimoLongNeck));
       return;
     }
 
@@ -1434,11 +1432,6 @@ export default function Catalogo({
               (categoria) => categoria.id === produto.categoria_id
             )?.nome;
             const eCombo = categoriaProduto === "Combos";
-            const produtoEhLongNeckAvulsa = ehCervejaLongNeckAvulsa({
-              categoria: categoriaProduto ?? "",
-              tipoVenda: produto.tipo_venda,
-              nome: produto.nome,
-            });
             const eGeloDeSabor = ["gelinho gourmet", "gelo de sabor"].includes(
               produto.nome.trim().toLowerCase()
             );
@@ -1507,12 +1500,6 @@ export default function Catalogo({
                         {produto.descricao}
                       </p>
                     )
-                  )}
-                  {produtoEhLongNeckAvulsa && (
-                    <p className="mt-2 text-xs font-bold text-yellow-300">
-                      Mínimo de {PEDIDO_MINIMO_LONG_NECK} unidades, ou liberada
-                      quando os outros produtos atingirem o pedido mínimo.
-                    </p>
                   )}
                   <div className="mt-auto flex items-end justify-between gap-3 pt-5">
                     <div>
@@ -2125,57 +2112,6 @@ export default function Catalogo({
               {carrinho.length > 0 && (
                 <div className="mt-7 space-y-4 border-t border-zinc-800 pt-6">
                   <IndicadorPedidoMinimo />
-                  {avaliacaoPedidoMinimoLongNeck.temLongNeckAvulsa && (
-                    <div
-                      className={`rounded-xl border p-4 text-sm ${
-                        avaliacaoPedidoMinimoLongNeck.atingido
-                          ? "border-green-500/50 bg-green-500/10"
-                          : "border-yellow-400/50 bg-yellow-400/10"
-                      }`}
-                    >
-                      <p
-                        className={`font-bold ${
-                          avaliacaoPedidoMinimoLongNeck.atingido
-                            ? "text-green-300"
-                            : "text-yellow-300"
-                        }`}
-                      >
-                        Cervejas long neck
-                      </p>
-                      <p className="mt-1 text-zinc-200">
-                        Mínimo de {PEDIDO_MINIMO_LONG_NECK} unidades avulsas
-                        enquanto os outros produtos não atingirem o pedido
-                        mínimo. Pode misturar as marcas. Você adicionou{" "}
-                        {avaliacaoPedidoMinimoLongNeck.quantidade}.
-                      </p>
-                      {avaliacaoPedidoMinimoLongNeck.liberadoPorOutrosProdutos ? (
-                        <p className="mt-1 font-semibold text-green-200">
-                          Long neck avulsa liberada: os outros produtos atingiram
-                          o pedido mínimo.
-                        </p>
-                      ) : avaliacaoPedidoMinimoLongNeck.atingido ? (
-                        <p className="mt-1 font-semibold text-green-200">
-                          Quantidade mínima de long neck atingida.
-                        </p>
-                      ) : (
-                        <p className="mt-1 font-semibold text-yellow-200">
-                          {avaliacaoPedidoMinimoLongNeck.falta === 1
-                            ? "Falta 1 unidade de long neck."
-                            : `Faltam ${avaliacaoPedidoMinimoLongNeck.falta} unidades de long neck.`}
-                          {avaliacaoPedidoMinimoLongNeck.faltaEmOutrosProdutos !==
-                            null && (
-                            <>
-                              {" "}Ou complete mais{" "}
-                              {formatarPreco(
-                                avaliacaoPedidoMinimoLongNeck.faltaEmOutrosProdutos
-                              )}{" "}
-                              em outros produtos.
-                            </>
-                          )}
-                        </p>
-                      )}
-                    </div>
-                  )}
                   {quantidadeGarrafas300 > 0 && (
                     <div className="rounded-xl border border-yellow-400/50 bg-yellow-400/10 p-4 text-sm">
                       <p className="font-bold text-yellow-300">Garrafinhas de 300 ml</p>
