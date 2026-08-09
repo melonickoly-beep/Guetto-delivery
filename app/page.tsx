@@ -143,7 +143,9 @@ export default async function Home() {
               </p>
             ) : (
               <>
-                <p className="mt-2">Paranacity e Cruzeiro do Sul</p>
+                <p className="mt-2">
+                  Paranacity, Vila Rural e Cruzeiro do Sul
+                </p>
                 <p>Sem taxa de entrega · respeitando o pedido mínimo</p>
               </>
             )}

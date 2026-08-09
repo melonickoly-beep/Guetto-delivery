@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://guettodelivery.com.br"),
   title: "Guetto Delivery | Bebidas, conveniência e tabacaria",
   description:
-    "Bebidas, gelo, conveniência e tabacaria em Paranacity e Cruzeiro do Sul.",
+    "Bebidas, gelo, conveniência e tabacaria em Paranacity, Vila Rural e Cruzeiro do Sul.",
   applicationName: "Guetto Delivery",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Guetto Delivery",
     description:
-      "Bebidas, conveniência e tabacaria em Paranacity e Cruzeiro do Sul.",
+      "Bebidas, conveniência e tabacaria em Paranacity, Vila Rural e Cruzeiro do Sul.",
     url: "/",
     siteName: "Guetto Delivery",
     locale: "pt_BR",
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Guetto Delivery",
     description:
-      "Bebidas, conveniência e tabacaria em Paranacity e Cruzeiro do Sul.",
+      "Bebidas, conveniência e tabacaria em Paranacity, Vila Rural e Cruzeiro do Sul.",
     images: ["/og-guetto-delivery.png"],
   },
 };

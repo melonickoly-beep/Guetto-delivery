@@ -677,6 +677,20 @@ export default function AdminPage() {
       .replaceAll("'", "&#039;");
   }
 
+  function resumirEscolhasRepetidas(escolhas: string[]) {
+    const contagens = new Map<string, number>();
+
+    for (const escolha of escolhas) {
+      const nome = escolha.trim();
+      if (!nome) continue;
+      contagens.set(nome, (contagens.get(nome) ?? 0) + 1);
+    }
+
+    return Array.from(contagens, ([nome, quantidade]) =>
+      `${quantidade}x ${nome}`
+    ).join(", ");
+  }
+
   function imprimirPedido(pedido: Pedido, janela: Window | null = null) {
     const janelaImpressao =
       janela ?? window.open("", "_blank", "width=420,height=720");
@@ -690,11 +704,17 @@ export default function AdminPage() {
       style: "currency",
       currency: "BRL",
     });
+    const observacaoImpressao = (pedido.observacao ?? "")
+      .replace(/atendimento\s*:\s*delivery\.?/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
     const detalhesItens = (pedido.itens ?? [])
       .map((item) => {
         const escolhas = Object.entries(item.escolhas_combo ?? {})
           .map(([nomeEscolha, valor]) => {
-            const escolha = Array.isArray(valor) ? valor.join(", ") : valor;
+            const escolha = Array.isArray(valor)
+              ? resumirEscolhasRepetidas(valor)
+              : valor;
             const rotuloEscolha =
               nomeEscolha === "whisky" &&
               item.nome.toLowerCase().includes("gin eternity")
@@ -754,7 +774,7 @@ export default function AdminPage() {
           <div class="linha total"><span>TOTAL</span><span>${moeda.format(Number(pedido.total))}</span></div>
           <div class="separador"></div>
           ${(pedido.pagamento ?? []).map((pagamento) => `<div class="pagamento ${/troco/i.test(pagamento) ? "troco" : ""}"><span class="pagamento-titulo">FORMA DE PAGAMENTO${/troco/i.test(pagamento) ? " / TROCO" : ""}</span>${textoSeguro(pagamento)}</div>`).join("")}
-          ${pedido.observacao ? `<p><strong>Observação:</strong> ${textoSeguro(pedido.observacao)}</p>` : ""}
+          ${observacaoImpressao ? `<p><strong>Observação:</strong> ${textoSeguro(observacaoImpressao)}</p>` : ""}
           <p class="rodape">Separar e conferir antes da ${pedido.endereco === "Retirada na loja" ? "retirada" : "entrega"}</p>
           <script>window.addEventListener("load", () => setTimeout(() => window.print(), 200));<\/script>
         </body>

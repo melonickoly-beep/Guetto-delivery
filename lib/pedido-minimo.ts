@@ -1,6 +1,17 @@
 export const PEDIDO_MINIMO_TABACARIA = 20;
+export const PEDIDO_MINIMO_LONG_NECK = 6;
 
-export type CidadeEntrega = "Paranacity" | "Cruzeiro do Sul";
+export const CIDADES_ENTREGA = [
+  { nome: "Paranacity", pedidoMinimo: 25 },
+  { nome: "Vila Rural", pedidoMinimo: 35 },
+  { nome: "Cruzeiro do Sul", pedidoMinimo: 35 },
+] as const;
+
+export type CidadeEntrega = (typeof CIDADES_ENTREGA)[number]["nome"];
+
+export const ehCidadeEntrega = (valor: unknown): valor is CidadeEntrega =>
+  typeof valor === "string" &&
+  CIDADES_ENTREGA.some((cidade) => cidade.nome === valor);
 
 export type ItemPedidoMinimo = {
   categoria: string;
@@ -8,6 +19,22 @@ export type ItemPedidoMinimo = {
   nome: string;
   descricao?: string | null;
   subtotal: number;
+};
+
+export type ItemPedidoMinimoLongNeck = ItemPedidoMinimo & {
+  quantidade: number;
+};
+
+export type ResultadoPedidoMinimoLongNeck = {
+  atingido: boolean;
+  falta: number;
+  faltaEmOutrosProdutos: number | null;
+  liberadoPorOutrosProdutos: boolean;
+  minimo: number;
+  minimoOutrosProdutos: number | null;
+  quantidade: number;
+  temLongNeckAvulsa: boolean;
+  valorOutrosProdutos: number;
 };
 
 export type LiberacaoPedidoMinimo =
@@ -33,7 +60,7 @@ const normalizar = (valor: string) =>
     .toLowerCase()
     .trim();
 
-const categoriaNormalizada = (item: ItemPedidoMinimo) =>
+const categoriaNormalizada = (item: Pick<ItemPedidoMinimo, "categoria">) =>
   normalizar(item.categoria);
 
 const ehLataCervejaAvulsa = (item: ItemPedidoMinimo) =>
@@ -44,8 +71,15 @@ const ehLataCervejaAvulsa = (item: ItemPedidoMinimo) =>
 const ehCaixaCerveja = (item: ItemPedidoMinimo) =>
   categoriaNormalizada(item) === "cervejas" && item.tipoVenda === "caixa";
 
+export const ehCervejaLongNeckAvulsa = (
+  item: Pick<ItemPedidoMinimo, "categoria" | "tipoVenda" | "nome">
+) =>
+  categoriaNormalizada(item) === "cervejas" &&
+  item.tipoVenda === "avulso" &&
+  normalizar(item.nome).includes("long neck");
+
 export const pedidoMinimoDaCidade = (cidade: CidadeEntrega) =>
-  cidade === "Paranacity" ? 25 : 35;
+  CIDADES_ENTREGA.find((item) => item.nome === cidade)?.pedidoMinimo ?? 35;
 
 export function avaliarPedidoMinimo(
   itens: ItemPedidoMinimo[],
@@ -158,6 +192,59 @@ export function avaliarPedidoMinimo(
       : valorSemLatasAvulsas,
     valorTotal,
   };
+}
+
+export function avaliarPedidoMinimoLongNeck(
+  itens: ItemPedidoMinimoLongNeck[],
+  cidade: CidadeEntrega | null
+): ResultadoPedidoMinimoLongNeck {
+  const longNecksAvulsas = itens.filter(ehCervejaLongNeckAvulsa);
+  const quantidade = longNecksAvulsas.reduce(
+    (total, item) =>
+      total + Math.max(0, Math.floor(Number(item.quantidade) || 0)),
+    0
+  );
+  const temLongNeckAvulsa = quantidade > 0;
+  const avaliacaoOutrosProdutos = avaliarPedidoMinimo(
+    itens.filter((item) => !ehCervejaLongNeckAvulsa(item)),
+    cidade
+  );
+  const liberadoPorOutrosProdutos =
+    temLongNeckAvulsa &&
+    quantidade < PEDIDO_MINIMO_LONG_NECK &&
+    avaliacaoOutrosProdutos.atingido;
+  const falta = temLongNeckAvulsa && !liberadoPorOutrosProdutos
+    ? Math.max(0, PEDIDO_MINIMO_LONG_NECK - quantidade)
+    : 0;
+
+  return {
+    atingido: falta === 0,
+    falta,
+    faltaEmOutrosProdutos: avaliacaoOutrosProdutos.falta,
+    liberadoPorOutrosProdutos,
+    minimo: PEDIDO_MINIMO_LONG_NECK,
+    minimoOutrosProdutos: avaliacaoOutrosProdutos.minimoReferencia,
+    quantidade,
+    temLongNeckAvulsa,
+    valorOutrosProdutos: avaliacaoOutrosProdutos.valorConsiderado,
+  };
+}
+
+export function mensagemPedidoMinimoLongNeck(
+  resultado: ResultadoPedidoMinimoLongNeck
+) {
+  const complemento =
+    resultado.falta === 1
+      ? "Falta 1 unidade."
+      : `Faltam ${resultado.falta} unidades.`;
+  const alternativaOutrosProdutos =
+    resultado.faltaEmOutrosProdutos === null
+      ? ""
+      : ` Ou complete mais R$ ${resultado.faltaEmOutrosProdutos
+          .toFixed(2)
+          .replace(".", ",")} em outros produtos; as long necks avulsas não entram nesse valor.`;
+
+  return `O pedido mínimo para cervejas long neck avulsas é de ${resultado.minimo} unidades enquanto os outros produtos não atingirem o mínimo da entrega. ${complemento} Você pode misturar as marcas.${alternativaOutrosProdutos}`;
 }
 
 export function mensagemPedidoMinimo(
