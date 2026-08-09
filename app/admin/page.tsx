@@ -1238,7 +1238,7 @@ export default function AdminPage() {
     const acompanhamento = `${window.location.origin}/acompanhar/${pedido.id}`;
     const mensagem = `${mensagens[pedido.status] ?? "Atualização do seu pedido:"}\n\nAcompanhe aqui:\n${acompanhamento}`;
     window.open(
-      `https://wa.me/${telefoneWhatsApp}?text=${encodeURIComponent(mensagem)}`,
+      `https://web.whatsapp.com/send?phone=${telefoneWhatsApp}&text=${encodeURIComponent(mensagem)}`,
       "_blank",
       "noopener,noreferrer"
     );
