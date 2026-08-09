@@ -23,7 +23,23 @@ type Produto = {
   destaque: boolean;
   tipo_venda: "caixa" | "avulso" | null;
   estoque_opcoes?: Record<string, number> | null;
+  grupo_estoque?: string | null;
+  unidades_por_venda?: number | null;
+  estoque_unidades?: number | null;
 };
+
+function estoqueDisponivelProduto(produto: Produto) {
+  if (
+    produto.grupo_estoque &&
+    typeof produto.estoque_unidades === "number"
+  ) {
+    return Math.floor(
+      produto.estoque_unidades / Math.max(1, produto.unidades_por_venda ?? 1)
+    );
+  }
+
+  return produto.estoque;
+}
 
 type Pedido = {
   id: string;
@@ -362,16 +378,27 @@ export default function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, alteracoes }),
       });
-      const resultado = (await resposta.json()) as Produto & { error?: string };
+      const resultado = (await resposta.json()) as {
+        produto?: Produto;
+        produtos_relacionados?: Produto[];
+        error?: string;
+      };
 
       if (!resposta.ok) {
         throw new Error(resultado.error ?? "Não foi possível salvar o produto.");
       }
 
-      setProdutos((atuais) =>
-        atuais.map((produto) =>
-          produto.id === id ? { ...produto, ...resultado } : produto
+      if (!resultado.produto) {
+        throw new Error("O servidor não confirmou o produto atualizado.");
+      }
+
+      const produtosAtualizados = new Map(
+        (resultado.produtos_relacionados ?? [resultado.produto]).map(
+          (produto) => [produto.id, produto]
         )
+      );
+      setProdutos((atuais) =>
+        atuais.map((produto) => produtosAtualizados.get(produto.id) ?? produto)
       );
       setProdutosSalvos((atuais) => new Set(atuais).add(id));
 
@@ -397,6 +424,39 @@ export default function AdminPage() {
         return proximos;
       });
     }
+  }
+
+  function atualizarEstoqueLocal(produto: Produto, novoEstoque: number) {
+    const estoqueNormalizado = Math.max(0, Math.floor(novoEstoque || 0));
+
+    setProdutos((atuais) => {
+      if (
+        !produto.grupo_estoque ||
+        typeof produto.estoque_unidades !== "number"
+      ) {
+        return atuais.map((item) =>
+          item.id === produto.id
+            ? { ...item, estoque: estoqueNormalizado }
+            : item
+        );
+      }
+
+      const unidadesPorVenda = Math.max(1, produto.unidades_por_venda ?? 1);
+      const unidadesSoltas = produto.estoque_unidades % unidadesPorVenda;
+      const estoqueTotalUnidades =
+        estoqueNormalizado * unidadesPorVenda + unidadesSoltas;
+
+      return atuais.map((item) => {
+        if (item.grupo_estoque !== produto.grupo_estoque) return item;
+
+        const fatorItem = Math.max(1, item.unidades_por_venda ?? 1);
+        return {
+          ...item,
+          estoque: Math.floor(estoqueTotalUnidades / fatorItem),
+          estoque_unidades: estoqueTotalUnidades,
+        };
+      });
+    });
   }
 
   async function atualizarFotoProduto(produto: Produto, file: File) {
@@ -1155,7 +1215,7 @@ export default function AdminPage() {
     setNome(produto.nome);
     setDescricao(produto.descricao ?? "");
     setPreco(String(produto.preco));
-    setEstoque(String(produto.estoque));
+    setEstoque(String(estoqueDisponivelProduto(produto)));
     setDestaque(produto.destaque);
     setTipoVenda(produto.tipo_venda ?? "caixa");
     setArquivo(null);
@@ -1230,11 +1290,17 @@ export default function AdminPage() {
   inicioHoje.setHours(0, 0, 0, 0);
   const pedidosHoje = pedidos.filter((pedido) => new Date(pedido.created_at) >= inicioHoje);
   const pedidosNovos = pedidos.filter((pedido) => pedido.status === "novo");
-  const produtosComEstoque = produtos.filter((produto) => produto.estoque > 0);
-  const produtosComEstoqueBaixo = produtos.filter(
-    (produto) => produto.estoque > 0 && produto.estoque <= 5
+  const produtosComEstoque = produtos.filter(
+    (produto) => estoqueDisponivelProduto(produto) > 0
   );
-  const produtosSemEstoque = produtos.filter((produto) => produto.estoque <= 0);
+  const produtosComEstoqueBaixo = produtos.filter(
+    (produto) =>
+      estoqueDisponivelProduto(produto) > 0 &&
+      estoqueDisponivelProduto(produto) <= 5
+  );
+  const produtosSemEstoque = produtos.filter(
+    (produto) => estoqueDisponivelProduto(produto) <= 0
+  );
   const produtosDaAba =
     abaEstoque === "com-estoque"
       ? produtosComEstoque
@@ -1995,7 +2061,10 @@ export default function AdminPage() {
                           type="button"
                           onClick={() =>
                             void atualizarProdutoRapido(produto.id, {
-                              estoque: Math.max(0, produto.estoque - 1),
+                              estoque: Math.max(
+                                0,
+                                estoqueDisponivelProduto(produto) - 1
+                              ),
                             })
                           }
                           disabled={produtosSalvando.has(produto.id)}
@@ -2007,19 +2076,13 @@ export default function AdminPage() {
                         <input
                           type="number"
                           min="0"
-                          value={produto.estoque}
+                          value={estoqueDisponivelProduto(produto)}
                           onChange={(event) => {
                             const novoEstoque = Math.max(
                               0,
                               Number(event.target.value)
                             );
-                            setProdutos((atuais) =>
-                              atuais.map((item) =>
-                                item.id === produto.id
-                                  ? { ...item, estoque: novoEstoque }
-                                  : item
-                              )
-                            );
+                            atualizarEstoqueLocal(produto, novoEstoque);
                           }}
                           onBlur={(event) =>
                             void atualizarProdutoRapido(produto.id, {
@@ -2036,7 +2099,7 @@ export default function AdminPage() {
                           type="button"
                           onClick={() =>
                             void atualizarProdutoRapido(produto.id, {
-                              estoque: produto.estoque + 1,
+                              estoque: estoqueDisponivelProduto(produto) + 1,
                             })
                           }
                           disabled={produtosSalvando.has(produto.id)}
