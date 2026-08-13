@@ -420,6 +420,10 @@ export default function Catalogo({
     return produto.estoque;
   }
 
+  const categoriaCervejasId = categorias.find(
+    (categoria) => normalizarTexto(categoria.nome) === "cervejas"
+  )?.id;
+
   const produtosFiltrados = useMemo(
     () => {
       const termo = normalizarTexto(busca);
@@ -439,16 +443,37 @@ export default function Catalogo({
 
       return categoriaAtiva === "mais-vendidos" && !termo
         ? filtrados
-            .filter((produto) => estoqueDisponivel(produto) > 0)
+            .filter(
+              (produto) =>
+                estoqueDisponivel(produto) > 0 &&
+                !(
+                  produto.categoria_id === categoriaCervejasId &&
+                  produto.tipo_venda === "avulso"
+                )
+            )
             .sort(
-              (produtoA, produtoB) =>
-                Number(produtoA.posicao_mais_vendido ?? 999) -
-                Number(produtoB.posicao_mais_vendido ?? 999)
+              (produtoA, produtoB) => {
+                const caixaCervejaA =
+                  produtoA.categoria_id === categoriaCervejasId &&
+                  produtoA.tipo_venda === "caixa"
+                    ? 0
+                    : 1;
+                const caixaCervejaB =
+                  produtoB.categoria_id === categoriaCervejasId &&
+                  produtoB.tipo_venda === "caixa"
+                    ? 0
+                    : 1;
+                return (
+                  caixaCervejaA - caixaCervejaB ||
+                  Number(produtoA.posicao_mais_vendido ?? 999) -
+                    Number(produtoB.posicao_mais_vendido ?? 999)
+                );
+              }
             )
             .slice(0, 8)
         : filtrados;
     },
-    [busca, categoriaAtiva, produtos]
+    [busca, categoriaAtiva, produtos, categoriaCervejasId]
   );
   const categoriaTabacariaId = categorias.find(
     (categoria) => normalizarTexto(categoria.nome) === "tabacaria"
@@ -1661,6 +1686,18 @@ export default function Catalogo({
           ))}
         </div>
       </div>
+
+      {categoriaAtiva === "mais-vendidos" && !busca.trim() && (
+        <div className="mt-5 rounded-2xl border-2 border-yellow-400 bg-yellow-400/10 p-4 text-center">
+          <p className="text-lg font-black text-yellow-300">
+            🍻 MAIS ECONOMIA NA CAIXA FECHADA
+          </p>
+          <p className="mt-1 text-sm text-zinc-300">
+            Na tela inicial, cervejas aparecem em caixas e packs. Unidades estão
+            na categoria Cervejas.
+          </p>
+        </div>
+      )}
 
       {produtosFiltrados.length === 0 ? (
         <div className="mt-8 rounded-xl border border-dashed border-zinc-700 p-10 text-center text-zinc-400">
