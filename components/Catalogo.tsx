@@ -16,6 +16,12 @@ import {
   Store,
   Truck,
   History,
+  Check,
+  CheckCircle2,
+  CreditCard,
+  Banknote,
+  QrCode,
+  MoreHorizontal,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -80,14 +86,26 @@ type Pagamento = {
 };
 
 type DadosClienteSalvos = {
-  nome: string;
-  sobrenome: string;
+  nomeCompleto?: string;
+  nome?: string;
+  sobrenome?: string;
   telefone: string;
-  rua: string;
-  numeroEndereco: string;
+  endereco?: string;
+  rua?: string;
+  numeroEndereco?: string;
   bairro: string;
   referencia: string;
   cidadeEntrega: "" | CidadeEntrega;
+};
+
+type ErrosCheckout = Partial<
+  Record<"nomeCompleto" | "telefone" | "endereco" | "bairro" | "geral", string>
+>;
+
+type PedidoConfirmado = {
+  id: string;
+  linkAcompanhamento: string;
+  linkWhatsApp: string;
 };
 
 type PedidoHistorico = {
@@ -141,9 +159,25 @@ const formatarNomeProduto = (nome: string) =>
   nome
     .replace(/\bcarvao\b/gi, "Carvão")
     .replace(/\benergetico\b/gi, "Energético")
+    .replace(/\bimperio\b/gi, "Império")
+    .replace(/\blimao\b/gi, "Limão")
+    .replace(/^boa\s+agudos$/i, "Boa")
+    .replace(/\s*-\s*agudos\s*-\s*caixa\s*12\s*latas/i, " - Caixa com 12")
+    .replace(/\bpack\s*6\b/i, "Pack com 6")
+    .replace(/\blong neck\b/i, "Long neck")
     .replace(/\s*-\s*/g, " - ")
     .replace(/\s+/g, " ")
     .trim();
+
+const rotuloQuantidadeProduto = (produto: Produto) => {
+  const nome = normalizarTexto(produto.nome);
+  if (nome.includes("combo")) return "1 COMBO";
+  if (nome === "gelo de sabor" || nome === "gelinho gourmet") return "1 UN";
+  const unidades = produto.unidades_por_venda ?? 1;
+  if (unidades > 1) return `${unidades} UN`;
+  if (produto.tipo_venda === "caixa") return "CAIXA";
+  return "1 UN";
+};
 
 const calcularSubtotalItem = (
   item: Pick<ItemCarrinho, "nome" | "preco" | "quantidade">
@@ -195,18 +229,25 @@ export default function Catalogo({
   const [ultimoPedidoId, setUltimoPedidoId] = useState("");
   const [ultimoPedidoFoiAjustado, setUltimoPedidoFoiAjustado] = useState(false);
   const [dadosClienteRecuperados, setDadosClienteRecuperados] = useState(false);
+  const [preferenciasCarregadas, setPreferenciasCarregadas] = useState(false);
   const [salvarDadosNoAparelho, setSalvarDadosNoAparelho] = useState(false);
-  const [avisoDadosSalvos, setAvisoDadosSalvos] = useState("");
   const [avisoCarrinho, setAvisoCarrinho] = useState("");
+  const [confirmacaoProduto, setConfirmacaoProduto] = useState("");
   const [enviandoPedido, setEnviandoPedido] = useState(false);
-  const [nome, setNome] = useState("");
-  const [sobrenome, setSobrenome] = useState("");
+  const [nomeCompleto, setNomeCompleto] = useState("");
   const [telefone, setTelefone] = useState("");
-  const [rua, setRua] = useState("");
-  const [numeroEndereco, setNumeroEndereco] = useState("");
+  const [endereco, setEndereco] = useState("");
   const [bairro, setBairro] = useState("");
   const [referencia, setReferencia] = useState("");
   const [cidadeEntrega, setCidadeEntrega] = useState<"" | CidadeEntrega>("");
+  const [seletorCidadeAberto, setSeletorCidadeAberto] = useState(false);
+  const [abrirCheckoutAposCidade, setAbrirCheckoutAposCidade] = useState(false);
+  const [errosCheckout, setErrosCheckout] = useState<ErrosCheckout>({});
+  const [erroPagamento, setErroPagamento] = useState("");
+  const [erroRevisao, setErroRevisao] = useState("");
+  const [dividirPagamentoAberto, setDividirPagamentoAberto] = useState(false);
+  const [cartaoEmEscolha, setCartaoEmEscolha] = useState(false);
+  const [pedidoConfirmado, setPedidoConfirmado] = useState<PedidoConfirmado | null>(null);
   const [quantidadePagamentos, setQuantidadePagamentos] =
     useState<QuantidadePagamentos>(1);
   const [primeiroPagamento, setPrimeiroPagamento] = useState<Pagamento>(pagamentoVazio);
@@ -228,6 +269,15 @@ export default function Catalogo({
     const intervalo = window.setInterval(() => setAgora(new Date()), 30_000);
     return () => window.clearInterval(intervalo);
   }, []);
+
+  useEffect(() => {
+    if (!confirmacaoProduto) return;
+    const temporizador = window.setTimeout(
+      () => setConfirmacaoProduto(""),
+      1800
+    );
+    return () => window.clearTimeout(temporizador);
+  }, [confirmacaoProduto]);
 
   useEffect(() => {
     try {
@@ -331,14 +381,26 @@ export default function Catalogo({
       const dadosSalvos = window.localStorage.getItem(
         "guetto_dados_cliente"
       );
-      if (!dadosSalvos) return;
+      if (!dadosSalvos) {
+        const cidadeSalva = window.localStorage.getItem("guetto_cidade");
+        if (
+          CIDADES_ENTREGA.some((cidade) => cidade.nome === cidadeSalva)
+        ) {
+          setCidadeEntrega(cidadeSalva as CidadeEntrega);
+        }
+        return;
+      }
 
       const dados = JSON.parse(dadosSalvos) as DadosClienteSalvos;
-      setNome(dados.nome ?? "");
-      setSobrenome(dados.sobrenome ?? "");
+      setNomeCompleto(
+        dados.nomeCompleto ??
+          [dados.nome, dados.sobrenome].filter(Boolean).join(" ")
+      );
       setTelefone(dados.telefone ?? "");
-      setRua(dados.rua ?? "");
-      setNumeroEndereco(dados.numeroEndereco ?? "");
+      setEndereco(
+        dados.endereco ??
+          [dados.rua, dados.numeroEndereco].filter(Boolean).join(", ")
+      );
       setBairro(dados.bairro ?? "");
       setReferencia(dados.referencia ?? "");
       setCidadeEntrega(dados.cidadeEntrega ?? "");
@@ -346,17 +408,10 @@ export default function Catalogo({
       setSalvarDadosNoAparelho(true);
     } catch {
       window.localStorage.removeItem("guetto_dados_cliente");
+    } finally {
+      setPreferenciasCarregadas(true);
     }
   }, []);
-
-  function apagarDadosClienteSalvos() {
-    window.localStorage.removeItem("guetto_dados_cliente");
-    setSalvarDadosNoAparelho(false);
-    setDadosClienteRecuperados(false);
-    setAvisoDadosSalvos(
-      "Os dados pessoais salvos neste aparelho foram apagados."
-    );
-  }
 
   function estoqueDisponivel(produto: Produto) {
     if (produto.grupo_estoque && typeof produto.estoque_unidades === "number") {
@@ -383,11 +438,14 @@ export default function Catalogo({
       });
 
       return categoriaAtiva === "mais-vendidos" && !termo
-        ? filtrados.sort(
-            (produtoA, produtoB) =>
-              Number(produtoA.posicao_mais_vendido ?? 999) -
-              Number(produtoB.posicao_mais_vendido ?? 999)
-          )
+        ? filtrados
+            .filter((produto) => estoqueDisponivel(produto) > 0)
+            .sort(
+              (produtoA, produtoB) =>
+                Number(produtoA.posicao_mais_vendido ?? 999) -
+                Number(produtoB.posicao_mais_vendido ?? 999)
+            )
+            .slice(0, 8)
         : filtrados;
     },
     [busca, categoriaAtiva, produtos]
@@ -552,6 +610,44 @@ export default function Catalogo({
     ? minutosAgora >= minutosAbertura && minutosAgora < minutosFechamento
     : minutosAgora >= minutosAbertura || minutosAgora < minutosFechamento);
 
+  useEffect(() => {
+    if (
+      preferenciasCarregadas &&
+      atendimentoAberto &&
+      !somenteRetiradaHoje &&
+      !cidadeEntrega
+    ) {
+      setSeletorCidadeAberto(true);
+    }
+  }, [
+    preferenciasCarregadas,
+    atendimentoAberto,
+    somenteRetiradaHoje,
+    cidadeEntrega,
+  ]);
+
+  function escolherCidade(cidade: CidadeEntrega) {
+    setCidadeEntrega(cidade);
+    window.localStorage.setItem("guetto_cidade", cidade);
+    setSeletorCidadeAberto(false);
+    setErrosCheckout((erros) => ({ ...erros, geral: undefined }));
+    if (abrirCheckoutAposCidade) {
+      setAbrirCheckoutAposCidade(false);
+      setEtapaCheckout(1);
+      window.requestAnimationFrame(() => setCarrinhoAberto(true));
+    }
+  }
+
+  function abrirCarrinhoParaPedido() {
+    if (!cidadeEntrega) {
+      setAbrirCheckoutAposCidade(true);
+      setSeletorCidadeAberto(true);
+      return;
+    }
+    setEtapaCheckout(1);
+    setCarrinhoAberto(true);
+  }
+
   function chaveItem(item: Produto & { sabor?: string; escolhasCombo?: EscolhasCombo }) {
     return `${item.id}:${item.sabor ?? ""}:${item.escolhasCombo ? JSON.stringify(item.escolhasCombo) : ""}`;
   }
@@ -569,8 +665,7 @@ export default function Catalogo({
     }
 
     setCarrinho(ultimoPedido);
-    setEtapaCheckout(1);
-    setCarrinhoAberto(true);
+    abrirCarrinhoParaPedido();
     if (ultimoPedidoFoiAjustado) {
       setAvisoCarrinho(
         "Alguns itens do último pedido foram ajustados conforme o estoque e os preços atuais."
@@ -604,6 +699,9 @@ export default function Catalogo({
 
   function alterarQuantidade(produto: Produto & { sabor?: string; escolhasCombo?: EscolhasCombo }, alteracao: number) {
     if (somenteRetiradaHoje) return;
+    if (alteracao > 0) {
+      setConfirmacaoProduto(`${formatarNomeProduto(produto.nome)} ADICIONADO ✓`);
+    }
     setCarrinho((itens) => {
       const chave = chaveItem(produto);
       const itemAtual = itens.find((item) => chaveItem(item) === chave);
@@ -700,6 +798,9 @@ export default function Catalogo({
           : item
       );
     });
+    setConfirmacaoProduto(
+      `${formatarNomeProduto(geloEmConfiguracao.nome)} ADICIONADO ✓`
+    );
     setGeloEmConfiguracao(null);
   }
 
@@ -733,6 +834,9 @@ export default function Catalogo({
       ...(comboEmConfiguracao.nome.toLowerCase().includes("jack daniel") ? { whisky: saborWhisky } : {}),
     };
     setCarrinho((itens) => [...itens, { ...comboEmConfiguracao, quantidade: 1, escolhasCombo: escolhas }]);
+    setConfirmacaoProduto(
+      `${formatarNomeProduto(comboEmConfiguracao.nome)} ADICIONADO ✓`
+    );
     setComboEmConfiguracao(null);
   }
 
@@ -761,62 +865,106 @@ export default function Catalogo({
     ].slice(0, quantidadePagamentos);
   }
 
+  function exibirErrosCheckout(erros: ErrosCheckout) {
+    setErrosCheckout(erros);
+    const primeiroCampo = ([
+      "nomeCompleto",
+      "telefone",
+      "endereco",
+      "bairro",
+    ] as const).find((campo) => erros[campo]);
+    if (!primeiroCampo) return;
+    const nomesCampos: Record<Exclude<keyof ErrosCheckout, "geral">, string> = {
+      nomeCompleto: "nome-completo",
+      telefone: "telefone",
+      endereco: "endereco",
+      bairro: "bairro",
+    };
+    window.requestAnimationFrame(() => {
+      const campo = document.querySelector<HTMLInputElement>(
+        `[name="${nomesCampos[primeiroCampo]}"]`
+      );
+      campo?.focus();
+      campo?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+
   function validarIdentificacaoEEndereco() {
     if (somenteRetiradaHoje) {
-      alert(
-        "Hoje o site está disponível apenas para consulta. As compras devem ser feitas presencialmente na loja."
-      );
+      exibirErrosCheckout({
+        geral:
+          "Hoje não há delivery. As compras devem ser feitas pessoalmente na loja.",
+      });
       return false;
     }
 
     if (!atendimentoAberto) {
-      alert("A Guetto Delivery está fechada no momento.");
+      exibirErrosCheckout({ geral: "A Guetto Delivery está fechada agora." });
       return false;
     }
     if (carrinho.length === 0) {
-      alert("Adicione pelo menos um produto antes de finalizar.");
+      exibirErrosCheckout({ geral: "Seu carrinho está vazio." });
       return false;
     }
-    if (!nome.trim() || !sobrenome.trim() || !telefone.trim()) {
-      alert("Preencha nome, sobrenome e telefone para continuar.");
+
+    if (!cidadeEntrega) {
+      exibirErrosCheckout({ geral: "ESCOLHA A CIDADE DA ENTREGA." });
+      setAbrirCheckoutAposCidade(false);
+      setSeletorCidadeAberto(true);
       return false;
     }
-    if (
-      !somenteRetiradaHoje &&
-      (!rua.trim() ||
-        !numeroEndereco.trim() ||
-        !bairro.trim() ||
-        !cidadeEntrega)
-    ) {
-      alert("Preencha o endereço, o bairro e a cidade para continuar.");
+
+    const erros: ErrosCheckout = {};
+    if (nomeCompleto.trim().split(/\s+/).length < 2) {
+      erros.nomeCompleto = "DIGITE SEU NOME E SOBRENOME.";
+    }
+    const telefoneNumeros = telefone.replace(/\D/g, "");
+    if (telefoneNumeros.length < 10 || telefoneNumeros.length > 11) {
+      erros.telefone = "DIGITE UM WHATSAPP COM DDD.";
+    }
+    if (endereco.trim().length < 4) {
+      erros.endereco = "DIGITE A RUA E O NÚMERO.";
+    }
+    if (!bairro.trim()) {
+      erros.bairro = "DIGITE O BAIRRO.";
+    }
+    if (Object.keys(erros).length > 0) {
+      exibirErrosCheckout(erros);
       return false;
     }
 
     if (!avaliacaoPedidoMinimoLongNeck.atingido) {
-      alert(mensagemPedidoMinimoLongNeck(avaliacaoPedidoMinimoLongNeck));
+      exibirErrosCheckout({
+        geral: mensagemPedidoMinimoLongNeck(avaliacaoPedidoMinimoLongNeck),
+      });
       return false;
     }
 
     if (!somenteRetiradaHoje && !avaliacaoPedidoMinimo.atingido) {
-      alert(
-        mensagemPedidoMinimo(
+      exibirErrosCheckout({
+        geral: mensagemPedidoMinimo(
           avaliacaoPedidoMinimo,
           cidadeEntrega as CidadeEntrega
-        )
-      );
+        ),
+      });
       return false;
     }
 
     if (quantidadeGarrafas300 > 0 && quantidadeGarrafas300 < 10) {
-      alert("O pedido mínimo para cervejas em garrafa de 300 ml é de 10 unidades.");
+      exibirErrosCheckout({
+        geral: "GARRAFAS DE 300 ML: O MÍNIMO É 10 UNIDADES.",
+      });
       return false;
     }
 
     if (quantidadeGarrafas300 > 0 && !vasilhameConfirmado) {
-      alert("Confirme que o vasilhame é obrigatório e não está incluso no pedido.");
+      exibirErrosCheckout({
+        geral: "CONFIRME QUE VOCÊ VAI LEVAR O VASILHAME.",
+      });
       return false;
     }
 
+    setErrosCheckout({});
     return true;
   }
 
@@ -824,28 +972,35 @@ export default function Catalogo({
     const pagamentos = pagamentosSelecionados();
 
     if (pagamentos.some((pagamento) => !pagamento.forma)) {
-      alert("Escolha todas as formas de pagamento.");
+      setErroPagamento(
+        cartaoEmEscolha
+          ? "ESCOLHA CRÉDITO OU DÉBITO."
+          : "ESCOLHA COMO VAI PAGAR."
+      );
       return false;
     }
 
     if (quantidadePagamentos > 1) {
       const soma = pagamentos.reduce((total, pagamento) => total + valorNumerico(pagamento.valor), 0);
       if (pagamentos.some((pagamento) => !pagamento.valor || valorNumerico(pagamento.valor) <= 0) || Math.abs(soma - valorTotal) > 0.01) {
-        alert(`Os pagamentos precisam somar ${formatarPreco(valorTotal)}.`);
+        setErroPagamento(
+          `OS VALORES PRECISAM SOMAR ${formatarPreco(valorTotal)}.`
+        );
         return false;
       }
     }
 
     if (pagamentos.some((pagamento) => pagamento.forma === "dinheiro" && pagamento.precisaTroco === null)) {
-      alert("Informe se vai precisar de troco ou não em cada pagamento em dinheiro.");
+      setErroPagamento("DIGA SE PRECISA DE TROCO.");
       return false;
     }
 
     if (pagamentos.some((pagamento) => pagamento.forma === "dinheiro" && pagamento.precisaTroco && valorNumerico(pagamento.trocoPara) <= 0)) {
-      alert("Informe o valor para o qual o cliente precisa de troco.");
+      setErroPagamento("DIGITE O VALOR PARA O TROCO.");
       return false;
     }
 
+    setErroPagamento("");
     return true;
   }
 
@@ -869,13 +1024,14 @@ export default function Catalogo({
 
     if (!confirmado) {
       setMaiorDeIdadeConfirmado(false);
+      setErroRevisao("");
       setCarrinhoAberto(false);
       setRevisaoAberta(true);
       return;
     }
 
     if (!maiorDeIdadeConfirmado) {
-      alert("Confirme que você tem 18 anos ou mais para enviar o pedido.");
+      setErroRevisao("CONFIRME QUE VOCÊ TEM 18 ANOS OU MAIS.");
       return;
     }
 
@@ -901,13 +1057,13 @@ export default function Catalogo({
     const pedido = [
       "Olá! Gostaria de fazer este pedido:",
       "",
-      `Cliente: ${nome.trim()} ${sobrenome.trim()}`,
+      `Cliente: ${nomeCompleto.trim()}`,
       `Telefone: ${telefone.trim()}`,
       ...(somenteRetiradaHoje ? ["Atendimento: Retirada na loja"] : []),
       ...(!somenteRetiradaHoje
         ? [
             `Cidade: ${cidadeEntrega}`,
-            `Endereço: ${rua.trim()}, ${numeroEndereco.trim()}`,
+            `Endereço: ${endereco.trim()}`,
             `Bairro: ${bairro.trim()}`,
             ...(referencia.trim()
               ? [`Referência: ${referencia.trim()}`]
@@ -933,12 +1089,12 @@ export default function Catalogo({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          cliente_nome: `${nome.trim()} ${sobrenome.trim()}`,
+          cliente_nome: nomeCompleto.trim(),
           telefone: telefone.trim(),
           tipo_atendimento: somenteRetiradaHoje ? "retirada" : "delivery",
           endereco: somenteRetiradaHoje
             ? "Retirada na loja"
-            : `${rua.trim()}, ${numeroEndereco.trim()}`,
+            : endereco.trim(),
           bairro: somenteRetiradaHoje ? null : bairro.trim(),
           referencia: somenteRetiradaHoje ? null : referencia.trim() || null,
           cidade_entrega: somenteRetiradaHoje ? null : cidadeEntrega,
@@ -974,7 +1130,9 @@ export default function Catalogo({
 
       if (!respostaPedido.ok) {
         const erro = await respostaPedido.json().catch(() => null);
-        alert(erro?.error ?? "Não foi possível registrar o pedido.");
+        setErroRevisao(
+          erro?.error ?? "NÃO FOI POSSÍVEL CONFIRMAR. TENTE NOVAMENTE."
+        );
         return;
       }
 
@@ -983,13 +1141,12 @@ export default function Catalogo({
       const pedidoCriadoEm = new Date().toISOString();
       const linkAcompanhamento = `${window.location.origin}/acompanhar/${pedidoId}`;
       const pedidoFinal = `${pedido}\n\nAcompanhe seu pedido:\n${linkAcompanhamento}`;
+      const linkWhatsApp = `https://wa.me/${WHATSAPP_GUETTO}?text=${encodeURIComponent(pedidoFinal)}`;
 
       const dadosCliente: DadosClienteSalvos = {
-        nome: nome.trim(),
-        sobrenome: sobrenome.trim(),
+        nomeCompleto: nomeCompleto.trim(),
         telefone: telefone.trim(),
-        rua: rua.trim(),
-        numeroEndereco: numeroEndereco.trim(),
+        endereco: endereco.trim(),
         bairro: bairro.trim(),
         referencia: referencia.trim(),
         cidadeEntrega,
@@ -1049,6 +1206,12 @@ export default function Catalogo({
       setRevisaoAberta(false);
       setEtapaCheckout(1);
       setMaiorDeIdadeConfirmado(false);
+      setErroRevisao("");
+      setPedidoConfirmado({
+        id: pedidoId,
+        linkAcompanhamento,
+        linkWhatsApp,
+      });
 
       try {
         await navigator.clipboard.writeText(pedidoFinal);
@@ -1056,11 +1219,10 @@ export default function Catalogo({
         // Copiar é apenas uma conveniência e não pode impedir a abertura do WhatsApp.
       }
 
-      window.location.assign(
-        `https://wa.me/${WHATSAPP_GUETTO}?text=${encodeURIComponent(pedidoFinal)}`
-      );
     } catch {
-      alert("Não foi possível enviar o pedido. Verifique sua internet e tente novamente.");
+      setErroRevisao(
+        "NÃO FOI POSSÍVEL CONFIRMAR. VERIFIQUE SUA INTERNET E TENTE DE NOVO."
+      );
     } finally {
       setEnviandoPedido(false);
     }
@@ -1122,8 +1284,8 @@ export default function Catalogo({
                 }`}
               >
                 {faltaPedidoMinimo === 0
-                  ? "Pedido mínimo atingido"
-                  : `Faltam ${formatarPreco(faltaPedidoMinimo ?? 0)}`}
+                  ? "PRONTO PARA PEDIR ✓"
+                  : `FALTAM ${formatarPreco(faltaPedidoMinimo ?? 0)}`}
               </p>
               {!compacto && (
                 <span className="shrink-0 text-xs text-zinc-400">
@@ -1168,6 +1330,62 @@ export default function Catalogo({
         somenteRetiradaHoje ? "pb-12" : "pb-28 xl:pr-[21rem]"
       }`}
     >
+      {confirmacaoProduto && (
+        <div
+          className="fixed left-1/2 top-4 z-[100] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-2xl bg-green-500 px-5 py-4 text-center font-black text-black shadow-2xl"
+          role="status"
+          aria-live="polite"
+        >
+          {confirmacaoProduto}
+        </div>
+      )}
+
+      {!somenteRetiradaHoje && seletorCidadeAberto && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-cidade"
+        >
+          <div className="w-full max-w-md rounded-3xl border-2 border-yellow-400 bg-zinc-950 p-5 shadow-2xl sm:p-7">
+            <MapPin className="mx-auto text-yellow-400" size={42} />
+            <h2
+              id="titulo-cidade"
+              className="mt-3 text-center text-3xl font-black text-white"
+            >
+              ONDE VOCÊ ESTÁ?
+            </h2>
+            <p className="mt-2 text-center text-zinc-300">
+              Toque na cidade da entrega.
+            </p>
+            <div className="mt-5 grid gap-3">
+              {CIDADES_ENTREGA.map((cidade) => (
+                <button
+                  key={cidade.nome}
+                  type="button"
+                  onClick={() => escolherCidade(cidade.nome)}
+                  className="min-h-16 rounded-2xl bg-yellow-400 px-4 py-3 text-xl font-black text-black hover:bg-yellow-300"
+                >
+                  {cidade.nome}
+                  <span className="mt-1 block text-xs font-bold">
+                    PEDIDO MÍNIMO {formatarPreco(cidade.pedidoMinimo)}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {!abrirCheckoutAposCidade && (
+              <button
+                type="button"
+                onClick={() => setSeletorCidadeAberto(false)}
+                className="mt-4 w-full rounded-xl px-4 py-3 font-bold text-zinc-300 underline underline-offset-4"
+              >
+                SÓ QUERO OLHAR
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="mb-4 rounded-2xl border border-white/10 bg-black/25 p-4 shadow-2xl backdrop-blur-sm sm:p-6">
         <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -1194,32 +1412,42 @@ export default function Catalogo({
                 aria-label="Refazer último pedido"
               >
                 <RotateCcw size={18} aria-hidden="true" />
-                <span>Refazer último pedido</span>
+                <span>Repetir último pedido</span>
               </button>
             )}
-            <button
-              type="button"
-              onClick={acompanharPedido}
-              className="inline-flex min-w-[9rem] flex-1 items-center justify-center gap-2 rounded-lg border border-blue-400 px-3 py-2 text-sm font-bold text-blue-200 transition hover:bg-blue-400/10 sm:flex-none"
-              aria-label="Acompanhar meu pedido"
-            >
-              <Clock3 size={18} aria-hidden="true" />
-              <span>Acompanhar pedido</span>
-            </button>
-            <Link
-              href="/historico"
-              className="inline-flex min-w-[9rem] flex-1 items-center justify-center gap-2 rounded-lg border border-zinc-600 px-3 py-2 text-sm font-bold text-zinc-200 transition hover:bg-zinc-800 sm:flex-none"
-              aria-label="Abrir meu histórico de pedidos"
-            >
-              <History size={18} aria-hidden="true" />
-              <span>Meus pedidos</span>
-            </Link>
+            <details className="relative flex-1 sm:flex-none">
+              <summary className="flex cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-zinc-600 px-3 py-2 text-sm font-bold text-zinc-200 hover:bg-zinc-800">
+                <MoreHorizontal size={19} aria-hidden="true" /> Mais
+              </summary>
+              <div className="absolute right-0 top-12 z-40 grid min-w-56 gap-1 rounded-xl border border-zinc-700 bg-zinc-950 p-2 shadow-2xl">
+                {ultimoPedidoId && (
+                  <button
+                    type="button"
+                    onClick={acompanharPedido}
+                    className="flex items-center gap-2 rounded-lg px-3 py-3 text-left font-bold text-blue-200 hover:bg-zinc-800"
+                  >
+                    <Clock3 size={18} /> Acompanhar pedido
+                  </button>
+                )}
+                <Link
+                  href="/historico"
+                  className="flex items-center gap-2 rounded-lg px-3 py-3 font-bold text-zinc-200 hover:bg-zinc-800"
+                >
+                  <History size={18} /> Meus pedidos
+                </Link>
+                <a
+                  href="https://wa.me/554491271708?text=Olá!%20Preciso%20de%20ajuda%20com%20meu%20pedido."
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 rounded-lg px-3 py-3 font-bold text-green-300 hover:bg-zinc-800"
+                >
+                  <MessageCircle size={18} /> Pedir ajuda
+                </a>
+              </div>
+            </details>
             {!somenteRetiradaHoje && (
               <button
-                onClick={() => {
-                  setEtapaCheckout(1);
-                  setCarrinhoAberto(true);
-                }}
+                onClick={abrirCarrinhoParaPedido}
                 className="relative inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-yellow-400 px-3 py-2 text-sm font-bold text-black hover:bg-yellow-300 sm:flex-none sm:px-4"
                 aria-label="Abrir carrinho"
               >
@@ -1235,7 +1463,7 @@ export default function Catalogo({
         </div>
 
         <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 lg:grid-cols-[1fr_auto] lg:items-end">
-          <div className="grid grid-cols-3 gap-2 text-xs sm:text-sm">
+          <div className="grid grid-cols-2 gap-2 text-xs sm:text-sm">
             <div className="rounded-xl bg-zinc-900/80 p-3">
               {somenteRetiradaHoje ? (
                 <Store className="mb-1 text-yellow-400" size={18} />
@@ -1260,7 +1488,7 @@ export default function Catalogo({
                 {somenteRetiradaHoje ? "Diretamente na loja" : "Após confirmar"}
               </span>
             </div>
-            {somenteRetiradaHoje ? (
+            {somenteRetiradaHoje && (
               <a
                 href={GOOGLE_EMPRESA_URL}
                 target="_blank"
@@ -1271,17 +1499,6 @@ export default function Catalogo({
                 <MapPin className="mb-1 text-blue-300" size={18} />
                 <strong className="block text-white">Como chegar?</strong>
                 <span className="text-blue-200">Abrir no Google</span>
-              </a>
-            ) : (
-              <a
-                href="https://wa.me/554491271708?text=Olá!%20Preciso%20de%20ajuda%20com%20meu%20pedido."
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-xl bg-green-500/15 p-3 transition hover:bg-green-500/25"
-              >
-                <MessageCircle className="mb-1 text-green-400" size={18} />
-                <strong className="block text-white">Precisa de ajuda?</strong>
-                <span className="text-green-300">Fale conosco</span>
               </a>
             )}
           </div>
@@ -1304,26 +1521,32 @@ export default function Catalogo({
               </a>
             </div>
           ) : (
-            <label className="block text-sm font-bold text-zinc-200 lg:min-w-80">
+            <div className="text-sm font-bold text-zinc-200 lg:min-w-[28rem]">
               <span className="mb-1.5 flex items-center gap-2">
                 <MapPin size={17} className="text-yellow-400" />
-                Onde vamos entregar?
+                CIDADE DA ENTREGA
               </span>
-              <select
-                value={cidadeEntrega}
-                onChange={(event) =>
-                  setCidadeEntrega(event.target.value as "" | CidadeEntrega)
-                }
-                className="w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3 font-semibold text-white outline-none focus:border-yellow-400"
-              >
-                <option value="">Escolha sua cidade</option>
+              <div className="grid grid-cols-3 gap-2">
                 {CIDADES_ENTREGA.map((cidade) => (
-                  <option key={cidade.nome} value={cidade.nome}>
-                    {cidade.nome} · mínimo {formatarPreco(cidade.pedidoMinimo)}
-                  </option>
+                  <button
+                    key={cidade.nome}
+                    type="button"
+                    onClick={() => escolherCidade(cidade.nome)}
+                    aria-pressed={cidadeEntrega === cidade.nome}
+                    className={`min-h-16 rounded-xl border px-2 py-2 text-center text-xs font-black transition sm:text-sm ${
+                      cidadeEntrega === cidade.nome
+                        ? "border-yellow-400 bg-yellow-400 text-black"
+                        : "border-zinc-700 bg-zinc-900 text-white hover:border-yellow-400"
+                    }`}
+                  >
+                    <span className="block">{cidade.nome}</span>
+                    <span className="mt-1 block text-[10px] font-bold opacity-75">
+                      MÍN. {formatarPreco(cidade.pedidoMinimo)}
+                    </span>
+                  </button>
                 ))}
-              </select>
-            </label>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -1525,7 +1748,7 @@ export default function Catalogo({
                   )}
                   {produto.mais_vendido ? (
                     <span className="absolute left-3 top-3 rounded-full bg-red-600 px-3 py-1 text-xs font-bold text-white">
-                      🔥 #{produto.posicao_mais_vendido} mais vendido
+                      🔥 MAIS PEDIDO
                     </span>
                   ) : produto.destaque ? (
                     <span className="absolute left-3 top-3 rounded-full bg-yellow-400 px-3 py-1 text-xs font-bold text-black">
@@ -1537,6 +1760,9 @@ export default function Catalogo({
                       Esgotado
                     </span>
                   )}
+                  <span className="absolute bottom-3 right-3 rounded-lg bg-black/85 px-3 py-1.5 text-sm font-black text-white shadow-lg">
+                    {rotuloQuantidadeProduto(produto)}
+                  </span>
                 </div>
                 <div className="flex flex-1 flex-col p-4 sm:p-5">
                   <h3 className="line-clamp-2 min-h-12 text-lg font-bold sm:min-h-14 sm:text-xl">
@@ -1545,10 +1771,13 @@ export default function Catalogo({
                   {produtoEhEssencia && produto.estoque_opcoes ? (
                     <div className="mt-2 min-h-10 text-sm text-zinc-400">
                       <span className="font-bold text-zinc-300">
-                        Sabores disponíveis:
-                      </span>{" "}
-                      {saboresDoProduto(produto).join(", ")}
+                        Escolha o sabor
+                      </span>
                     </div>
+                  ) : eGeloDeSabor ? (
+                    <p className="mt-2 min-h-10 text-sm font-bold text-zinc-300">
+                      Escolha o sabor ao adicionar
+                    </p>
                   ) : (
                     produto.descricao && (
                       <p className="mt-2 line-clamp-2 min-h-10 text-sm text-zinc-400">
@@ -1612,7 +1841,7 @@ export default function Catalogo({
                           ? "Montar combo"
                           : exigeEscolhaDeSabor
                             ? "Escolher sabor"
-                            : "Adicionar"}
+                            : "+ ADICIONAR"}
                       </button>
                     )}
                   </div>
@@ -1815,10 +2044,7 @@ export default function Catalogo({
           </div>
           <button
             type="button"
-            onClick={() => {
-              setEtapaCheckout(1);
-              setCarrinhoAberto(true);
-            }}
+            onClick={abrirCarrinhoParaPedido}
             disabled={carrinho.length === 0}
             className="w-full rounded-xl bg-yellow-400 px-4 py-3 font-black text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
           >
@@ -1912,16 +2138,13 @@ export default function Catalogo({
       {!somenteRetiradaHoje && quantidadeTotal > 0 && !carrinhoAberto && (
         <button
           type="button"
-          onClick={() => {
-            setEtapaCheckout(1);
-            setCarrinhoAberto(true);
-          }}
+          onClick={abrirCarrinhoParaPedido}
           className="fixed bottom-4 left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-center justify-between rounded-2xl bg-yellow-400 px-5 py-4 font-black text-black shadow-2xl hover:bg-yellow-300 xl:hidden"
         >
           <span className="flex flex-col items-start">
             <span className="flex items-center gap-2">
               <ShoppingBag size={20} />
-              Carrinho ({quantidadeTotal})
+              {quantidadeTotal} {quantidadeTotal === 1 ? "ITEM" : "ITENS"} · CONTINUAR
             </span>
             <span className="text-xs font-semibold">
               {somenteRetiradaHoje
@@ -1929,7 +2152,7 @@ export default function Catalogo({
                 : pedidoMinimoAtual === null
                   ? "Escolha a cidade para ver o mínimo"
                   : faltaPedidoMinimo === 0
-                    ? "Pedido mínimo atingido"
+                    ? "PRONTO PARA PEDIR ✓"
                     : `Faltam ${formatarPreco(faltaPedidoMinimo ?? 0)}`}
             </span>
           </span>
@@ -1938,15 +2161,20 @@ export default function Catalogo({
       )}
 
       {!somenteRetiradaHoje && revisaoAberta && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4">
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-confirmacao"
+        >
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-yellow-400/50 bg-zinc-950 p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-black uppercase tracking-wider text-yellow-300">
                   Etapa 3 de 3
                 </p>
-                <h2 className="text-2xl font-black text-yellow-400">Confirme e envie</h2>
-                <p className="text-sm text-zinc-400">Revise, confirme sua idade e envie pelo WhatsApp.</p>
+                <h2 id="titulo-confirmacao" className="text-3xl font-black text-yellow-400">CONFIRMAR</h2>
+                <p className="text-sm text-zinc-400">Confira e confirme seu pedido.</p>
               </div>
               <button
                 type="button"
@@ -1960,9 +2188,9 @@ export default function Catalogo({
 
             <ol className="mt-5 grid grid-cols-3 gap-2 rounded-xl bg-zinc-900 p-3 text-center text-[10px] font-bold">
               {[
-                "Identificação",
-                "Pagamento",
-                "Concluir",
+                "ONDE ENTREGAR",
+                "COMO PAGAR",
+                "CONFIRMAR",
               ].map(
                 (etapa, indice) => (
                   <li
@@ -2014,13 +2242,13 @@ export default function Catalogo({
             </div>
 
             <div className="mt-5 rounded-xl border border-zinc-800 p-4 text-sm text-zinc-300">
-              <p className="font-bold text-white">{nome.trim()} {sobrenome.trim()}</p>
+              <p className="font-bold text-white">{nomeCompleto.trim()}</p>
               <p>{telefone.trim()}</p>
               {somenteRetiradaHoje ? (
                 <p className="font-bold text-yellow-300">Retirada na loja</p>
               ) : (
                 <>
-                  <p>{rua.trim()}, {numeroEndereco.trim()} — {bairro.trim()} — {cidadeEntrega}</p>
+                  <p>{endereco.trim()} — {bairro.trim()} — {cidadeEntrega}</p>
                   {referencia.trim() && <p>Referência: {referencia.trim()}</p>}
                 </>
               )}
@@ -2052,35 +2280,66 @@ export default function Catalogo({
               <span>Total</span>
               <span className="text-yellow-400">{formatarPreco(valorTotal)}</span>
             </div>
-            <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border-2 border-red-500/60 bg-red-950/40 p-4">
-              <input
-                type="checkbox"
-                checked={maiorDeIdadeConfirmado}
-                onChange={(event) =>
-                  setMaiorDeIdadeConfirmado(event.target.checked)
+            <button
+              type="button"
+              onClick={() => {
+                setMaiorDeIdadeConfirmado((confirmado) => !confirmado);
+                setErroRevisao("");
+              }}
+              aria-pressed={maiorDeIdadeConfirmado}
+              className={`mt-5 flex min-h-20 w-full items-center justify-center gap-3 rounded-2xl border-2 px-4 py-4 text-lg font-black transition ${
+                maiorDeIdadeConfirmado
+                  ? "border-green-400 bg-green-500 text-black"
+                  : "border-red-500 bg-red-950/50 text-white"
+              }`}
+            >
+              {maiorDeIdadeConfirmado && <Check size={26} />}
+              TENHO 18 ANOS OU MAIS
+            </button>
+            <p className="mt-2 text-center text-xs text-red-200">
+              Proibida a venda de bebidas e tabacaria para menores de 18 anos.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => {
+                const salvar = !salvarDadosNoAparelho;
+                setSalvarDadosNoAparelho(salvar);
+                if (!salvar) {
+                  window.localStorage.removeItem("guetto_dados_cliente");
+                  setDadosClienteRecuperados(false);
                 }
-                className="mt-1 h-5 w-5 shrink-0 accent-yellow-400"
-              />
+              }}
+              aria-pressed={salvarDadosNoAparelho}
+              className="mt-4 flex w-full items-center gap-3 rounded-xl border border-zinc-700 bg-zinc-900 p-4 text-left"
+            >
+              <span
+                className={`grid h-7 w-7 shrink-0 place-items-center rounded-md border ${
+                  salvarDadosNoAparelho
+                    ? "border-yellow-400 bg-yellow-400 text-black"
+                    : "border-zinc-500"
+                }`}
+              >
+                {salvarDadosNoAparelho && <Check size={18} />}
+              </span>
               <span>
                 <strong className="block text-white">
-                  Confirmo que tenho 18 anos ou mais
+                  SALVAR MEU ENDEREÇO
                 </strong>
-                <span className="mt-1 block text-sm text-red-200">
-                  A venda de bebidas alcoólicas e produtos de tabacaria é
-                  proibida para menores de 18 anos.
+                <span className="text-xs text-zinc-400">
+                  Para o próximo pedido neste aparelho.
                 </span>
               </span>
-            </label>
-            <div className="mt-5 flex items-start gap-3 rounded-xl border border-green-500/40 bg-green-500/10 p-4 text-sm text-green-100">
-              <MessageCircle className="mt-0.5 shrink-0 text-green-400" size={20} />
-              <p>
-                <strong className="block text-white">
-                  O pedido será registrado antes de abrir o WhatsApp
-                </strong>
-                A loja receberá o pedido no painel. Quando o WhatsApp abrir,
-                toque no botão verde de enviar para falar com a equipe também.
-              </p>
-            </div>
+            </button>
+
+            {erroRevisao && (
+              <div
+                className="mt-4 rounded-xl border-2 border-red-500 bg-red-950 p-4 text-center font-black text-red-100"
+                role="alert"
+              >
+                {erroRevisao}
+              </div>
+            )}
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <button
                 type="button"
@@ -2100,10 +2359,61 @@ export default function Catalogo({
                 className="rounded-xl bg-green-500 px-4 py-3 font-bold text-black hover:bg-green-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-300"
               >
                 {enviandoPedido
-                  ? "Registrando pedido..."
+                  ? "CONFIRMANDO..."
                   : maiorDeIdadeConfirmado
-                    ? "Registrar e abrir WhatsApp"
-                    : "Confirme sua idade"}
+                    ? "CONFIRMAR PEDIDO"
+                    : "CONFIRME SUA IDADE"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pedidoConfirmado && (
+        <div
+          className="fixed inset-0 z-[95] flex items-center justify-center bg-black/90 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-pedido-confirmado"
+        >
+          <div className="w-full max-w-md rounded-3xl border-2 border-green-400 bg-zinc-950 p-6 text-center shadow-2xl sm:p-8">
+            <CheckCircle2 className="mx-auto text-green-400" size={68} />
+            <h2
+              id="titulo-pedido-confirmado"
+              className="mt-4 text-3xl font-black text-white"
+            >
+              PEDIDO RECEBIDO!
+            </h2>
+            <p className="mt-2 text-lg font-bold text-green-300">
+              A loja já recebeu no painel.
+            </p>
+            <p className="mt-4 rounded-xl bg-green-500/15 p-4 font-black text-green-200">
+              NÃO PRECISA ENVIAR NO WHATSAPP.
+            </p>
+            <p className="mt-4 text-sm text-zinc-400">
+              Pedido nº {pedidoConfirmado.id.slice(0, 8).toUpperCase()}
+            </p>
+            <div className="mt-5 grid gap-3">
+              <a
+                href={pedidoConfirmado.linkAcompanhamento}
+                className="rounded-xl bg-yellow-400 px-4 py-4 text-lg font-black text-black hover:bg-yellow-300"
+              >
+                ACOMPANHAR PEDIDO
+              </a>
+              <a
+                href={pedidoConfirmado.linkWhatsApp}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-xl border border-green-500 px-4 py-3 font-bold text-green-300 hover:bg-green-500/10"
+              >
+                FALAR COM A LOJA (OPCIONAL)
+              </a>
+              <button
+                type="button"
+                onClick={() => setPedidoConfirmado(null)}
+                className="rounded-xl px-4 py-3 font-bold text-zinc-300 underline underline-offset-4"
+              >
+                CONTINUAR NO CARDÁPIO
               </button>
             </div>
           </div>
@@ -2125,7 +2435,7 @@ export default function Catalogo({
                   Etapa {etapaCheckout} de 3
                 </p>
                 <h2 id="titulo-checkout" className="text-2xl font-bold">
-                  {etapaCheckout === 1 ? "Identificação e endereço" : "Forma de pagamento"}
+                  {etapaCheckout === 1 ? "ONDE ENTREGAR" : "COMO PAGAR"}
                 </h2>
               </div>
               <button onClick={() => setCarrinhoAberto(false)} className="rounded-lg p-2 hover:bg-zinc-800" aria-label="Fechar carrinho">
@@ -2134,9 +2444,9 @@ export default function Catalogo({
             </div>
             <ol className="grid grid-cols-3 gap-2 border-b border-zinc-800 py-3 text-center text-[10px] font-bold text-zinc-500">
               {[
-                "Identificação",
-                "Pagamento",
-                "Concluir",
+                "ONDE ENTREGAR",
+                "COMO PAGAR",
+                "CONFIRMAR",
               ].map(
                 (etapa, indice) => (
                   <li
@@ -2211,12 +2521,10 @@ export default function Catalogo({
                     </span>
                     <div>
                       <h3 className="font-black text-white">
-                        {somenteRetiradaHoje ? "Retirada" : "Entrega"}
+                        ONDE ENTREGAR
                       </h3>
                       <p className="text-xs text-zinc-400">
-                        {somenteRetiradaHoje
-                          ? "Seus dados para confirmar a retirada"
-                          : "Seus dados e o endereço do pedido"}
+                        Preencha os dados abaixo
                       </p>
                     </div>
                   </div>
@@ -2227,48 +2535,87 @@ export default function Catalogo({
                         : "Preenchemos seu último endereço. Você pode editar qualquer campo antes de finalizar."}
                     </div>
                   )}
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="space-y-1.5 text-sm font-bold text-zinc-200">
-                      <span>Nome <span aria-hidden="true">*</span></span>
-                      <input
-                        name="nome"
-                        autoComplete="given-name"
-                        value={nome}
-                        onChange={(event) => setNome(event.target.value)}
-                        placeholder="Ex.: Maria"
-                        required
-                        className="w-full min-w-0 rounded-lg bg-zinc-900 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2"
-                      />
-                    </label>
-                    <label className="space-y-1.5 text-sm font-bold text-zinc-200">
-                      <span>Sobrenome <span aria-hidden="true">*</span></span>
-                      <input
-                        name="sobrenome"
-                        autoComplete="family-name"
-                        value={sobrenome}
-                        onChange={(event) => setSobrenome(event.target.value)}
-                        placeholder="Ex.: Silva"
-                        required
-                        className="w-full min-w-0 rounded-lg bg-zinc-900 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2"
-                      />
-                    </label>
+                  {errosCheckout.geral && (
+                    <div
+                      className="rounded-xl border-2 border-red-500 bg-red-950 p-4 text-center font-black text-red-100"
+                      role="alert"
+                    >
+                      {errosCheckout.geral}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-yellow-400/50 bg-yellow-400/10 p-4">
+                    <div>
+                      <span className="text-xs font-bold text-zinc-400">ENTREGA EM</span>
+                      <strong className="block text-lg text-yellow-300">
+                        {cidadeEntrega}
+                      </strong>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAbrirCheckoutAposCidade(false);
+                        setSeletorCidadeAberto(true);
+                      }}
+                      className="rounded-lg border border-yellow-400 px-3 py-2 text-sm font-black text-yellow-300"
+                    >
+                      TROCAR
+                    </button>
                   </div>
                   <label className="space-y-1.5 text-sm font-bold text-zinc-200">
-                    <span>WhatsApp com DDD <span aria-hidden="true">*</span></span>
+                    <span>NOME COMPLETO <span aria-hidden="true">*</span></span>
+                    <input
+                      name="nome-completo"
+                      autoComplete="name"
+                      value={nomeCompleto}
+                      onChange={(event) => {
+                        setNomeCompleto(event.target.value);
+                        setErrosCheckout((erros) => ({ ...erros, nomeCompleto: undefined }));
+                      }}
+                      placeholder="Ex.: Maria Silva"
+                      aria-invalid={Boolean(errosCheckout.nomeCompleto)}
+                      required
+                      className={`w-full min-w-0 rounded-xl border-2 bg-zinc-900 p-4 text-lg font-normal text-white outline-none focus:border-yellow-400 ${
+                        errosCheckout.nomeCompleto ? "border-red-500" : "border-transparent"
+                      }`}
+                    />
+                    {errosCheckout.nomeCompleto && (
+                      <span className="block font-black text-red-400" role="alert">
+                        {errosCheckout.nomeCompleto}
+                      </span>
+                    )}
+                  </label>
+                  <label className="space-y-1.5 text-sm font-bold text-zinc-200">
+                    <span>SEU WHATSAPP COM DDD <span aria-hidden="true">*</span></span>
                     <input
                       name="telefone"
                       autoComplete="tel"
                       value={telefone}
-                      onChange={(event) => setTelefone(event.target.value)}
+                      onChange={(event) => {
+                        setTelefone(event.target.value);
+                        setErrosCheckout((erros) => ({ ...erros, telefone: undefined }));
+                      }}
                       inputMode="tel"
                       placeholder="Ex.: (44) 99999-9999"
-                      aria-describedby="ajuda-telefone"
+                      aria-describedby={
+                        errosCheckout.telefone
+                          ? "erro-telefone"
+                          : "ajuda-telefone"
+                      }
+                      aria-invalid={Boolean(errosCheckout.telefone)}
                       required
-                      className="w-full rounded-lg bg-zinc-900 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2"
+                      className={`w-full rounded-xl border-2 bg-zinc-900 p-4 text-lg font-normal text-white outline-none focus:border-yellow-400 ${
+                        errosCheckout.telefone ? "border-red-500" : "border-transparent"
+                      }`}
                     />
-                    <span id="ajuda-telefone" className="block text-xs font-normal text-zinc-400">
-                      Usaremos este número para confirmar e atualizar seu pedido.
-                    </span>
+                    {errosCheckout.telefone ? (
+                      <span id="erro-telefone" className="block font-black text-red-400" role="alert">
+                        {errosCheckout.telefone}
+                      </span>
+                    ) : (
+                      <span id="ajuda-telefone" className="block text-xs font-normal text-zinc-400">
+                        A loja usa este número para falar com você.
+                      </span>
+                    )}
                   </label>
                   {somenteRetiradaHoje ? (
                     <div className="rounded-xl border border-yellow-400/40 bg-yellow-400/10 p-4 text-sm text-yellow-100">
@@ -2280,44 +2627,52 @@ export default function Catalogo({
                     </div>
                   ) : (
                     <>
-                      <div className="grid gap-3 sm:grid-cols-[1fr_7rem]">
-                        <label className="space-y-1.5 text-sm font-bold text-zinc-200">
-                          <span>Rua ou avenida <span aria-hidden="true">*</span></span>
-                          <input
-                            name="rua"
-                            autoComplete="address-line1"
-                            value={rua}
-                            onChange={(event) => setRua(event.target.value)}
-                            placeholder="Ex.: Rua das Flores"
-                            required
-                            className="w-full min-w-0 rounded-lg bg-zinc-900 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2"
-                          />
-                        </label>
-                        <label className="space-y-1.5 text-sm font-bold text-zinc-200">
-                          <span>Número <span aria-hidden="true">*</span></span>
-                          <input
-                            name="numero-endereco"
-                            autoComplete="address-line2"
-                            value={numeroEndereco}
-                            onChange={(event) => setNumeroEndereco(event.target.value)}
-                            placeholder="Ex.: 123"
-                            required
-                            className="w-full min-w-0 rounded-lg bg-zinc-900 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2"
-                          />
-                        </label>
-                      </div>
                       <label className="space-y-1.5 text-sm font-bold text-zinc-200">
-                        <span>Bairro <span aria-hidden="true">*</span></span>
+                        <span>RUA E NÚMERO <span aria-hidden="true">*</span></span>
+                        <input
+                          name="endereco"
+                          autoComplete="street-address"
+                          value={endereco}
+                          onChange={(event) => {
+                            setEndereco(event.target.value);
+                            setErrosCheckout((erros) => ({ ...erros, endereco: undefined }));
+                          }}
+                          placeholder="Ex.: Rua das Flores, 123"
+                          aria-invalid={Boolean(errosCheckout.endereco)}
+                          required
+                          className={`w-full rounded-xl border-2 bg-zinc-900 p-4 text-lg font-normal text-white outline-none focus:border-yellow-400 ${
+                            errosCheckout.endereco ? "border-red-500" : "border-transparent"
+                          }`}
+                        />
+                        {errosCheckout.endereco && (
+                          <span className="block font-black text-red-400" role="alert">
+                            {errosCheckout.endereco}
+                          </span>
+                        )}
+                      </label>
+                      <label className="space-y-1.5 text-sm font-bold text-zinc-200">
+                        <span>BAIRRO <span aria-hidden="true">*</span></span>
                         <input
                           name="bairro"
                           autoComplete="address-level3"
                           value={bairro}
-                          onChange={(event) => setBairro(event.target.value)}
+                          onChange={(event) => {
+                            setBairro(event.target.value);
+                            setErrosCheckout((erros) => ({ ...erros, bairro: undefined }));
+                          }}
                           placeholder="Ex.: Centro"
                           maxLength={100}
                           required
-                          className="w-full rounded-lg bg-zinc-900 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2"
+                          aria-invalid={Boolean(errosCheckout.bairro)}
+                          className={`w-full rounded-xl border-2 bg-zinc-900 p-4 text-lg font-normal text-white outline-none focus:border-yellow-400 ${
+                            errosCheckout.bairro ? "border-red-500" : "border-transparent"
+                          }`}
                         />
+                        {errosCheckout.bairro && (
+                          <span className="block font-black text-red-400" role="alert">
+                            {errosCheckout.bairro}
+                          </span>
+                        )}
                       </label>
                       <label className="space-y-1.5 text-sm font-bold text-zinc-200">
                         <span>Ponto de referência <span className="font-normal text-zinc-400">(opcional)</span></span>
@@ -2329,88 +2684,191 @@ export default function Catalogo({
                           className="w-full rounded-lg bg-zinc-900 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2"
                         />
                       </label>
-                      <label className="space-y-1.5 text-sm font-bold text-zinc-200">
-                        <span>Cidade de entrega <span aria-hidden="true">*</span></span>
-                        <select
-                          name="cidade-entrega"
-                          value={cidadeEntrega}
-                          onChange={(event) =>
-                            setCidadeEntrega(
-                              event.target.value as "" | CidadeEntrega
-                            )
-                          }
-                          required
-                          className="w-full rounded-lg bg-zinc-900 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2"
-                        >
-                          <option value="">Selecione sua cidade</option>
-                          {CIDADES_ENTREGA.map((cidade) => (
-                            <option key={cidade.nome} value={cidade.nome}>
-                              {cidade.nome} — pedido mínimo{" "}
-                              {formatarPreco(cidade.pedidoMinimo)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
                     </>
                   )}
-
-                  <div className="rounded-xl border border-zinc-700 bg-zinc-900/70 p-4 text-sm">
-                    <label className="flex cursor-pointer items-start gap-3">
-                      <input
-                        type="checkbox"
-                        checked={salvarDadosNoAparelho}
-                        onChange={(event) => {
-                          const salvar = event.target.checked;
-                          setSalvarDadosNoAparelho(salvar);
-                          setAvisoDadosSalvos("");
-                          if (!salvar) {
-                            window.localStorage.removeItem(
-                              "guetto_dados_cliente"
-                            );
-                            setDadosClienteRecuperados(false);
-                          }
-                        }}
-                        className="mt-1"
-                      />
-                      <span>
-                        <strong className="block text-white">
-                          Salvar meus dados neste aparelho
-                        </strong>
-                        <span className="text-zinc-400">
-                          Guarda nome, telefone e endereço somente neste
-                          navegador para preencher o próximo pedido.
-                        </span>
-                      </span>
-                    </label>
-                    {(dadosClienteRecuperados || avisoDadosSalvos) && (
-                      <div className="mt-3 border-t border-zinc-700 pt-3">
-                        {avisoDadosSalvos && (
-                          <p className="mb-2 text-green-300">
-                            {avisoDadosSalvos}
-                          </p>
-                        )}
-                        {dadosClienteRecuperados && (
-                          <button
-                            type="button"
-                            onClick={apagarDadosClienteSalvos}
-                            className="font-bold text-red-400 underline underline-offset-4 hover:text-red-300"
-                          >
-                            Apagar meus dados salvos
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    <a
-                      href="/privacidade"
-                      className="mt-3 inline-block font-semibold text-yellow-300 underline underline-offset-4"
-                    >
-                      Saiba como seus dados são utilizados
-                    </a>
-                  </div>
                     </>
                   )}
 
                   {etapaCheckout === 2 && (
+                    <div id="escolha-pagamento" className="space-y-4">
+                      <div className="flex items-center gap-3 rounded-xl border-2 border-yellow-400 bg-yellow-400/10 p-4">
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-yellow-400 font-black text-black">
+                          2
+                        </span>
+                        <div>
+                          <h3 className="text-xl font-black text-yellow-300">
+                            COMO VAI PAGAR?
+                          </h3>
+                          <p className="text-sm text-zinc-300">Toque em uma opção.</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPrimeiroPagamento({ ...pagamentoVazio, forma: "pix" });
+                            setCartaoEmEscolha(false);
+                            setErroPagamento("");
+                          }}
+                          aria-pressed={primeiroPagamento.forma === "pix"}
+                          className={`min-h-24 rounded-2xl border-2 px-2 py-3 font-black ${
+                            primeiroPagamento.forma === "pix"
+                              ? "border-green-400 bg-green-500 text-black"
+                              : "border-zinc-700 bg-zinc-900 text-white"
+                          }`}
+                        >
+                          <QrCode className="mx-auto mb-2" size={28} /> PIX
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPrimeiroPagamento({ ...pagamentoVazio, forma: "dinheiro" });
+                            setCartaoEmEscolha(false);
+                            setErroPagamento("");
+                          }}
+                          aria-pressed={primeiroPagamento.forma === "dinheiro"}
+                          className={`min-h-24 rounded-2xl border-2 px-2 py-3 font-black ${
+                            primeiroPagamento.forma === "dinheiro"
+                              ? "border-green-400 bg-green-500 text-black"
+                              : "border-zinc-700 bg-zinc-900 text-white"
+                          }`}
+                        >
+                          <Banknote className="mx-auto mb-2" size={28} /> DINHEIRO
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCartaoEmEscolha(true);
+                            if (!["credito", "debito"].includes(primeiroPagamento.forma)) {
+                              setPrimeiroPagamento(pagamentoVazio);
+                            }
+                            setErroPagamento("");
+                          }}
+                          aria-pressed={cartaoEmEscolha || ["credito", "debito"].includes(primeiroPagamento.forma)}
+                          className={`min-h-24 rounded-2xl border-2 px-2 py-3 font-black ${
+                            cartaoEmEscolha || ["credito", "debito"].includes(primeiroPagamento.forma)
+                              ? "border-green-400 bg-green-500 text-black"
+                              : "border-zinc-700 bg-zinc-900 text-white"
+                          }`}
+                        >
+                          <CreditCard className="mx-auto mb-2" size={28} /> CARTÃO
+                        </button>
+                      </div>
+
+                      {(cartaoEmEscolha || ["credito", "debito"].includes(primeiroPagamento.forma)) && (
+                        <div className="rounded-xl border border-green-400/50 bg-green-500/10 p-3">
+                          <p className="mb-3 text-center font-black text-white">
+                            QUAL CARTÃO?
+                          </p>
+                          <div className="grid grid-cols-2 gap-3">
+                            {([
+                              ["credito", "CRÉDITO"],
+                              ["debito", "DÉBITO"],
+                            ] as const).map(([valor, rotulo]) => (
+                              <button
+                                key={valor}
+                                type="button"
+                                onClick={() => {
+                                  setPrimeiroPagamento({ ...pagamentoVazio, forma: valor });
+                                  setCartaoEmEscolha(true);
+                                  setErroPagamento("");
+                                }}
+                                className={`rounded-xl border-2 px-3 py-4 font-black ${
+                                  primeiroPagamento.forma === valor
+                                    ? "border-yellow-400 bg-yellow-400 text-black"
+                                    : "border-zinc-600 bg-zinc-900 text-white"
+                                }`}
+                              >
+                                {rotulo}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {!dividirPagamentoAberto && primeiroPagamento.forma === "dinheiro" && (
+                        <div className="rounded-xl border-2 border-yellow-400 bg-yellow-400/10 p-4">
+                          <p className="text-center text-lg font-black text-yellow-200">
+                            PRECISA DE TROCO?
+                          </p>
+                          <div className="mt-3 grid grid-cols-2 gap-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPrimeiroPagamento({ ...primeiroPagamento, precisaTroco: false, trocoPara: "" });
+                                setErroPagamento("");
+                              }}
+                              className={`rounded-xl border-2 px-3 py-4 font-black ${
+                                primeiroPagamento.precisaTroco === false
+                                  ? "border-green-400 bg-green-500 text-black"
+                                  : "border-zinc-600 bg-zinc-900 text-white"
+                              }`}
+                            >
+                              NÃO
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPrimeiroPagamento({ ...primeiroPagamento, precisaTroco: true });
+                                setErroPagamento("");
+                              }}
+                              className={`rounded-xl border-2 px-3 py-4 font-black ${
+                                primeiroPagamento.precisaTroco === true
+                                  ? "border-green-400 bg-green-500 text-black"
+                                  : "border-zinc-600 bg-zinc-900 text-white"
+                              }`}
+                            >
+                              SIM
+                            </button>
+                          </div>
+                          {primeiroPagamento.precisaTroco && (
+                            <label className="mt-4 block font-bold text-white">
+                              TROCO PARA QUANTO?
+                              <input
+                                name="troco-primeiro-pagamento"
+                                value={primeiroPagamento.trocoPara}
+                                onChange={(event) => {
+                                  setPrimeiroPagamento({ ...primeiroPagamento, trocoPara: event.target.value });
+                                  setErroPagamento("");
+                                }}
+                                inputMode="decimal"
+                                placeholder="Ex.: 100,00"
+                                className="mt-2 w-full rounded-xl border-2 border-zinc-700 bg-zinc-900 p-4 text-lg font-normal outline-none focus:border-yellow-400"
+                              />
+                            </label>
+                          )}
+                        </div>
+                      )}
+
+                      {erroPagamento && (
+                        <div className="rounded-xl border-2 border-red-500 bg-red-950 p-4 text-center font-black text-red-100" role="alert">
+                          {erroPagamento}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const abrir = !dividirPagamentoAberto;
+                          setDividirPagamentoAberto(abrir);
+                          setQuantidadePagamentos(abrir ? 2 : 1);
+                          if (!abrir) {
+                            setSegundoPagamento(pagamentoVazio);
+                            setTerceiroPagamento(pagamentoVazio);
+                          }
+                          setErroPagamento("");
+                        }}
+                        className="w-full rounded-xl px-4 py-3 text-sm font-bold text-zinc-300 underline underline-offset-4"
+                      >
+                        {dividirPagamentoAberto
+                          ? "NÃO QUERO DIVIDIR O PAGAMENTO"
+                          : "PRECISA DIVIDIR O PAGAMENTO?"}
+                      </button>
+                    </div>
+                  )}
+
+                  {etapaCheckout === 2 && dividirPagamentoAberto && (
                     <>
                   <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-yellow-400 bg-yellow-400/10 p-4">
                     <div className="flex items-center gap-3">
@@ -2418,9 +2876,9 @@ export default function Catalogo({
                         2
                       </span>
                       <div>
-                        <h3 className="font-black text-yellow-300">Pagamento</h3>
+                        <h3 className="font-black text-yellow-300">DIVIDIR PAGAMENTO</h3>
                         <p className="text-xs text-zinc-300">
-                          Escolha uma ou mais formas
+                          Informe o valor de cada forma
                         </p>
                       </div>
                     </div>
@@ -2436,7 +2894,6 @@ export default function Catalogo({
                         }
                         className="rounded-lg bg-zinc-800 px-3 py-2 outline-none ring-yellow-400 focus:ring-2"
                       >
-                        <option value={1}>1 forma</option>
                         <option value={2}>2 formas</option>
                         <option value={3}>3 formas</option>
                       </select>
@@ -2579,9 +3036,9 @@ export default function Catalogo({
                   type="button"
                   onClick={avancarParaPagamento}
                   disabled={carrinho.length === 0 || !atendimentoAberto}
-                  className="w-full rounded-lg bg-yellow-400 px-4 py-3 font-bold text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+                  className="w-full rounded-xl bg-yellow-400 px-4 py-4 text-lg font-black text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
                 >
-                  Continuar para pagamento
+                  CONTINUAR
                 </button>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
@@ -2598,14 +3055,14 @@ export default function Catalogo({
                     disabled={carrinho.length === 0 || !atendimentoAberto}
                     className="rounded-lg bg-yellow-400 px-4 py-3 font-bold text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
                   >
-                    Revisar e concluir
+                    CONTINUAR
                   </button>
                 </div>
               )}
               <p className="mt-2 text-center text-xs text-zinc-400">
                 {etapaCheckout === 1
-                  ? "Seus dados serão usados somente para este pedido."
-                  : "Na próxima tela, confirme sua idade e envie o pedido."}
+                  ? "Próximo: escolher o pagamento."
+                  : "Próximo: confirmar o pedido."}
               </p>
             </div>
           </aside>

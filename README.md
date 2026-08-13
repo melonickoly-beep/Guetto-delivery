@@ -36,6 +36,6 @@ navegador. Cadastre o estoque real antes de liberar os produtos para venda.
 ## Fluxo do pedido
 
 O navegador envia somente identificadores e quantidades. A API valida novamente
-os produtos, preços e estoque no servidor, registra o pedido e então abre o
-WhatsApp para o cliente confirmar o envio. O painel permite acompanhar e alterar
-o status dos pedidos.
+os produtos, preços e estoque no servidor e registra o pedido diretamente no
+painel. Depois da confirmação, o WhatsApp fica disponível apenas como contato
+opcional. O painel permite acompanhar e alterar o status dos pedidos.
