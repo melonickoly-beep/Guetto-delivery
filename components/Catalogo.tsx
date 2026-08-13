@@ -211,11 +211,9 @@ export default function Catalogo({
   const categoriaInicial =
     produtos.some((produto) => produto.mais_vendido)
       ? "mais-vendidos"
-      : produtos.some((produto) => produto.destaque)
-        ? "destaques"
       : categorias.find((categoria) => categoria.nome === "Combos")?.id ??
-    categorias[0]?.id ??
-    null;
+        categorias[0]?.id ??
+        null;
   const [categoriaAtiva, setCategoriaAtiva] = useState<string | null>(
     categoriaInicial
   );
@@ -439,9 +437,7 @@ export default function Catalogo({
           termo.length > 0 ||
           (categoriaAtiva === "mais-vendidos"
             ? produto.mais_vendido
-            : categoriaAtiva === "destaques"
-              ? produto.destaque
-              : produto.categoria_id === categoriaAtiva);
+            : produto.categoria_id === categoriaAtiva);
         const textoProduto = normalizarTexto(
           `${produto.nome} ${produto.descricao ?? ""}`
         );
@@ -547,6 +543,7 @@ export default function Catalogo({
       nome: item.nome,
       descricao: item.descricao,
       subtotal: calcularSubtotalItem(item),
+      quantidade: item.quantidade,
     })),
     cidadeEntrega || null
   );
@@ -1348,7 +1345,25 @@ export default function Catalogo({
               <p className="mt-2 text-xs text-zinc-300">
                 {avaliacaoPedidoMinimo.liberadoPor === "caixa_cerveja"
                   ? "Latas avulsas liberadas pela caixa/pack fechado de cerveja."
-                  : "Latas avulsas não entram nessa soma. Também liberamos com R$ 20,00 em tabacaria ou uma caixa/pack fechado de cerveja."}
+                  : avaliacaoPedidoMinimo.liberadoPor === "caixa_mista"
+                    ? "Caixa mista completa: 12 latas. O total usa o preço avulso de cada lata."
+                    : avaliacaoPedidoMinimo.liberadoPor ===
+                        "pack_misto_long_neck"
+                      ? "Latas avulsas liberadas pelo pack misto de 6 long necks."
+                    : avaliacaoPedidoMinimo.liberadoPor === "cidade" ||
+                        avaliacaoPedidoMinimo.liberadoPor === "tabacaria"
+                      ? "Latas avulsas liberadas pelos outros produtos do pedido. O total usa o preço avulso de cada lata."
+                      : `Você pode misturar marcas. ${avaliacaoPedidoMinimo.faltaLatasParaCaixaMista === 1 ? "Falta 1 lata" : `Faltam ${avaliacaoPedidoMinimo.faltaLatasParaCaixaMista} latas`} para completar uma caixa mista de 12; o total usa os preços avulsos. Também liberamos com R$ 20,00 em tabacaria ou uma caixa/pack fechado.`}
+              </p>
+            )}
+            {!compacto && avaliacaoPedidoMinimoLongNeck.temLongNeckAvulsa && (
+              <p className="mt-2 text-xs text-zinc-300">
+                {avaliacaoPedidoMinimoLongNeck.quantidade >=
+                avaliacaoPedidoMinimoLongNeck.minimo
+                  ? "Pack misto completo: 6 long necks. Você pode misturar marcas e o total usa o preço avulso de cada unidade."
+                  : avaliacaoPedidoMinimoLongNeck.liberadoPorOutrosProdutos
+                    ? "Long necks avulsas liberadas pelos outros produtos do pedido."
+                    : `Você pode misturar marcas. ${avaliacaoPedidoMinimoLongNeck.falta === 1 ? "Falta 1 long neck" : `Faltam ${avaliacaoPedidoMinimoLongNeck.falta} long necks`} para completar um pack misto de 6; o total usa os preços avulsos.`}
               </p>
             )}
           </>
@@ -1637,9 +1652,6 @@ export default function Catalogo({
           {produtos.some((produto) => produto.mais_vendido) && (
             <option value="mais-vendidos">🔥 Mais vendidos</option>
           )}
-          {produtos.some((produto) => produto.destaque) && (
-            <option value="destaques">⭐ Ofertas e destaques</option>
-          )}
           {categorias.map((categoria) => (
             <option key={categoria.id} value={categoria.id}>
               {categoria.icone} {categoria.nome}
@@ -1661,22 +1673,6 @@ export default function Catalogo({
               }`}
             >
               🔥 Mais vendidos
-            </button>
-          )}
-          {produtos.some((produto) => produto.destaque) && (
-            <button
-              type="button"
-              onClick={() => {
-                setBusca("");
-                setCategoriaAtiva("destaques");
-              }}
-              className={`whitespace-nowrap rounded-full border px-4 py-2 font-semibold transition ${
-                categoriaAtiva === "destaques" && !busca
-                  ? "border-yellow-400 bg-yellow-400 text-black"
-                  : "border-zinc-700 bg-zinc-900 hover:border-yellow-400"
-              }`}
-            >
-              ⭐ Ofertas e destaques
             </button>
           )}
           {categorias.map((categoria) => (

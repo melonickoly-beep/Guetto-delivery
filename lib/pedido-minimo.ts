@@ -1,5 +1,6 @@
 export const PEDIDO_MINIMO_TABACARIA = 20;
 export const PEDIDO_MINIMO_LONG_NECK = 6;
+export const QUANTIDADE_CAIXA_MISTA_LATAS = 12;
 
 export const CIDADES_ENTREGA = [
   { nome: "Paranacity", pedidoMinimo: 25 },
@@ -48,6 +49,7 @@ export type ItemPedidoMinimo = {
   nome: string;
   descricao?: string | null;
   subtotal: number;
+  quantidade: number;
 };
 
 export type ItemPedidoMinimoLongNeck = ItemPedidoMinimo & {
@@ -70,6 +72,8 @@ export type LiberacaoPedidoMinimo =
   | "cidade"
   | "tabacaria"
   | "caixa_cerveja"
+  | "caixa_mista"
+  | "pack_misto_long_neck"
   | null;
 
 export type ResultadoPedidoMinimo = {
@@ -77,6 +81,8 @@ export type ResultadoPedidoMinimo = {
   falta: number | null;
   liberadoPor: LiberacaoPedidoMinimo;
   minimoReferencia: number | null;
+  faltaLatasParaCaixaMista: number;
+  quantidadeLatasAvulsas: number;
   temLataCervejaAvulsa: boolean;
   valorConsiderado: number;
   valorTotal: number;
@@ -126,6 +132,22 @@ export function avaliarPedidoMinimo(
     itens.length > 0 && itensTabacaria.length === itens.length;
   const latasCervejaAvulsas = itens.filter(ehLataCervejaAvulsa);
   const temLataCervejaAvulsa = latasCervejaAvulsas.length > 0;
+  const quantidadeLatasAvulsas = latasCervejaAvulsas.reduce(
+    (total, item) =>
+      total + Math.max(0, Math.floor(Number(item.quantidade) || 0)),
+    0
+  );
+  const faltaLatasParaCaixaMista = Math.max(
+    0,
+    QUANTIDADE_CAIXA_MISTA_LATAS - quantidadeLatasAvulsas
+  );
+  const quantidadeLongNecksAvulsas = itens
+    .filter(ehCervejaLongNeckAvulsa)
+    .reduce(
+      (total, item) =>
+        total + Math.max(0, Math.floor(Number(item.quantidade) || 0)),
+      0
+    );
 
   if (!cidade) {
     return {
@@ -133,6 +155,8 @@ export function avaliarPedidoMinimo(
       falta: null,
       liberadoPor: null,
       minimoReferencia: null,
+      faltaLatasParaCaixaMista,
+      quantidadeLatasAvulsas,
       temLataCervejaAvulsa,
       valorConsiderado: 0,
       valorTotal,
@@ -140,6 +164,20 @@ export function avaliarPedidoMinimo(
   }
 
   const minimoCidade = pedidoMinimoDaCidade(cidade);
+
+  if (quantidadeLongNecksAvulsas >= PEDIDO_MINIMO_LONG_NECK) {
+    return {
+      atingido: true,
+      falta: 0,
+      liberadoPor: "pack_misto_long_neck",
+      minimoReferencia: minimoCidade,
+      faltaLatasParaCaixaMista,
+      quantidadeLatasAvulsas,
+      temLataCervejaAvulsa,
+      valorConsiderado: minimoCidade,
+      valorTotal,
+    };
+  }
 
   if (!temLataCervejaAvulsa) {
     const minimoReferencia = somenteTabacaria
@@ -153,6 +191,8 @@ export function avaliarPedidoMinimo(
       liberadoPor:
         falta === 0 ? (somenteTabacaria ? "tabacaria" : "cidade") : null,
       minimoReferencia,
+      faltaLatasParaCaixaMista,
+      quantidadeLatasAvulsas,
       temLataCervejaAvulsa,
       valorConsiderado: valorTotal,
       valorTotal,
@@ -165,6 +205,22 @@ export function avaliarPedidoMinimo(
       falta: 0,
       liberadoPor: "caixa_cerveja",
       minimoReferencia: minimoCidade,
+      faltaLatasParaCaixaMista,
+      quantidadeLatasAvulsas,
+      temLataCervejaAvulsa,
+      valorConsiderado: minimoCidade,
+      valorTotal,
+    };
+  }
+
+  if (quantidadeLatasAvulsas >= QUANTIDADE_CAIXA_MISTA_LATAS) {
+    return {
+      atingido: true,
+      falta: 0,
+      liberadoPor: "caixa_mista",
+      minimoReferencia: minimoCidade,
+      faltaLatasParaCaixaMista,
+      quantidadeLatasAvulsas,
       temLataCervejaAvulsa,
       valorConsiderado: minimoCidade,
       valorTotal,
@@ -188,6 +244,8 @@ export function avaliarPedidoMinimo(
       falta: 0,
       liberadoPor: "cidade",
       minimoReferencia: minimoCidade,
+      faltaLatasParaCaixaMista,
+      quantidadeLatasAvulsas,
       temLataCervejaAvulsa,
       valorConsiderado: valorSemLatasAvulsas,
       valorTotal,
@@ -200,6 +258,8 @@ export function avaliarPedidoMinimo(
       falta: 0,
       liberadoPor: "tabacaria",
       minimoReferencia: PEDIDO_MINIMO_TABACARIA,
+      faltaLatasParaCaixaMista,
+      quantidadeLatasAvulsas,
       temLataCervejaAvulsa,
       valorConsiderado: valorTabacaria,
       valorTotal,
@@ -215,6 +275,8 @@ export function avaliarPedidoMinimo(
     minimoReferencia: caminhoTabacariaMaisProximo
       ? PEDIDO_MINIMO_TABACARIA
       : minimoCidade,
+    faltaLatasParaCaixaMista,
+    quantidadeLatasAvulsas,
     temLataCervejaAvulsa,
     valorConsiderado: caminhoTabacariaMaisProximo
       ? valorTabacaria
@@ -273,7 +335,7 @@ export function mensagemPedidoMinimoLongNeck(
           .toFixed(2)
           .replace(".", ",")} em outros produtos; as long necks avulsas não entram nesse valor.`;
 
-  return `O pedido mínimo para cervejas long neck avulsas é de ${resultado.minimo} unidades enquanto os outros produtos não atingirem o mínimo da entrega. ${complemento} Você pode misturar as marcas.${alternativaOutrosProdutos}`;
+  return `O pedido mínimo para cervejas long neck avulsas é de ${resultado.minimo} unidades enquanto os outros produtos não atingirem o mínimo da entrega. ${complemento} Você pode misturar as marcas para completar o pack; o total usa o preço avulso de cada unidade.${alternativaOutrosProdutos}`;
 }
 
 export function mensagemPedidoMinimo(
@@ -281,9 +343,13 @@ export function mensagemPedidoMinimo(
   cidade: CidadeEntrega
 ) {
   if (resultado.temLataCervejaAvulsa) {
+    const alternativaCaixaMista = resultado.faltaLatasParaCaixaMista === 1
+      ? " ou adicione mais 1 lata para completar uma caixa mista de 12"
+      : ` ou adicione mais ${resultado.faltaLatasParaCaixaMista} latas para completar uma caixa mista de 12`;
+
     return `Latas avulsas de cerveja só são liberadas após R$ ${pedidoMinimoDaCidade(cidade)
       .toFixed(2)
-      .replace(".", ",")} em outros itens, R$ ${PEDIDO_MINIMO_TABACARIA.toFixed(2).replace(".", ",")} em tabacaria ou com uma caixa/pack fechado de cerveja. As latas avulsas não entram no pedido mínimo.`;
+      .replace(".", ",")} em outros itens, R$ ${PEDIDO_MINIMO_TABACARIA.toFixed(2).replace(".", ",")} em tabacaria, com uma caixa/pack fechado de cerveja${alternativaCaixaMista}. Você pode misturar as marcas e o preço continua sendo o das unidades avulsas.`;
   }
 
   return `O pedido mínimo para entrega em ${cidade} é de R$ ${(
