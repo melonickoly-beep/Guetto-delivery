@@ -74,6 +74,8 @@ export type LiberacaoPedidoMinimo =
   | "caixa_cerveja"
   | "caixa_mista"
   | "pack_misto_long_neck"
+  | "pacote_erva_terere"
+  | "duas_cocas_2l"
   | null;
 
 export type ResultadoPedidoMinimo = {
@@ -105,6 +107,16 @@ const ehLataCervejaAvulsa = (item: ItemPedidoMinimo) =>
 
 const ehCaixaCerveja = (item: ItemPedidoMinimo) =>
   categoriaNormalizada(item) === "cervejas" && item.tipoVenda === "caixa";
+
+const ehPacoteErvaTerere = (item: ItemPedidoMinimo) => {
+  const texto = normalizar(`${item.nome} ${item.descricao ?? ""}`);
+  return texto.includes("erva") && texto.includes("terere");
+};
+
+const ehCocaCola2Litros = (item: ItemPedidoMinimo) => {
+  const texto = normalizar(`${item.nome} ${item.descricao ?? ""}`);
+  return texto.includes("coca-cola") && /\b2\s*l\b/.test(texto);
+};
 
 export const ehCervejaLongNeckAvulsa = (
   item: Pick<ItemPedidoMinimo, "categoria" | "tipoVenda" | "nome">
@@ -164,6 +176,52 @@ export function avaliarPedidoMinimo(
   }
 
   const minimoCidade = pedidoMinimoDaCidade(cidade);
+
+  if (cidade === "Paranacity") {
+    const quantidadePacotesErvaTerere = itens
+      .filter(ehPacoteErvaTerere)
+      .reduce(
+        (total, item) =>
+          total + Math.max(0, Math.floor(Number(item.quantidade) || 0)),
+        0
+      );
+
+    if (quantidadePacotesErvaTerere >= 1) {
+      return {
+        atingido: true,
+        falta: 0,
+        liberadoPor: "pacote_erva_terere",
+        minimoReferencia: minimoCidade,
+        faltaLatasParaCaixaMista,
+        quantidadeLatasAvulsas,
+        temLataCervejaAvulsa,
+        valorConsiderado: minimoCidade,
+        valorTotal,
+      };
+    }
+
+    const quantidadeCocas2Litros = itens
+      .filter(ehCocaCola2Litros)
+      .reduce(
+        (total, item) =>
+          total + Math.max(0, Math.floor(Number(item.quantidade) || 0)),
+        0
+      );
+
+    if (quantidadeCocas2Litros >= 2) {
+      return {
+        atingido: true,
+        falta: 0,
+        liberadoPor: "duas_cocas_2l",
+        minimoReferencia: minimoCidade,
+        faltaLatasParaCaixaMista,
+        quantidadeLatasAvulsas,
+        temLataCervejaAvulsa,
+        valorConsiderado: minimoCidade,
+        valorTotal,
+      };
+    }
+  }
 
   if (quantidadeLongNecksAvulsas >= PEDIDO_MINIMO_LONG_NECK) {
     return {
@@ -342,6 +400,10 @@ export function mensagemPedidoMinimo(
   resultado: ResultadoPedidoMinimo,
   cidade: CidadeEntrega
 ) {
+  const excecoesParanacity = cidade === "Paranacity"
+    ? " Em Paranacity, 1 pacote de erva de tereré ou 2 Coca-Cola 2L também liberam a entrega."
+    : "";
+
   if (resultado.temLataCervejaAvulsa) {
     const alternativaCaixaMista = resultado.faltaLatasParaCaixaMista === 1
       ? " ou adicione mais 1 lata para completar uma caixa mista de 12"
@@ -349,12 +411,12 @@ export function mensagemPedidoMinimo(
 
     return `Latas avulsas de cerveja só são liberadas após R$ ${pedidoMinimoDaCidade(cidade)
       .toFixed(2)
-      .replace(".", ",")} em outros itens, R$ ${PEDIDO_MINIMO_TABACARIA.toFixed(2).replace(".", ",")} em tabacaria, com uma caixa/pack fechado de cerveja${alternativaCaixaMista}. Você pode misturar as marcas e o preço continua sendo o das unidades avulsas.`;
+      .replace(".", ",")} em outros itens, R$ ${PEDIDO_MINIMO_TABACARIA.toFixed(2).replace(".", ",")} em tabacaria, com uma caixa/pack fechado de cerveja${alternativaCaixaMista}. Você pode misturar as marcas e o preço continua sendo o das unidades avulsas.${excecoesParanacity}`;
   }
 
   return `O pedido mínimo para entrega em ${cidade} é de R$ ${(
     resultado.minimoReferencia ?? pedidoMinimoDaCidade(cidade)
   )
     .toFixed(2)
-    .replace(".", ",")}.`;
+    .replace(".", ",")}.${excecoesParanacity}`;
 }

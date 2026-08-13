@@ -1341,6 +1341,19 @@ export default function Catalogo({
                 style={{ width: `${progressoPedidoMinimo}%` }}
               />
             </div>
+            {!compacto &&
+              avaliacaoPedidoMinimo.liberadoPor === "pacote_erva_terere" && (
+                <p className="mt-2 text-xs text-green-200">
+                  Entrega liberada em Paranacity por 1 pacote de erva de
+                  tereré.
+                </p>
+              )}
+            {!compacto &&
+              avaliacaoPedidoMinimo.liberadoPor === "duas_cocas_2l" && (
+                <p className="mt-2 text-xs text-green-200">
+                  Entrega liberada em Paranacity por 2 Coca-Cola de 2 litros.
+                </p>
+              )}
             {!compacto && avaliacaoPedidoMinimo.temLataCervejaAvulsa && (
               <p className="mt-2 text-xs text-zinc-300">
                 {avaliacaoPedidoMinimo.liberadoPor === "caixa_cerveja"
