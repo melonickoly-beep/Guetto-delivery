@@ -1244,6 +1244,7 @@ export default function Catalogo({
         // Copiar é apenas uma conveniência e não pode impedir a abertura do WhatsApp.
       }
 
+      window.location.assign(linkWhatsApp);
     } catch {
       setErroRevisao(
         "NÃO FOI POSSÍVEL CONFIRMAR. VERIFIQUE SUA INTERNET E TENTE DE NOVO."
@@ -2377,6 +2378,16 @@ export default function Catalogo({
                 {erroRevisao}
               </div>
             )}
+            <div className="mt-4 flex items-start gap-3 rounded-xl border-2 border-green-500 bg-green-500/10 p-4 text-sm text-green-100">
+              <MessageCircle className="mt-0.5 shrink-0 text-green-400" size={22} />
+              <p>
+                <strong className="block text-base text-white">
+                  ENVIO PELO WHATSAPP É OBRIGATÓRIO
+                </strong>
+                Depois de confirmar, o WhatsApp abrirá. Toque no botão de
+                enviar para concluir o pedido.
+              </p>
+            </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <button
                 type="button"
@@ -2396,9 +2407,9 @@ export default function Catalogo({
                 className="rounded-xl bg-green-500 px-4 py-3 font-bold text-black hover:bg-green-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-300"
               >
                 {enviandoPedido
-                  ? "CONFIRMANDO..."
+                  ? "ABRINDO WHATSAPP..."
                   : maiorDeIdadeConfirmado
-                    ? "CONFIRMAR PEDIDO"
+                    ? "CONFIRMAR E ENVIAR NO WHATSAPP"
                     : "CONFIRME SUA IDADE"}
               </button>
             </div>
@@ -2419,31 +2430,29 @@ export default function Catalogo({
               id="titulo-pedido-confirmado"
               className="mt-4 text-3xl font-black text-white"
             >
-              PEDIDO RECEBIDO!
+              FALTA ENVIAR NO WHATSAPP
             </h2>
-            <p className="mt-2 text-lg font-bold text-green-300">
-              A loja já recebeu no painel.
+            <p className="mt-2 text-lg font-bold text-yellow-300">
+              O pedido foi registrado no site.
             </p>
-            <p className="mt-4 rounded-xl bg-green-500/15 p-4 font-black text-green-200">
-              NÃO PRECISA ENVIAR NO WHATSAPP.
+            <p className="mt-4 rounded-xl border-2 border-green-500 bg-green-500/15 p-4 font-black text-green-200">
+              ABRA O WHATSAPP E TOQUE EM ENVIAR PARA CONCLUIR.
             </p>
             <p className="mt-4 text-sm text-zinc-400">
               Pedido nº {pedidoConfirmado.id.slice(0, 8).toUpperCase()}
             </p>
             <div className="mt-5 grid gap-3">
               <a
-                href={pedidoConfirmado.linkAcompanhamento}
-                className="rounded-xl bg-yellow-400 px-4 py-4 text-lg font-black text-black hover:bg-yellow-300"
+                href={pedidoConfirmado.linkWhatsApp}
+                className="rounded-xl bg-green-500 px-4 py-4 text-lg font-black text-black hover:bg-green-400"
               >
-                ACOMPANHAR PEDIDO
+                ENVIAR PEDIDO NO WHATSAPP
               </a>
               <a
-                href={pedidoConfirmado.linkWhatsApp}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-xl border border-green-500 px-4 py-3 font-bold text-green-300 hover:bg-green-500/10"
+                href={pedidoConfirmado.linkAcompanhamento}
+                className="rounded-xl border border-yellow-400 px-4 py-3 font-bold text-yellow-300 hover:bg-yellow-400/10"
               >
-                FALAR COM A LOJA (OPCIONAL)
+                ACOMPANHAR PEDIDO
               </a>
               <button
                 type="button"

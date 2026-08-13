@@ -112,7 +112,7 @@ export default async function Home() {
             <p className="mt-1 text-xs text-zinc-300 sm:mt-2 sm:text-sm">
               {somenteRetiradaHoje
                 ? "Consulte nossos produtos e preços. Compras somente na loja."
-              : "Escolha, monte e confirme seu pedido pelo site."}
+              : "Escolha, monte e finalize seu pedido pelo WhatsApp."}
             </p>
           </div>
         </div>
