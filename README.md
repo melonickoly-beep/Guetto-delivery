@@ -37,5 +37,6 @@ navegador. Cadastre o estoque real antes de liberar os produtos para venda.
 
 O navegador envia somente identificadores e quantidades. A API valida novamente
 os produtos, preços e estoque no servidor e registra o pedido diretamente no
-painel. Depois da confirmação, o WhatsApp fica disponível apenas como contato
-opcional. O painel permite acompanhar e alterar o status dos pedidos.
+painel. Em seguida, o site abre o WhatsApp com o pedido completo para o cliente
+enviar obrigatoriamente à loja. O painel permite acompanhar e alterar o status
+dos pedidos.
