@@ -183,7 +183,12 @@ export default function AdminPage() {
     const intervaloPedidos = window.setInterval(() => {
       carregarPedidos();
       carregarResumoPedidos();
-    }, 45_000);
+    }, 10_000);
+    const atualizarAoVoltar = () => {
+      if (document.visibilityState === "visible") {
+        void carregarPainelPedidos();
+      }
+    };
     const canalPedidos = supabase
       .channel("pedidos-admin")
       .on(
@@ -195,9 +200,13 @@ export default function AdminPage() {
         }
       )
       .subscribe();
+    document.addEventListener("visibilitychange", atualizarAoVoltar);
+    window.addEventListener("focus", atualizarAoVoltar);
 
     return () => {
       window.clearInterval(intervaloPedidos);
+      document.removeEventListener("visibilitychange", atualizarAoVoltar);
+      window.removeEventListener("focus", atualizarAoVoltar);
       void supabase.removeChannel(canalPedidos);
     };
   }, [painelDesbloqueado, paginaEstoque]); // eslint-disable-line react-hooks/exhaustive-deps -- Atualiza somente ao entrar ou sair de uma área do painel.
@@ -650,12 +659,25 @@ export default function AdminPage() {
     if (error) return;
 
     const lista = data ?? [];
+    let recebeuPedidoNovo = false;
     if (idsPedidosConhecidos.current === null) {
       idsPedidosConhecidos.current = new Set(
         lista.map((pedido) => pedido.id)
       );
+      const pedidosAguardando = lista.filter(
+        (pedido) => pedido.status === "novo"
+      );
+      if (pedidosAguardando.length > 0) {
+        recebeuPedidoNovo = true;
+        void exibirNotificacao(
+          "Pedido aguardando na Guetto Delivery",
+          pedidosAguardando.length === 1
+            ? `Pedido de ${pedidosAguardando[0].cliente_nome} aguardando atendimento.`
+            : `${pedidosAguardando.length} pedidos aguardando atendimento.`,
+          "pedidos-aguardando"
+        );
+      }
     } else {
-      let recebeuPedidoNovo = false;
       for (const pedido of lista) {
         if (
           pedido.status === "novo" &&
@@ -674,13 +696,13 @@ export default function AdminPage() {
         }
       }
 
-      if (recebeuPedidoNovo) {
-        void tocarAlertaSonoro();
-      }
-
       for (const pedido of lista) {
         idsPedidosConhecidos.current.add(pedido.id);
       }
+    }
+
+    if (recebeuPedidoNovo) {
+      void tocarAlertaSonoro();
     }
 
     setPedidos(lista);
@@ -1290,6 +1312,37 @@ export default function AdminPage() {
   inicioHoje.setHours(0, 0, 0, 0);
   const pedidosHoje = pedidos.filter((pedido) => new Date(pedido.created_at) >= inicioHoje);
   const pedidosNovos = pedidos.filter((pedido) => pedido.status === "novo");
+
+  useEffect(() => {
+    if (paginaEstoque) return;
+
+    document.title = pedidosNovos.length > 0
+      ? `(${pedidosNovos.length}) Novo pedido | Guetto Delivery`
+      : "Painel Administrativo | Guetto Delivery";
+
+    return () => {
+      document.title = "Guetto Delivery";
+    };
+  }, [paginaEstoque, pedidosNovos.length]);
+
+  useEffect(() => {
+    if (!painelDesbloqueado || paginaEstoque || pedidosNovos.length === 0) {
+      return;
+    }
+
+    const lembrete = window.setInterval(() => {
+      void tocarAlertaSonoro();
+      void exibirNotificacao(
+        "Pedido ainda aguardando atendimento",
+        pedidosNovos.length === 1
+          ? "Há 1 pedido novo no painel."
+          : `Há ${pedidosNovos.length} pedidos novos no painel.`,
+        "lembrete-pedidos-novos"
+      );
+    }, 60_000);
+
+    return () => window.clearInterval(lembrete);
+  }, [painelDesbloqueado, paginaEstoque, pedidosNovos.length]);
   const produtosComEstoque = produtos.filter(
     (produto) => estoqueDisponivelProduto(produto) > 0
   );
@@ -1438,6 +1491,14 @@ export default function AdminPage() {
               <p className="text-zinc-300">
                 {pedidosNovos.length > 0 ? `${pedidosNovos.length} novo(s) aguardando atendimento.` : "Nenhum pedido novo aguardando atendimento."}
               </p>
+              <p className="mt-1 text-sm text-zinc-400">
+                Os pedidos aparecem aqui mesmo que o cliente não envie a mensagem no WhatsApp.
+              </p>
+              {pedidosNovos.length > 0 && (
+                <p className="mt-1 text-sm font-bold text-yellow-200">
+                  O painel repetirá o alerta a cada minuto até o pedido ser atendido.
+                </p>
+              )}
             </div>
             <button type="button" onClick={ativarNotificacoes} className="rounded-lg bg-yellow-400 px-4 py-3 font-bold text-black hover:bg-yellow-300">
               {notificacoesAtivadas && alertaSonoroAtivado
@@ -1454,7 +1515,7 @@ export default function AdminPage() {
           )}
         </section>
 
-        <details className="group mb-4 rounded-xl border border-zinc-800 bg-zinc-900">
+        <details open={pedidosNovos.length > 0} className="group mb-4 rounded-xl border border-zinc-800 bg-zinc-900">
           <summary className="cursor-pointer list-none rounded-xl px-6 py-5 text-xl font-bold hover:bg-zinc-800">
             <span className="flex items-center justify-between">
               Pedidos recentes
@@ -1466,7 +1527,7 @@ export default function AdminPage() {
             <div>
               <p className="text-zinc-400">Acompanhe e atualize o andamento dos pedidos.</p>
               <p className="mt-1 text-xs text-zinc-500">
-                Atualização automática a cada 45 segundos.
+                Atualização automática a cada 10 segundos e aviso imediato quando disponível.
               </p>
             </div>
             <button type="button" onClick={() => void carregarPainelPedidos()} className="rounded-lg border border-zinc-600 px-4 py-2 hover:bg-zinc-800">

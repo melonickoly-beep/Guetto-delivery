@@ -17,7 +17,7 @@ import {
   Truck,
   History,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   avaliarPedidoMinimo,
   avaliarPedidoMinimoLongNeck,
@@ -70,11 +70,12 @@ type ItemCarrinho = Produto & {
 
 type FormaPagamento = "pix" | "dinheiro" | "credito" | "debito";
 type QuantidadePagamentos = 1 | 2 | 3;
+type EtapaCheckout = 1 | 2;
 
 type Pagamento = {
   forma: FormaPagamento | "";
   valor: string;
-  precisaTroco: boolean;
+  precisaTroco: boolean | null;
   trocoPara: string;
 };
 
@@ -113,7 +114,7 @@ const formasPagamento: Array<{ valor: FormaPagamento; rotulo: string }> = [
 const pagamentoVazio: Pagamento = {
   forma: "",
   valor: "",
-  precisaTroco: false,
+  precisaTroco: null,
   trocoPara: "",
 };
 
@@ -185,7 +186,9 @@ export default function Catalogo({
   const [busca, setBusca] = useState("");
   const [carrinhoAberto, setCarrinhoAberto] = useState(false);
   const [revisaoAberta, setRevisaoAberta] = useState(false);
+  const [etapaCheckout, setEtapaCheckout] = useState<EtapaCheckout>(1);
   const [maiorDeIdadeConfirmado, setMaiorDeIdadeConfirmado] = useState(false);
+  const conteudoCheckoutRef = useRef<HTMLDivElement | null>(null);
   const [carrinho, setCarrinho] = useState<ItemCarrinho[]>([]);
   const [carrinhoCarregado, setCarrinhoCarregado] = useState(false);
   const [ultimoPedido, setUltimoPedido] = useState<ItemCarrinho[]>([]);
@@ -307,6 +310,7 @@ export default function Catalogo({
       if (ultimoPedidoIdSalvo) setUltimoPedidoId(ultimoPedidoIdSalvo);
 
       if (window.localStorage.getItem("guetto_abrir_carrinho") === "1") {
+        setEtapaCheckout(1);
         setCarrinhoAberto(true);
         window.localStorage.removeItem("guetto_abrir_carrinho");
       }
@@ -565,6 +569,7 @@ export default function Catalogo({
     }
 
     setCarrinho(ultimoPedido);
+    setEtapaCheckout(1);
     setCarrinhoAberto(true);
     if (ultimoPedidoFoiAjustado) {
       setAvisoCarrinho(
@@ -738,29 +743,43 @@ export default function Catalogo({
 
   function resumoPagamento(pagamento: Pagamento, valor: number) {
     const rotulo = formasPagamento.find((forma) => forma.valor === pagamento.forma)?.rotulo;
-    const troco = pagamento.forma === "dinheiro" && pagamento.precisaTroco
-      ? ` (troco para ${formatarPreco(valorNumerico(pagamento.trocoPara))})`
-      : "";
+    const troco = pagamento.forma !== "dinheiro"
+      ? ""
+      : pagamento.precisaTroco === true
+        ? ` (troco para ${formatarPreco(valorNumerico(pagamento.trocoPara))})`
+        : pagamento.precisaTroco === false
+          ? " (não precisa de troco)"
+          : "";
     return `${rotulo}: ${formatarPreco(valor)}${troco}`;
   }
 
-  async function finalizarPedido(confirmado = false) {
-    if (enviandoPedido) return;
+  function pagamentosSelecionados() {
+    return [
+      primeiroPagamento,
+      segundoPagamento,
+      terceiroPagamento,
+    ].slice(0, quantidadePagamentos);
+  }
 
+  function validarIdentificacaoEEndereco() {
     if (somenteRetiradaHoje) {
       alert(
         "Hoje o site está disponível apenas para consulta. As compras devem ser feitas presencialmente na loja."
       );
-      return;
+      return false;
     }
 
     if (!atendimentoAberto) {
       alert("A Guetto Delivery está fechada no momento.");
-      return;
+      return false;
+    }
+    if (carrinho.length === 0) {
+      alert("Adicione pelo menos um produto antes de finalizar.");
+      return false;
     }
     if (!nome.trim() || !sobrenome.trim() || !telefone.trim()) {
       alert("Preencha nome, sobrenome e telefone para continuar.");
-      return;
+      return false;
     }
     if (
       !somenteRetiradaHoje &&
@@ -770,12 +789,12 @@ export default function Catalogo({
         !cidadeEntrega)
     ) {
       alert("Preencha o endereço, o bairro e a cidade para continuar.");
-      return;
+      return false;
     }
 
     if (!avaliacaoPedidoMinimoLongNeck.atingido) {
       alert(mensagemPedidoMinimoLongNeck(avaliacaoPedidoMinimoLongNeck));
-      return;
+      return false;
     }
 
     if (!somenteRetiradaHoje && !avaliacaoPedidoMinimo.atingido) {
@@ -785,50 +804,72 @@ export default function Catalogo({
           cidadeEntrega as CidadeEntrega
         )
       );
-      return;
-    }
-
-    if (!primeiroPagamento.forma) {
-      alert("Escolha uma forma de pagamento.");
-      return;
+      return false;
     }
 
     if (quantidadeGarrafas300 > 0 && quantidadeGarrafas300 < 10) {
       alert("O pedido mínimo para cervejas em garrafa de 300 ml é de 10 unidades.");
-      return;
+      return false;
     }
 
     if (quantidadeGarrafas300 > 0 && !vasilhameConfirmado) {
       alert("Confirme que o vasilhame é obrigatório e não está incluso no pedido.");
-      return;
+      return false;
     }
 
-    const pagamentos = [
-      primeiroPagamento,
-      segundoPagamento,
-      terceiroPagamento,
-    ].slice(0, quantidadePagamentos);
+    return true;
+  }
+
+  function validarPagamento() {
+    const pagamentos = pagamentosSelecionados();
 
     if (pagamentos.some((pagamento) => !pagamento.forma)) {
       alert("Escolha todas as formas de pagamento.");
-      return;
+      return false;
     }
 
     if (quantidadePagamentos > 1) {
       const soma = pagamentos.reduce((total, pagamento) => total + valorNumerico(pagamento.valor), 0);
       if (pagamentos.some((pagamento) => !pagamento.valor || valorNumerico(pagamento.valor) <= 0) || Math.abs(soma - valorTotal) > 0.01) {
         alert(`Os pagamentos precisam somar ${formatarPreco(valorTotal)}.`);
-        return;
+        return false;
       }
+    }
+
+    if (pagamentos.some((pagamento) => pagamento.forma === "dinheiro" && pagamento.precisaTroco === null)) {
+      alert("Informe se vai precisar de troco ou não em cada pagamento em dinheiro.");
+      return false;
     }
 
     if (pagamentos.some((pagamento) => pagamento.forma === "dinheiro" && pagamento.precisaTroco && valorNumerico(pagamento.trocoPara) <= 0)) {
       alert("Informe o valor para o qual o cliente precisa de troco.");
-      return;
+      return false;
     }
+
+    return true;
+  }
+
+  function mudarEtapaCheckout(etapa: EtapaCheckout) {
+    setEtapaCheckout(etapa);
+    window.requestAnimationFrame(() =>
+      conteudoCheckoutRef.current?.scrollTo({ top: 0, behavior: "smooth" })
+    );
+  }
+
+  function avancarParaPagamento() {
+    if (!validarIdentificacaoEEndereco()) return;
+    mudarEtapaCheckout(2);
+  }
+
+  async function finalizarPedido(confirmado = false) {
+    if (enviandoPedido) return;
+    if (!validarIdentificacaoEEndereco() || !validarPagamento()) return;
+
+    const pagamentos = pagamentosSelecionados();
 
     if (!confirmado) {
       setMaiorDeIdadeConfirmado(false);
+      setCarrinhoAberto(false);
       setRevisaoAberta(true);
       return;
     }
@@ -910,6 +951,16 @@ export default function Catalogo({
               : item.escolhasCombo ?? null,
           })),
           pagamento: pagamentosFormatados,
+          troco: pagamentos.map((pagamento) =>
+            pagamento.forma === "dinheiro"
+              ? {
+                  precisa_troco: pagamento.precisaTroco,
+                  troco_para: pagamento.precisaTroco
+                    ? valorNumerico(pagamento.trocoPara)
+                    : null,
+                }
+              : null
+          ),
           tempo_entrega: tempoEntrega,
           observacao: [
             somenteRetiradaHoje
@@ -996,6 +1047,7 @@ export default function Catalogo({
       window.localStorage.setItem("guetto_carrinho", "[]");
       setCarrinho([]);
       setRevisaoAberta(false);
+      setEtapaCheckout(1);
       setMaiorDeIdadeConfirmado(false);
 
       try {
@@ -1164,7 +1216,10 @@ export default function Catalogo({
             </Link>
             {!somenteRetiradaHoje && (
               <button
-                onClick={() => setCarrinhoAberto(true)}
+                onClick={() => {
+                  setEtapaCheckout(1);
+                  setCarrinhoAberto(true);
+                }}
                 className="relative inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-yellow-400 px-3 py-2 text-sm font-bold text-black hover:bg-yellow-300 sm:flex-none sm:px-4"
                 aria-label="Abrir carrinho"
               >
@@ -1760,7 +1815,10 @@ export default function Catalogo({
           </div>
           <button
             type="button"
-            onClick={() => setCarrinhoAberto(true)}
+            onClick={() => {
+              setEtapaCheckout(1);
+              setCarrinhoAberto(true);
+            }}
             disabled={carrinho.length === 0}
             className="w-full rounded-xl bg-yellow-400 px-4 py-3 font-black text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
           >
@@ -1854,7 +1912,10 @@ export default function Catalogo({
       {!somenteRetiradaHoje && quantidadeTotal > 0 && !carrinhoAberto && (
         <button
           type="button"
-          onClick={() => setCarrinhoAberto(true)}
+          onClick={() => {
+            setEtapaCheckout(1);
+            setCarrinhoAberto(true);
+          }}
           className="fixed bottom-4 left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-center justify-between rounded-2xl bg-yellow-400 px-5 py-4 font-black text-black shadow-2xl hover:bg-yellow-300 xl:hidden"
         >
           <span className="flex flex-col items-start">
@@ -1881,8 +1942,11 @@ export default function Catalogo({
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-yellow-400/50 bg-zinc-950 p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-black text-yellow-400">Revise seu pedido</h2>
-                <p className="text-sm text-zinc-400">Confira tudo antes de abrir o WhatsApp.</p>
+                <p className="text-xs font-black uppercase tracking-wider text-yellow-300">
+                  Etapa 3 de 3
+                </p>
+                <h2 className="text-2xl font-black text-yellow-400">Confirme e envie</h2>
+                <p className="text-sm text-zinc-400">Revise, confirme sua idade e envie pelo WhatsApp.</p>
               </div>
               <button
                 type="button"
@@ -1894,23 +1958,21 @@ export default function Catalogo({
               </button>
             </div>
 
-            <ol className="mt-5 grid grid-cols-4 gap-1 rounded-xl bg-zinc-900 p-3 text-center text-[10px] font-bold">
+            <ol className="mt-5 grid grid-cols-3 gap-2 rounded-xl bg-zinc-900 p-3 text-center text-[10px] font-bold">
               {[
-                somenteRetiradaHoje ? "Retirada" : "Entrega",
+                "Identificação",
                 "Pagamento",
-                "Revisão",
-                "WhatsApp",
+                "Concluir",
               ].map(
                 (etapa, indice) => (
                   <li
                     key={etapa}
-                    className={
-                      indice <= 2 ? "text-yellow-300" : "text-green-300"
-                    }
+                    className={indice < 2 ? "text-yellow-300" : "text-green-300"}
+                    aria-current={indice === 2 ? "step" : undefined}
                   >
                     <span
                       className={`mx-auto mb-1 grid h-6 w-6 place-items-center rounded-full ${
-                        indice <= 2
+                        indice < 2
                           ? "bg-yellow-400 text-black"
                           : "bg-green-500 text-black"
                       }`}
@@ -2013,19 +2075,23 @@ export default function Catalogo({
               <MessageCircle className="mt-0.5 shrink-0 text-green-400" size={20} />
               <p>
                 <strong className="block text-white">
-                  Falta apenas enviar no WhatsApp
+                  O pedido será registrado antes de abrir o WhatsApp
                 </strong>
-                Seu pedido só será confirmado após você enviar a mensagem que
-                abriremos no WhatsApp.
+                A loja receberá o pedido no painel. Quando o WhatsApp abrir,
+                toque no botão verde de enviar para falar com a equipe também.
               </p>
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <button
                 type="button"
-                onClick={() => setRevisaoAberta(false)}
+                onClick={() => {
+                  setRevisaoAberta(false);
+                  setEtapaCheckout(2);
+                  setCarrinhoAberto(true);
+                }}
                 className="rounded-xl border border-zinc-700 px-4 py-3 font-bold hover:bg-zinc-900"
               >
-                Corrigir
+                Voltar ao pagamento
               </button>
               <button
                 type="button"
@@ -2034,9 +2100,9 @@ export default function Catalogo({
                 className="rounded-xl bg-green-500 px-4 py-3 font-bold text-black hover:bg-green-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-300"
               >
                 {enviandoPedido
-                  ? "Enviando pedido..."
+                  ? "Registrando pedido..."
                   : maiorDeIdadeConfirmado
-                    ? "Abrir WhatsApp"
+                    ? "Registrar e abrir WhatsApp"
                     : "Confirme sua idade"}
               </button>
             </div>
@@ -2049,28 +2115,38 @@ export default function Catalogo({
           <aside
             className="flex h-full w-full max-w-md flex-col bg-zinc-950 p-4 shadow-2xl sm:p-6"
             onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="titulo-checkout"
           >
             <div className="flex items-center justify-between border-b border-zinc-800 pb-5">
-              <h2 className="text-2xl font-bold">Seu carrinho</h2>
+              <div>
+                <p className="text-xs font-black uppercase tracking-wider text-yellow-300">
+                  Etapa {etapaCheckout} de 3
+                </p>
+                <h2 id="titulo-checkout" className="text-2xl font-bold">
+                  {etapaCheckout === 1 ? "Identificação e endereço" : "Forma de pagamento"}
+                </h2>
+              </div>
               <button onClick={() => setCarrinhoAberto(false)} className="rounded-lg p-2 hover:bg-zinc-800" aria-label="Fechar carrinho">
                 <X />
               </button>
             </div>
-            <ol className="grid grid-cols-4 gap-1 border-b border-zinc-800 py-3 text-center text-[10px] font-bold text-zinc-500">
+            <ol className="grid grid-cols-3 gap-2 border-b border-zinc-800 py-3 text-center text-[10px] font-bold text-zinc-500">
               {[
-                somenteRetiradaHoje ? "Retirada" : "Entrega",
+                "Identificação",
                 "Pagamento",
-                "Revisão",
-                "WhatsApp",
+                "Concluir",
               ].map(
                 (etapa, indice) => (
                   <li
                     key={etapa}
-                    className={indice < 2 ? "text-yellow-300" : ""}
+                    className={indice + 1 <= etapaCheckout ? "text-yellow-300" : ""}
+                    aria-current={indice + 1 === etapaCheckout ? "step" : undefined}
                   >
                     <span
                       className={`mx-auto mb-1 grid h-6 w-6 place-items-center rounded-full ${
-                        indice < 2
+                        indice + 1 <= etapaCheckout
                           ? "bg-yellow-400 text-black"
                           : "bg-zinc-800 text-zinc-400"
                       }`}
@@ -2082,11 +2158,15 @@ export default function Catalogo({
                 )
               )}
             </ol>
-            <div className="flex-1 overflow-y-auto py-5">
-              {carrinho.length === 0 ? (
+            <div ref={conteudoCheckoutRef} className="flex-1 overflow-y-auto py-5">
+              {etapaCheckout === 1 && (carrinho.length === 0 ? (
                 <p className="text-center text-zinc-400">Seu carrinho está vazio.</p>
               ) : (
-                <div className="space-y-4">
+                <details className="rounded-xl border border-zinc-800 bg-zinc-900/70">
+                  <summary className="cursor-pointer px-4 py-3 text-sm font-bold text-zinc-200">
+                    Ver {quantidadeTotal} {quantidadeTotal === 1 ? "item" : "itens"} do pedido · {formatarPreco(valorTotal)}
+                  </summary>
+                  <div className="space-y-3 border-t border-zinc-800 p-3">
                   {carrinho.map((item) => (
                     <div key={chaveItem(item)} className="flex items-center gap-3 rounded-xl bg-zinc-900 p-3">
                       <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-zinc-800">
@@ -2106,11 +2186,14 @@ export default function Catalogo({
                       </div>
                     </div>
                   ))}
-                </div>
-              )}
+                  </div>
+                </details>
+              ))}
 
               {carrinho.length > 0 && (
                 <div className="mt-7 space-y-4 border-t border-zinc-800 pt-6">
+                  {etapaCheckout === 1 && (
+                    <>
                   <IndicadorPedidoMinimo />
                   {quantidadeGarrafas300 > 0 && (
                     <div className="rounded-xl border border-yellow-400/50 bg-yellow-400/10 p-4 text-sm">
@@ -2324,7 +2407,11 @@ export default function Catalogo({
                       Saiba como seus dados são utilizados
                     </a>
                   </div>
+                    </>
+                  )}
 
+                  {etapaCheckout === 2 && (
+                    <>
                   <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-yellow-400 bg-yellow-400/10 p-4">
                     <div className="flex items-center gap-3">
                       <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-yellow-400 font-black text-black">
@@ -2359,7 +2446,7 @@ export default function Catalogo({
                   <div className="space-y-3 rounded-xl bg-zinc-900 p-4">
                     <label className="block space-y-1.5 text-sm font-semibold text-zinc-300">
                       <span>{quantidadePagamentos > 1 ? "Forma do 1º pagamento" : "Forma de pagamento"}</span>
-                      <select name="primeiro-pagamento" value={primeiroPagamento.forma} onChange={(event) => setPrimeiroPagamento({ ...primeiroPagamento, forma: event.target.value as FormaPagamento })} className="w-full rounded-lg bg-zinc-800 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2">
+                      <select name="primeiro-pagamento" value={primeiroPagamento.forma} onChange={(event) => setPrimeiroPagamento({ ...primeiroPagamento, forma: event.target.value as FormaPagamento | "", precisaTroco: null, trocoPara: "" })} className="w-full rounded-lg bg-zinc-800 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2">
                         <option value="">Selecione como deseja pagar</option>
                         {formasPagamento.map((forma) => <option key={forma.valor} value={forma.valor}>{forma.rotulo}</option>)}
                       </select>
@@ -2371,9 +2458,21 @@ export default function Catalogo({
                       </label>
                     )}
                     {primeiroPagamento.forma === "dinheiro" && (
-                      <label className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={primeiroPagamento.precisaTroco} onChange={(event) => setPrimeiroPagamento({ ...primeiroPagamento, precisaTroco: event.target.checked })} /> Precisa de troco
-                      </label>
+                      <fieldset className="space-y-2 rounded-lg border border-yellow-400/60 bg-yellow-400/5 p-3" aria-required="true">
+                        <legend className="px-1 text-sm font-bold text-yellow-200">
+                          Vai precisar de troco? <span className="text-xs text-yellow-400">(obrigatório)</span>
+                        </legend>
+                        <div className="flex flex-wrap gap-4">
+                          <label className="flex items-center gap-2 text-sm">
+                            <input type="radio" name="troco-primeiro-pagamento" value="sim" checked={primeiroPagamento.precisaTroco === true} onChange={() => setPrimeiroPagamento({ ...primeiroPagamento, precisaTroco: true })} required />
+                            Sim, preciso de troco
+                          </label>
+                          <label className="flex items-center gap-2 text-sm">
+                            <input type="radio" name="troco-primeiro-pagamento" value="nao" checked={primeiroPagamento.precisaTroco === false} onChange={() => setPrimeiroPagamento({ ...primeiroPagamento, precisaTroco: false, trocoPara: "" })} required />
+                            Não preciso de troco
+                          </label>
+                        </div>
+                      </fieldset>
                     )}
                     {primeiroPagamento.forma === "dinheiro" && primeiroPagamento.precisaTroco && (
                       <label className="block space-y-1.5 text-sm font-semibold text-zinc-300">
@@ -2387,7 +2486,7 @@ export default function Catalogo({
                     <div className="space-y-3 rounded-xl bg-zinc-900 p-4">
                       <label className="block space-y-1.5 text-sm font-semibold text-zinc-300">
                         <span>Forma do 2º pagamento</span>
-                        <select name="segundo-pagamento" value={segundoPagamento.forma} onChange={(event) => setSegundoPagamento({ ...segundoPagamento, forma: event.target.value as FormaPagamento })} className="w-full rounded-lg bg-zinc-800 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2">
+                        <select name="segundo-pagamento" value={segundoPagamento.forma} onChange={(event) => setSegundoPagamento({ ...segundoPagamento, forma: event.target.value as FormaPagamento | "", precisaTroco: null, trocoPara: "" })} className="w-full rounded-lg bg-zinc-800 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2">
                           <option value="">Selecione como deseja pagar</option>
                           {formasPagamento.map((forma) => <option key={forma.valor} value={forma.valor}>{forma.rotulo}</option>)}
                         </select>
@@ -2396,7 +2495,15 @@ export default function Catalogo({
                         <span>Valor do 2º pagamento</span>
                         <input name="valor-segundo-pagamento" value={segundoPagamento.valor} onChange={(event) => setSegundoPagamento({ ...segundoPagamento, valor: event.target.value })} inputMode="decimal" placeholder="Ex.: 20,00" className="w-full rounded-lg bg-zinc-800 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2" />
                       </label>
-                      {segundoPagamento.forma === "dinheiro" && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={segundoPagamento.precisaTroco} onChange={(event) => setSegundoPagamento({ ...segundoPagamento, precisaTroco: event.target.checked })} /> Precisa de troco</label>}
+                      {segundoPagamento.forma === "dinheiro" && (
+                        <fieldset className="space-y-2 rounded-lg border border-yellow-400/60 bg-yellow-400/5 p-3" aria-required="true">
+                          <legend className="px-1 text-sm font-bold text-yellow-200">Vai precisar de troco? <span className="text-xs text-yellow-400">(obrigatório)</span></legend>
+                          <div className="flex flex-wrap gap-4">
+                            <label className="flex items-center gap-2 text-sm"><input type="radio" name="troco-segundo-pagamento" value="sim" checked={segundoPagamento.precisaTroco === true} onChange={() => setSegundoPagamento({ ...segundoPagamento, precisaTroco: true })} required /> Sim, preciso de troco</label>
+                            <label className="flex items-center gap-2 text-sm"><input type="radio" name="troco-segundo-pagamento" value="nao" checked={segundoPagamento.precisaTroco === false} onChange={() => setSegundoPagamento({ ...segundoPagamento, precisaTroco: false, trocoPara: "" })} required /> Não preciso de troco</label>
+                          </div>
+                        </fieldset>
+                      )}
                       {segundoPagamento.forma === "dinheiro" && segundoPagamento.precisaTroco && (
                         <label className="block space-y-1.5 text-sm font-semibold text-zinc-300">
                           <span>Troco para quanto?</span>
@@ -2410,7 +2517,7 @@ export default function Catalogo({
                     <div className="space-y-3 rounded-xl bg-zinc-900 p-4">
                       <label className="block space-y-1.5 text-sm font-semibold text-zinc-300">
                         <span>Forma do 3º pagamento</span>
-                        <select name="terceiro-pagamento" value={terceiroPagamento.forma} onChange={(event) => setTerceiroPagamento({ ...terceiroPagamento, forma: event.target.value as FormaPagamento })} className="w-full rounded-lg bg-zinc-800 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2">
+                        <select name="terceiro-pagamento" value={terceiroPagamento.forma} onChange={(event) => setTerceiroPagamento({ ...terceiroPagamento, forma: event.target.value as FormaPagamento | "", precisaTroco: null, trocoPara: "" })} className="w-full rounded-lg bg-zinc-800 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2">
                           <option value="">Selecione como deseja pagar</option>
                           {formasPagamento.map((forma) => <option key={forma.valor} value={forma.valor}>{forma.rotulo}</option>)}
                         </select>
@@ -2419,7 +2526,15 @@ export default function Catalogo({
                         <span>Valor do 3º pagamento</span>
                         <input name="valor-terceiro-pagamento" value={terceiroPagamento.valor} onChange={(event) => setTerceiroPagamento({ ...terceiroPagamento, valor: event.target.value })} inputMode="decimal" placeholder="Ex.: 20,00" className="w-full rounded-lg bg-zinc-800 p-3 font-normal text-white outline-none ring-yellow-400 focus:ring-2" />
                       </label>
-                      {terceiroPagamento.forma === "dinheiro" && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={terceiroPagamento.precisaTroco} onChange={(event) => setTerceiroPagamento({ ...terceiroPagamento, precisaTroco: event.target.checked })} /> Precisa de troco</label>}
+                      {terceiroPagamento.forma === "dinheiro" && (
+                        <fieldset className="space-y-2 rounded-lg border border-yellow-400/60 bg-yellow-400/5 p-3" aria-required="true">
+                          <legend className="px-1 text-sm font-bold text-yellow-200">Vai precisar de troco? <span className="text-xs text-yellow-400">(obrigatório)</span></legend>
+                          <div className="flex flex-wrap gap-4">
+                            <label className="flex items-center gap-2 text-sm"><input type="radio" name="troco-terceiro-pagamento" value="sim" checked={terceiroPagamento.precisaTroco === true} onChange={() => setTerceiroPagamento({ ...terceiroPagamento, precisaTroco: true })} required /> Sim, preciso de troco</label>
+                            <label className="flex items-center gap-2 text-sm"><input type="radio" name="troco-terceiro-pagamento" value="nao" checked={terceiroPagamento.precisaTroco === false} onChange={() => setTerceiroPagamento({ ...terceiroPagamento, precisaTroco: false, trocoPara: "" })} required /> Não preciso de troco</label>
+                          </div>
+                        </fieldset>
+                      )}
                       {terceiroPagamento.forma === "dinheiro" && terceiroPagamento.precisaTroco && (
                         <label className="block space-y-1.5 text-sm font-semibold text-zinc-300">
                           <span>Troco para quanto?</span>
@@ -2452,28 +2567,45 @@ export default function Catalogo({
                       </p>
                     </div>
                   )}
+                    </>
+                  )}
                 </div>
               )}
             </div>
             <div className="border-t border-zinc-800 pt-5">
-              <div className="mb-3 flex items-center gap-3 text-sm">
-                <span className="grid h-7 w-7 place-items-center rounded-full bg-yellow-400 font-black text-black">
-                  3
-                </span>
-                <div>
-                  <p className="font-black">Revisão</p>
-                  <p className="text-xs text-zinc-400">
-                    Confira tudo antes de enviar
-                  </p>
-                </div>
-              </div>
               <div className="mb-4 flex justify-between text-lg font-bold"><span>Total</span><span className="text-yellow-400">{formatarPreco(valorTotal)}</span></div>
-              <button onClick={() => finalizarPedido()} disabled={carrinho.length === 0 || !atendimentoAberto} className="w-full rounded-lg bg-yellow-400 px-4 py-3 font-bold text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400">
-                Revisar pedido
-              </button>
+              {etapaCheckout === 1 ? (
+                <button
+                  type="button"
+                  onClick={avancarParaPagamento}
+                  disabled={carrinho.length === 0 || !atendimentoAberto}
+                  className="w-full rounded-lg bg-yellow-400 px-4 py-3 font-bold text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+                >
+                  Continuar para pagamento
+                </button>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => mudarEtapaCheckout(1)}
+                    className="rounded-lg border border-zinc-700 px-4 py-3 font-bold text-white hover:bg-zinc-900"
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void finalizarPedido()}
+                    disabled={carrinho.length === 0 || !atendimentoAberto}
+                    className="rounded-lg bg-yellow-400 px-4 py-3 font-bold text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+                  >
+                    Revisar e concluir
+                  </button>
+                </div>
+              )}
               <p className="mt-2 text-center text-xs text-zinc-400">
-                Depois da revisão, abriremos o WhatsApp para você enviar a
-                mensagem.
+                {etapaCheckout === 1
+                  ? "Seus dados serão usados somente para este pedido."
+                  : "Na próxima tela, confirme sua idade e envie o pedido."}
               </p>
             </div>
           </aside>
