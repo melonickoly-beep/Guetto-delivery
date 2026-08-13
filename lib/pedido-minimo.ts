@@ -9,6 +9,35 @@ export const CIDADES_ENTREGA = [
 
 export type CidadeEntrega = (typeof CIDADES_ENTREGA)[number]["nome"];
 
+export const BAIRROS_POR_CIDADE = {
+  Paranacity: [
+    "Centro",
+    "Vila Progresso",
+    "Jd Matil",
+    "Jd Bella Vista",
+    "Jd Italia",
+    "Conjunto Nonato",
+    "Conjunto Jose Sanches",
+    "Conjunto Joao Lopes",
+    "Jardim Licce",
+  ],
+  "Vila Rural": ["Vila Rural", "Atrás do Panizza"],
+  "Cruzeiro do Sul": ["Cruzeiro do Sul"],
+} as const satisfies Record<CidadeEntrega, readonly string[]>;
+
+export type BairroEntrega =
+  (typeof BAIRROS_POR_CIDADE)[CidadeEntrega][number];
+
+export const bairrosDaCidade = (cidade: CidadeEntrega | "") =>
+  cidade ? BAIRROS_POR_CIDADE[cidade] : [];
+
+export const ehBairroEntrega = (
+  cidade: CidadeEntrega,
+  bairro: unknown
+): bairro is BairroEntrega =>
+  typeof bairro === "string" &&
+  (BAIRROS_POR_CIDADE[cidade] as readonly string[]).includes(bairro);
+
 export const ehCidadeEntrega = (valor: unknown): valor is CidadeEntrega =>
   typeof valor === "string" &&
   CIDADES_ENTREGA.some((cidade) => cidade.nome === valor);

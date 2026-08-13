@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import {
   avaliarPedidoMinimo,
   avaliarPedidoMinimoLongNeck,
+  ehBairroEntrega,
   ehCidadeEntrega,
   mensagemPedidoMinimo,
   mensagemPedidoMinimoLongNeck,
@@ -91,9 +92,24 @@ export async function POST(request: Request) {
     typeof body?.endereco === "string" ? body.endereco.trim() : "";
   const bairro = typeof body?.bairro === "string" ? body.bairro.trim() : "";
 
-  if (!bairro || bairro.length > 100) {
+  if (!cidadeEntrega || !ehBairroEntrega(cidadeEntrega, bairro)) {
     return NextResponse.json(
-      { error: "Informe o bairro para continuar." },
+      { error: "Escolha um bairro válido para a área de entrega." },
+      { status: 400 }
+    );
+  }
+
+  const enderecoNormalizado = normalizar(endereco);
+  if (
+    cidadeEntrega !== "Vila Rural" &&
+    (enderecoNormalizado.includes("panizza") ||
+      enderecoNormalizado.includes("vila rural"))
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Endereços na Vila Rural ou atrás do Panizza devem usar a área Vila Rural.",
+      },
       { status: 400 }
     );
   }
