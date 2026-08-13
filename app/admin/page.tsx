@@ -371,7 +371,18 @@ export default function AdminPage() {
   async function atualizarProdutoRapido(
     id: string,
     alteracoes: Partial<
-      Pick<Produto, "preco" | "estoque" | "descricao" | "imagem" | "estoque_opcoes">
+      Pick<
+        Produto,
+        | "categoria_id"
+        | "nome"
+        | "preco"
+        | "estoque"
+        | "descricao"
+        | "imagem"
+        | "destaque"
+        | "tipo_venda"
+        | "estoque_opcoes"
+      >
     >
   ) {
     setProdutosSalvos((atuais) => {
@@ -1266,20 +1277,23 @@ export default function AdminPage() {
       tipo_venda: tipoVenda,
     };
 
-    const { error } = produtoEmEdicao
-      ? await supabase
-          .from("produtos")
-          .update({ ...dadosProduto, ...(imagemNova ? { imagem: imagemNova } : {}) })
-          .eq("id", produtoEmEdicao)
-      : await supabase
-          .from("produtos")
-          .insert({ ...dadosProduto, imagem: imagemNova });
+    if (produtoEmEdicao) {
+      const salvou = await atualizarProdutoRapido(produtoEmEdicao, {
+        ...dadosProduto,
+        ...(imagemNova ? { imagem: imagemNova } : {}),
+      });
+      setSalvando(false);
+      if (!salvou) return;
+    } else {
+      const { error } = await supabase
+        .from("produtos")
+        .insert({ ...dadosProduto, imagem: imagemNova });
+      setSalvando(false);
 
-    setSalvando(false);
-
-    if (error) {
-      alert(error.message);
-      return;
+      if (error) {
+        alert(error.message);
+        return;
+      }
     }
 
     const estavaEditando = Boolean(produtoEmEdicao);

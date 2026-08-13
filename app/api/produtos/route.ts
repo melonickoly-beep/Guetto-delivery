@@ -44,6 +44,34 @@ export async function PATCH(request: Request) {
     alteracoes.preco = preco;
   }
 
+  if ("categoria_id" in entrada) {
+    if (typeof entrada.categoria_id !== "string" || !entrada.categoria_id.trim()) {
+      return NextResponse.json({ error: "Categoria inválida." }, { status: 400 });
+    }
+    alteracoes.categoria_id = entrada.categoria_id.trim();
+  }
+
+  if ("nome" in entrada) {
+    if (typeof entrada.nome !== "string" || !entrada.nome.trim()) {
+      return NextResponse.json({ error: "Nome inválido." }, { status: 400 });
+    }
+    alteracoes.nome = entrada.nome.trim();
+  }
+
+  if ("destaque" in entrada) {
+    if (typeof entrada.destaque !== "boolean") {
+      return NextResponse.json({ error: "Destaque inválido." }, { status: 400 });
+    }
+    alteracoes.destaque = entrada.destaque;
+  }
+
+  if ("tipo_venda" in entrada) {
+    if (entrada.tipo_venda !== "caixa" && entrada.tipo_venda !== "avulso") {
+      return NextResponse.json({ error: "Tipo de venda inválido." }, { status: 400 });
+    }
+    alteracoes.tipo_venda = entrada.tipo_venda;
+  }
+
   if ("estoque" in entrada) {
     const estoque = Number(entrada.estoque);
     if (!Number.isInteger(estoque) || estoque < 0) {
