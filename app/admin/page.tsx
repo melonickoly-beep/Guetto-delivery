@@ -125,6 +125,9 @@ export default function AdminPage() {
     new Set()
   );
   const [produtosSalvos, setProdutosSalvos] = useState<Set<string>>(new Set());
+  const [estoquesEmEdicao, setEstoquesEmEdicao] = useState<
+    Record<string, string>
+  >({});
   const confirmacoesSalvasRef = useRef<Record<string, number>>({});
   const [detalhesEssencias, setDetalhesEssencias] = useState<DetalhesEssencias>({});
   const detalhesEssenciasRef = useRef<DetalhesEssencias>({});
@@ -420,6 +423,13 @@ export default function AdminPage() {
       setProdutos((atuais) =>
         atuais.map((produto) => produtosAtualizados.get(produto.id) ?? produto)
       );
+      if ("estoque" in alteracoes) {
+        setEstoquesEmEdicao((atuais) => {
+          const proximos = { ...atuais };
+          delete proximos[id];
+          return proximos;
+        });
+      }
       setProdutosSalvos((atuais) => new Set(atuais).add(id));
 
       window.clearTimeout(confirmacoesSalvasRef.current[id]);
@@ -446,36 +456,22 @@ export default function AdminPage() {
     }
   }
 
-  function atualizarEstoqueLocal(produto: Produto, novoEstoque: number) {
-    const estoqueNormalizado = Math.max(0, Math.floor(novoEstoque || 0));
+  async function salvarEstoqueDigitado(produto: Produto) {
+    const valorDigitado =
+      estoquesEmEdicao[produto.id] ?? String(estoqueDisponivelProduto(produto));
+    const estoqueNormalizado = Number(valorDigitado);
 
-    setProdutos((atuais) => {
-      if (
-        !produto.grupo_estoque ||
-        typeof produto.estoque_unidades !== "number"
-      ) {
-        return atuais.map((item) =>
-          item.id === produto.id
-            ? { ...item, estoque: estoqueNormalizado }
-            : item
-        );
-      }
+    if (
+      !valorDigitado.trim() ||
+      !Number.isInteger(estoqueNormalizado) ||
+      estoqueNormalizado < 0
+    ) {
+      alert("Informe uma quantidade inteira, igual ou maior que zero.");
+      return;
+    }
 
-      const unidadesPorVenda = Math.max(1, produto.unidades_por_venda ?? 1);
-      const unidadesSoltas = produto.estoque_unidades % unidadesPorVenda;
-      const estoqueTotalUnidades =
-        estoqueNormalizado * unidadesPorVenda + unidadesSoltas;
-
-      return atuais.map((item) => {
-        if (item.grupo_estoque !== produto.grupo_estoque) return item;
-
-        const fatorItem = Math.max(1, item.unidades_por_venda ?? 1);
-        return {
-          ...item,
-          estoque: Math.floor(estoqueTotalUnidades / fatorItem),
-          estoque_unidades: estoqueTotalUnidades,
-        };
-      });
+    await atualizarProdutoRapido(produto.id, {
+      estoque: estoqueNormalizado,
     });
   }
 
@@ -2130,7 +2126,13 @@ export default function AdminPage() {
                         Estoque total: {produto.estoque}
                       </span>
                     ) : (
-                      <div className="flex items-center gap-2 text-sm">
+                      <form
+                        className="flex flex-wrap items-center gap-2 text-sm"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void salvarEstoqueDigitado(produto);
+                        }}
+                      >
                         <span className="font-semibold">Estoque</span>
                         <button
                           type="button"
@@ -2142,7 +2144,10 @@ export default function AdminPage() {
                               ),
                             })
                           }
-                          disabled={produtosSalvando.has(produto.id)}
+                          disabled={
+                            produtosSalvando.has(produto.id) ||
+                            produto.id in estoquesEmEdicao
+                          }
                           className="grid h-8 w-8 place-items-center rounded-md bg-zinc-800 text-lg hover:bg-zinc-700"
                           aria-label={`Diminuir estoque de ${produto.nome}`}
                         >
@@ -2151,25 +2156,30 @@ export default function AdminPage() {
                         <input
                           type="number"
                           min="0"
-                          value={estoqueDisponivelProduto(produto)}
-                          onChange={(event) => {
-                            const novoEstoque = Math.max(
-                              0,
-                              Number(event.target.value)
-                            );
-                            atualizarEstoqueLocal(produto, novoEstoque);
-                          }}
-                          onBlur={(event) =>
-                            void atualizarProdutoRapido(produto.id, {
-                              estoque: Math.max(0, Number(event.target.value)),
-                            })
+                          step="1"
+                          value={
+                            estoquesEmEdicao[produto.id] ??
+                            String(estoqueDisponivelProduto(produto))
                           }
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") event.currentTarget.blur();
-                          }}
+                          onChange={(event) =>
+                            setEstoquesEmEdicao((atuais) => ({
+                              ...atuais,
+                              [produto.id]: event.target.value,
+                            }))
+                          }
                           className="w-16 rounded-md bg-zinc-800 px-2 py-1.5 text-center"
                           aria-label={`Estoque de ${produto.nome}`}
                         />
+                        <button
+                          type="submit"
+                          disabled={
+                            produtosSalvando.has(produto.id) ||
+                            !(produto.id in estoquesEmEdicao)
+                          }
+                          className="rounded-md bg-yellow-400 px-3 py-1.5 font-bold text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Salvar estoque
+                        </button>
                         <button
                           type="button"
                           onClick={() =>
@@ -2177,7 +2187,10 @@ export default function AdminPage() {
                               estoque: estoqueDisponivelProduto(produto) + 1,
                             })
                           }
-                          disabled={produtosSalvando.has(produto.id)}
+                          disabled={
+                            produtosSalvando.has(produto.id) ||
+                            produto.id in estoquesEmEdicao
+                          }
                           className="grid h-8 w-8 place-items-center rounded-md bg-zinc-800 text-lg hover:bg-zinc-700"
                           aria-label={`Aumentar estoque de ${produto.nome}`}
                         >
@@ -2187,12 +2200,14 @@ export default function AdminPage() {
                           {produtosSalvando.has(produto.id) ? (
                             <span className="text-yellow-300">Salvando...</span>
                           ) : produtosSalvos.has(produto.id) ? (
-                            <span className="text-green-300">Salvo</span>
+                            <span className="text-green-300">Salvo no banco</span>
                           ) : (
-                            <span className="text-zinc-500">Salva ao sair</span>
+                            <span className="text-zinc-500">
+                              Digite e toque em salvar
+                            </span>
                           )}
                         </span>
-                      </div>
+                      </form>
                     )}
                   </div>
 

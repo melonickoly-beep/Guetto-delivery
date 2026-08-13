@@ -1698,18 +1698,6 @@ export default function Catalogo({
         </div>
       </div>
 
-      {categoriaAtiva === "mais-vendidos" && !busca.trim() && (
-        <div className="mt-5 rounded-2xl border-2 border-yellow-400 bg-yellow-400/10 p-4 text-center">
-          <p className="text-lg font-black text-yellow-300">
-            🍻 MAIS ECONOMIA NA CAIXA FECHADA
-          </p>
-          <p className="mt-1 text-sm text-zinc-300">
-            Na tela inicial, cervejas aparecem em caixas e packs. Unidades estão
-            na categoria Cervejas.
-          </p>
-        </div>
-      )}
-
       {produtosFiltrados.length === 0 ? (
         <div className="mt-8 rounded-xl border border-dashed border-zinc-700 p-10 text-center text-zinc-400">
           Nenhum produto encontrado nesta categoria.
