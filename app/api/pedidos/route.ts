@@ -16,6 +16,11 @@ type ItemRecebido = {
   escolhas_combo?: unknown;
 };
 
+type TrocoRecebido = {
+  precisa_troco?: unknown;
+  troco_para?: unknown;
+};
+
 const normalizar = (valor: string) =>
   valor
     .normalize("NFD")
@@ -111,6 +116,41 @@ export async function POST(request: Request) {
     itens.length > 50
   ) {
     return NextResponse.json({ error: "Dados do pedido inválidos." }, { status: 400 });
+  }
+
+  const troco: Array<TrocoRecebido | null> = Array.isArray(body?.troco)
+    ? body.troco
+    : [];
+  const pagamentoEmDinheiroInvalido = body.pagamento.some(
+    (pagamento: string, indice: number) => {
+      const pagamentoNormalizado = normalizar(pagamento);
+      if (!pagamentoNormalizado.startsWith("dinheiro:")) return false;
+
+      const confirmacao = troco[indice];
+      if (
+        !confirmacao ||
+        typeof confirmacao.precisa_troco !== "boolean"
+      ) {
+        return true;
+      }
+
+      return (
+        confirmacao.precisa_troco &&
+        (typeof confirmacao.troco_para !== "number" ||
+          !Number.isFinite(confirmacao.troco_para) ||
+          confirmacao.troco_para <= 0)
+      );
+    }
+  );
+
+  if (pagamentoEmDinheiroInvalido) {
+    return NextResponse.json(
+      {
+        error:
+          "Informe se vai precisar de troco ou não e, quando necessário, o valor para o troco.",
+      },
+      { status: 400 }
+    );
   }
 
   for (const item of itens) {
