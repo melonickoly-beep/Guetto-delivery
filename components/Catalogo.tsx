@@ -171,9 +171,13 @@ const formatarNomeProduto = (nome: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const rotuloQuantidadeProduto = (produto: Produto) => {
+const rotuloQuantidadeProduto = (
+  produto: Produto,
+  categoria?: string
+) => {
   const nome = normalizarTexto(produto.nome);
   if (nome.includes("combo")) return "1 COMBO";
+  if (normalizarTexto(categoria ?? "") === "salgadinhos") return "PACOTE";
   if (nome === "gelo de sabor" || nome === "gelinho gourmet") return "1 UN";
   const unidades = produto.unidades_por_venda ?? 1;
   if (unidades > 1) return `${unidades} UN`;
@@ -1806,7 +1810,7 @@ export default function Catalogo({
                     </span>
                   )}
                   <span className="absolute bottom-3 right-3 rounded-lg bg-black/85 px-3 py-1.5 text-sm font-black text-white shadow-lg">
-                    {rotuloQuantidadeProduto(produto)}
+                    {rotuloQuantidadeProduto(produto, categoriaProduto)}
                   </span>
                 </div>
                 <div className="flex flex-1 flex-col p-4 sm:p-5">
