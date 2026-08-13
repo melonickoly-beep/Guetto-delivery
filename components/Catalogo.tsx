@@ -27,7 +27,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   avaliarPedidoMinimo,
   avaliarPedidoMinimoLongNeck,
+  bairrosDaCidade,
   CIDADES_ENTREGA,
+  ehBairroEntrega,
   mensagemPedidoMinimo,
   mensagemPedidoMinimoLongNeck,
   type CidadeEntrega,
@@ -401,7 +403,12 @@ export default function Catalogo({
         dados.endereco ??
           [dados.rua, dados.numeroEndereco].filter(Boolean).join(", ")
       );
-      setBairro(dados.bairro ?? "");
+      const cidadeSalva = dados.cidadeEntrega ?? "";
+      setBairro(
+        cidadeSalva && ehBairroEntrega(cidadeSalva, dados.bairro)
+          ? dados.bairro
+          : ""
+      );
       setReferencia(dados.referencia ?? "");
       setCidadeEntrega(dados.cidadeEntrega ?? "");
       setDadosClienteRecuperados(true);
@@ -653,6 +660,9 @@ export default function Catalogo({
 
   function escolherCidade(cidade: CidadeEntrega) {
     setCidadeEntrega(cidade);
+    setBairro((bairroAtual) =>
+      ehBairroEntrega(cidade, bairroAtual) ? bairroAtual : ""
+    );
     window.localStorage.setItem("guetto_cidade", cidade);
     setSeletorCidadeAberto(false);
     setErrosCheckout((erros) => ({ ...erros, geral: undefined }));
@@ -950,8 +960,8 @@ export default function Catalogo({
     if (endereco.trim().length < 4) {
       erros.endereco = "DIGITE A RUA E O NÚMERO.";
     }
-    if (!bairro.trim()) {
-      erros.bairro = "DIGITE O BAIRRO.";
+    if (!bairro || !ehBairroEntrega(cidadeEntrega, bairro)) {
+      erros.bairro = "ESCOLHA O BAIRRO.";
     }
     if (Object.keys(erros).length > 0) {
       exibirErrosCheckout(erros);
@@ -2698,7 +2708,7 @@ export default function Catalogo({
                       </label>
                       <label className="space-y-1.5 text-sm font-bold text-zinc-200">
                         <span>BAIRRO <span aria-hidden="true">*</span></span>
-                        <input
+                        <select
                           name="bairro"
                           autoComplete="address-level3"
                           value={bairro}
@@ -2706,14 +2716,19 @@ export default function Catalogo({
                             setBairro(event.target.value);
                             setErrosCheckout((erros) => ({ ...erros, bairro: undefined }));
                           }}
-                          placeholder="Ex.: Centro"
-                          maxLength={100}
                           required
                           aria-invalid={Boolean(errosCheckout.bairro)}
                           className={`w-full rounded-xl border-2 bg-zinc-900 p-4 text-lg font-normal text-white outline-none focus:border-yellow-400 ${
                             errosCheckout.bairro ? "border-red-500" : "border-transparent"
                           }`}
-                        />
+                        >
+                          <option value="">Escolha o bairro</option>
+                          {bairrosDaCidade(cidadeEntrega).map((opcao) => (
+                            <option key={opcao} value={opcao}>
+                              {opcao}
+                            </option>
+                          ))}
+                        </select>
                         {errosCheckout.bairro && (
                           <span className="block font-black text-red-400" role="alert">
                             {errosCheckout.bairro}
