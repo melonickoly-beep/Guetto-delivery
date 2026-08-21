@@ -115,7 +115,10 @@ const ehPacoteErvaTerere = (item: ItemPedidoMinimo) => {
 
 const ehCocaCola2Litros = (item: ItemPedidoMinimo) => {
   const texto = normalizar(`${item.nome} ${item.descricao ?? ""}`);
-  return texto.includes("coca-cola") && /\b2\s*l\b/.test(texto);
+  return (
+    (texto.includes("coca-cola") || texto.includes("coca cola")) &&
+    /\b2\s*l\b/.test(texto)
+  );
 };
 
 export const ehCervejaLongNeckAvulsa = (
@@ -401,7 +404,7 @@ export function mensagemPedidoMinimo(
   cidade: CidadeEntrega
 ) {
   const excecoesParanacity = cidade === "Paranacity"
-    ? " Em Paranacity, 1 pacote de erva de tereré ou 2 Coca-Cola 2L também liberam a entrega."
+    ? " Em Paranacity, 1 pacote de erva de tereré ou 2 Coca Cola 2L também liberam a entrega."
     : "";
 
   if (resultado.temLataCervejaAvulsa) {

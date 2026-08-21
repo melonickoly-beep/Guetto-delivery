@@ -101,7 +101,15 @@ type DadosClienteSalvos = {
 };
 
 type ErrosCheckout = Partial<
-  Record<"nomeCompleto" | "telefone" | "endereco" | "bairro" | "geral", string>
+  Record<
+    | "nomeCompleto"
+    | "telefone"
+    | "endereco"
+    | "numeroEndereco"
+    | "bairro"
+    | "geral",
+    string
+  >
 >;
 
 type PedidoConfirmado = {
@@ -154,11 +162,51 @@ const normalizarTexto = (valor: string) =>
     .toLowerCase()
     .trim();
 
+const prioridadeCategorias = new Map(
+  [
+    "cervejas",
+    "combos",
+    "tabacaria",
+    "salgadinhos",
+    "vinhos",
+    "balas e gomas",
+  ].map((categoria, indice) => [categoria, indice])
+);
+
+const ordenarCategorias = (categorias: Categoria[]) =>
+  [...categorias].sort((categoriaA, categoriaB) => {
+    const prioridadeA =
+      prioridadeCategorias.get(normalizarTexto(categoriaA.nome)) ??
+      Number.POSITIVE_INFINITY;
+    const prioridadeB =
+      prioridadeCategorias.get(normalizarTexto(categoriaB.nome)) ??
+      Number.POSITIVE_INFINITY;
+
+    if (prioridadeA !== prioridadeB) return prioridadeA - prioridadeB;
+    return categoriaA.nome.localeCompare(categoriaB.nome, "pt-BR", {
+      sensitivity: "base",
+    });
+  });
+
+const separarEnderecoSalvo = (endereco: string) => {
+  const enderecoLimpo = endereco.trim();
+  const partes = enderecoLimpo.match(/^(.*?),\s*(\d[\dA-Za-z\s/-]*)$/);
+
+  return {
+    rua: partes?.[1]?.trim() ?? enderecoLimpo,
+    numero: partes?.[2]?.trim() ?? "",
+  };
+};
+
+const numeroEnderecoValido = (numero: string) =>
+  /^\d[\dA-Za-z\s/-]{0,19}$/.test(numero.trim());
+
 const ehEssencia = (produto: Pick<Produto, "nome">) =>
   normalizarTexto(produto.nome).startsWith("essencia");
 
 const formatarNomeProduto = (nome: string) =>
   nome
+    .replace(/\bcoca\s*-\s*cola\b/gi, "Coca Cola")
     .replace(/\bcarvao\b/gi, "Carvão")
     .replace(/\benergetico\b/gi, "Energético")
     .replace(/\bimperio\b/gi, "Império")
@@ -176,12 +224,14 @@ const rotuloQuantidadeProduto = (
   categoria?: string
 ) => {
   const nome = normalizarTexto(produto.nome);
+  const categoriaNormalizada = normalizarTexto(categoria ?? "");
   if (nome.includes("combo")) return "1 COMBO";
-  if (normalizarTexto(categoria ?? "") === "salgadinhos") return "PACOTE";
+  if (categoriaNormalizada === "erva para terere") return "PACOTE 500G";
+  if (categoriaNormalizada === "vinhos") return "UNIDADE";
+  if (categoriaNormalizada === "salgadinhos") return "PACOTE";
   if (nome === "gelo de sabor" || nome === "gelinho gourmet") return "1 UN";
   const unidades = produto.unidades_por_venda ?? 1;
   if (unidades > 1) return `${unidades} UN`;
-  if (produto.tipo_venda === "caixa") return "CAIXA";
   return "1 UN";
 };
 
@@ -212,12 +262,14 @@ export default function Catalogo({
   horarioFechamento: string;
   somenteRetiradaConfigurada: boolean;
 }) {
+  const categoriasOrdenadas = ordenarCategorias(categorias);
+  const temProdutosMaisVendidos = produtos.some(
+    (produto) => produto.mais_vendido
+  );
   const categoriaInicial =
-    produtos.some((produto) => produto.mais_vendido)
+    temProdutosMaisVendidos
       ? "mais-vendidos"
-      : categorias.find((categoria) => categoria.nome === "Combos")?.id ??
-        categorias[0]?.id ??
-        null;
+      : categoriasOrdenadas[0]?.id ?? null;
   const [categoriaAtiva, setCategoriaAtiva] = useState<string | null>(
     categoriaInicial
   );
@@ -241,6 +293,7 @@ export default function Catalogo({
   const [nomeCompleto, setNomeCompleto] = useState("");
   const [telefone, setTelefone] = useState("");
   const [endereco, setEndereco] = useState("");
+  const [numeroEndereco, setNumeroEndereco] = useState("");
   const [bairro, setBairro] = useState("");
   const [referencia, setReferencia] = useState("");
   const [cidadeEntrega, setCidadeEntrega] = useState<"" | CidadeEntrega>("");
@@ -401,9 +454,10 @@ export default function Catalogo({
           [dados.nome, dados.sobrenome].filter(Boolean).join(" ")
       );
       setTelefone(dados.telefone ?? "");
-      setEndereco(
-        dados.endereco ??
-          [dados.rua, dados.numeroEndereco].filter(Boolean).join(", ")
+      const enderecoSalvo = separarEnderecoSalvo(dados.endereco ?? "");
+      setEndereco(dados.rua?.trim() || enderecoSalvo.rua);
+      setNumeroEndereco(
+        dados.numeroEndereco?.trim() || enderecoSalvo.numero
       );
       const cidadeSalva = dados.cidadeEntrega ?? "";
       setBairro(
@@ -907,6 +961,7 @@ export default function Catalogo({
       "nomeCompleto",
       "telefone",
       "endereco",
+      "numeroEndereco",
       "bairro",
     ] as const).find((campo) => erros[campo]);
     if (!primeiroCampo) return;
@@ -914,6 +969,7 @@ export default function Catalogo({
       nomeCompleto: "nome-completo",
       telefone: "telefone",
       endereco: "endereco",
+      numeroEndereco: "numero-endereco",
       bairro: "bairro",
     };
     window.requestAnimationFrame(() => {
@@ -958,8 +1014,11 @@ export default function Catalogo({
     if (telefoneNumeros.length < 10 || telefoneNumeros.length > 11) {
       erros.telefone = "DIGITE UM WHATSAPP COM DDD.";
     }
-    if (endereco.trim().length < 4) {
-      erros.endereco = "DIGITE A RUA E O NÚMERO.";
+    if (endereco.trim().length < 3) {
+      erros.endereco = "DIGITE O NOME DA RUA.";
+    }
+    if (!numeroEnderecoValido(numeroEndereco)) {
+      erros.numeroEndereco = "DIGITE O NÚMERO DA CASA.";
     }
     if (!bairro || !ehBairroEntrega(cidadeEntrega, bairro)) {
       erros.bairro = "ESCOLHA O BAIRRO.";
@@ -1090,6 +1149,7 @@ export default function Catalogo({
     const pagamentosFormatados = pagamentos.map((pagamento) =>
       resumoPagamento(pagamento, quantidadePagamentos > 1 ? valorNumerico(pagamento.valor) : valorTotal)
     );
+    const enderecoCompleto = `${endereco.trim()}, ${numeroEndereco.trim()}`;
     const pedido = [
       "Olá! Gostaria de fazer este pedido:",
       "",
@@ -1099,7 +1159,7 @@ export default function Catalogo({
       ...(!somenteRetiradaHoje
         ? [
             `Cidade: ${cidadeEntrega}`,
-            `Endereço: ${endereco.trim()}`,
+            `Endereço: ${enderecoCompleto}`,
             `Bairro: ${bairro.trim()}`,
             ...(referencia.trim()
               ? [`Referência: ${referencia.trim()}`]
@@ -1113,7 +1173,6 @@ export default function Catalogo({
       somenteRetiradaHoje
         ? "Retirada: avisem pelo WhatsApp quando o pedido estiver pronto."
         : `Previsão de entrega: até ${tempoEntrega} minutos`,
-      "Maioridade: cliente confirmou ter 18 anos ou mais.",
       ...(quantidadeGarrafas300 > 0 ? ["Vasilhame: cliente confirmou que levará o próprio."] : []),
       "Pagamento:",
       ...pagamentosFormatados.map((pagamento) => `- ${pagamento}`),
@@ -1131,6 +1190,9 @@ export default function Catalogo({
           endereco: somenteRetiradaHoje
             ? "Retirada na loja"
             : endereco.trim(),
+          numero_endereco: somenteRetiradaHoje
+            ? null
+            : numeroEndereco.trim(),
           bairro: somenteRetiradaHoje ? null : bairro.trim(),
           referencia: somenteRetiradaHoje ? null : referencia.trim() || null,
           cidade_entrega: somenteRetiradaHoje ? null : cidadeEntrega,
@@ -1182,7 +1244,9 @@ export default function Catalogo({
       const dadosCliente: DadosClienteSalvos = {
         nomeCompleto: nomeCompleto.trim(),
         telefone: telefone.trim(),
-        endereco: endereco.trim(),
+        endereco: enderecoCompleto,
+        rua: endereco.trim(),
+        numeroEndereco: numeroEndereco.trim(),
         bairro: bairro.trim(),
         referencia: referencia.trim(),
         cidadeEntrega,
@@ -1355,7 +1419,7 @@ export default function Catalogo({
             {!compacto &&
               avaliacaoPedidoMinimo.liberadoPor === "duas_cocas_2l" && (
                 <p className="mt-2 text-xs text-green-200">
-                  Entrega liberada em Paranacity por 2 Coca-Cola de 2 litros.
+                  Entrega liberada em Paranacity por 2 Coca Cola de 2 litros.
                 </p>
               )}
             {!compacto && avaliacaoPedidoMinimo.temLataCervejaAvulsa && (
@@ -1666,17 +1730,17 @@ export default function Catalogo({
           className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 p-2.5 font-bold text-white outline-none focus:border-yellow-400 sm:hidden"
         >
           {busca && <option value="">Resultados da busca</option>}
-          {produtos.some((produto) => produto.mais_vendido) && (
+          {temProdutosMaisVendidos && (
             <option value="mais-vendidos">🔥 Mais vendidos</option>
           )}
-          {categorias.map((categoria) => (
+          {categoriasOrdenadas.map((categoria) => (
             <option key={categoria.id} value={categoria.id}>
               {categoria.icone} {categoria.nome}
             </option>
           ))}
         </select>
         <div className="mt-2 hidden gap-2 overflow-x-auto pb-1 sm:flex">
-          {produtos.some((produto) => produto.mais_vendido) && (
+          {temProdutosMaisVendidos && (
             <button
               type="button"
               onClick={() => {
@@ -1692,7 +1756,7 @@ export default function Catalogo({
               🔥 Mais vendidos
             </button>
           )}
-          {categorias.map((categoria) => (
+          {categoriasOrdenadas.map((categoria) => (
             <button
               key={categoria.id}
               onClick={() => {
@@ -2297,7 +2361,7 @@ export default function Catalogo({
                 <p className="font-bold text-yellow-300">Retirada na loja</p>
               ) : (
                 <>
-                  <p>{endereco.trim()} — {bairro.trim()} — {cidadeEntrega}</p>
+                  <p>{endereco.trim()}, {numeroEndereco.trim()} — {bairro.trim()} — {cidadeEntrega}</p>
                   {referencia.trim() && <p>Referência: {referencia.trim()}</p>}
                 </>
               )}
@@ -2684,29 +2748,61 @@ export default function Catalogo({
                     </div>
                   ) : (
                     <>
-                      <label className="space-y-1.5 text-sm font-bold text-zinc-200">
-                        <span>RUA E NÚMERO <span aria-hidden="true">*</span></span>
-                        <input
-                          name="endereco"
-                          autoComplete="street-address"
-                          value={endereco}
-                          onChange={(event) => {
-                            setEndereco(event.target.value);
-                            setErrosCheckout((erros) => ({ ...erros, endereco: undefined }));
-                          }}
-                          placeholder="Ex.: Rua das Flores, 123"
-                          aria-invalid={Boolean(errosCheckout.endereco)}
-                          required
-                          className={`w-full rounded-xl border-2 bg-zinc-900 p-4 text-lg font-normal text-white outline-none focus:border-yellow-400 ${
-                            errosCheckout.endereco ? "border-red-500" : "border-transparent"
-                          }`}
-                        />
-                        {errosCheckout.endereco && (
-                          <span className="block font-black text-red-400" role="alert">
-                            {errosCheckout.endereco}
-                          </span>
-                        )}
-                      </label>
+                      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_11rem]">
+                        <label className="space-y-1.5 text-sm font-bold text-zinc-200">
+                          <span>RUA <span aria-hidden="true">*</span></span>
+                          <input
+                            name="endereco"
+                            autoComplete="address-line1"
+                            value={endereco}
+                            onChange={(event) => {
+                              setEndereco(event.target.value);
+                              setErrosCheckout((erros) => ({ ...erros, endereco: undefined }));
+                            }}
+                            placeholder="Ex.: Rua das Flores"
+                            aria-invalid={Boolean(errosCheckout.endereco)}
+                            required
+                            className={`w-full rounded-xl border-2 bg-zinc-900 p-4 text-lg font-normal text-white outline-none focus:border-yellow-400 ${
+                              errosCheckout.endereco ? "border-red-500" : "border-transparent"
+                            }`}
+                          />
+                          {errosCheckout.endereco && (
+                            <span className="block font-black text-red-400" role="alert">
+                              {errosCheckout.endereco}
+                            </span>
+                          )}
+                        </label>
+                        <label className="space-y-1.5 text-sm font-bold text-zinc-200">
+                          <span>NÚMERO DA CASA <span aria-hidden="true">*</span></span>
+                          <input
+                            name="numero-endereco"
+                            autoComplete="address-line2"
+                            inputMode="numeric"
+                            maxLength={20}
+                            value={numeroEndereco}
+                            onChange={(event) => {
+                              setNumeroEndereco(event.target.value);
+                              setErrosCheckout((erros) => ({
+                                ...erros,
+                                numeroEndereco: undefined,
+                              }));
+                            }}
+                            placeholder="Ex.: 123"
+                            aria-invalid={Boolean(errosCheckout.numeroEndereco)}
+                            required
+                            className={`w-full rounded-xl border-2 bg-zinc-900 p-4 text-lg font-normal text-white outline-none focus:border-yellow-400 ${
+                              errosCheckout.numeroEndereco
+                                ? "border-red-500"
+                                : "border-transparent"
+                            }`}
+                          />
+                          {errosCheckout.numeroEndereco && (
+                            <span className="block font-black text-red-400" role="alert">
+                              {errosCheckout.numeroEndereco}
+                            </span>
+                          )}
+                        </label>
+                      </div>
                       <label className="space-y-1.5 text-sm font-bold text-zinc-200">
                         <span>BAIRRO <span aria-hidden="true">*</span></span>
                         <select
