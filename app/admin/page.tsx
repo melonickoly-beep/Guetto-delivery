@@ -2069,9 +2069,48 @@ export default function AdminPage() {
                     {categorias.find((categoria) => categoria.id === produto.categoria_id)?.nome ?? "Sem categoria"}
                   </span>
 
-                  <h3 className="text-xl font-bold">
-                    {produto.nome}
-                  </h3>
+                  <label className="block max-w-2xl">
+                    <span className="sr-only">Título do produto</span>
+                    <input
+                      type="text"
+                      defaultValue={produto.nome}
+                      maxLength={120}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          event.currentTarget.blur();
+                        }
+                        if (event.key === "Escape") {
+                          event.currentTarget.value = produto.nome;
+                          event.currentTarget.blur();
+                        }
+                      }}
+                      onBlur={async (event) => {
+                        const campo = event.currentTarget;
+                        const novoNome = campo.value.trim();
+
+                        if (!novoNome) {
+                          alert("Informe o título do produto.");
+                          campo.value = produto.nome;
+                          return;
+                        }
+
+                        campo.value = novoNome;
+                        if (novoNome === produto.nome) return;
+
+                        const salvou = await atualizarProdutoRapido(produto.id, {
+                          nome: novoNome,
+                        });
+                        if (!salvou) campo.value = produto.nome;
+                      }}
+                      className="w-full border-b border-transparent bg-transparent py-1 text-xl font-bold text-white outline-none transition hover:border-zinc-600 focus:border-yellow-400"
+                      aria-label={`Título de ${produto.nome}`}
+                      title="Clique para editar o título"
+                    />
+                    <span className="mt-1 block text-[11px] text-zinc-500">
+                      Clique no título para editar. Salva ao sair ou pressionar Enter.
+                    </span>
+                  </label>
 
                   <label className="mt-3 flex max-w-2xl flex-col gap-1 text-sm">
                     <span className="font-semibold text-zinc-300">

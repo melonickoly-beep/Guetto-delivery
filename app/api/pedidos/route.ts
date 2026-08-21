@@ -29,6 +29,16 @@ const normalizar = (valor: string) =>
     .toLowerCase()
     .trim();
 
+const separarEnderecoLegado = (endereco: string) => {
+  const partes = endereco.match(/^(.*?),\s*(\d[\dA-Za-z\s/-]*)$/);
+  return partes
+    ? { rua: partes[1].trim(), numero: partes[2].trim() }
+    : { rua: endereco, numero: "" };
+};
+
+const numeroEnderecoValido = (numero: string) =>
+  /^\d[\dA-Za-z\s/-]{0,19}$/.test(numero.trim());
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const itens: ItemRecebido[] = Array.isArray(body?.itens) ? body.itens : [];
@@ -88,8 +98,19 @@ export async function POST(request: Request) {
   const cidadeEntrega = ehCidadeEntrega(body?.cidade_entrega)
     ? body.cidade_entrega
     : "";
-  const endereco =
+  const enderecoRecebido =
     typeof body?.endereco === "string" ? body.endereco.trim() : "";
+  const enderecoLegado = separarEnderecoLegado(enderecoRecebido);
+  const numeroEnderecoRecebido =
+    typeof body?.numero_endereco === "string"
+      ? body.numero_endereco.trim()
+      : "";
+  const rua = numeroEnderecoRecebido
+    ? enderecoRecebido
+    : enderecoLegado.rua;
+  const numeroEndereco = numeroEnderecoRecebido || enderecoLegado.numero;
+  const endereco =
+    rua && numeroEndereco ? `${rua}, ${numeroEndereco}` : enderecoRecebido;
   const bairro = typeof body?.bairro === "string" ? body.bairro.trim() : "";
 
   if (!cidadeEntrega || !ehBairroEntrega(cidadeEntrega, bairro)) {
@@ -119,7 +140,8 @@ export async function POST(request: Request) {
     typeof body?.telefone !== "string" ||
     !body.cliente_nome.trim() ||
     !body.telefone.trim() ||
-    !endereco ||
+    rua.length < 3 ||
+    !numeroEnderecoValido(numeroEndereco) ||
     !cidadeEntrega ||
     !Array.isArray(body?.pagamento) ||
     body.pagamento.length < 1 ||
