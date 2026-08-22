@@ -23,7 +23,7 @@ import {
   QrCode,
   MoreHorizontal,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   avaliarPedidoMinimo,
   avaliarPedidoMinimoLongNeck,
@@ -51,6 +51,7 @@ type Produto = {
   imagem: string | null;
   destaque: boolean;
   tipo_venda: "caixa" | "avulso" | null;
+  produto_base_id: string | null;
   grupo_estoque: string | null;
   unidades_por_venda: number | null;
   estoque_unidades: number | null;
@@ -476,19 +477,128 @@ export default function Catalogo({
     }
   }, []);
 
-  function estoqueDisponivel(produto: Produto) {
+  function estoqueProdutoIndividual(produto: Produto) {
     if (produto.grupo_estoque && typeof produto.estoque_unidades === "number") {
       return Math.floor(produto.estoque_unidades / (produto.unidades_por_venda || 1));
     }
     return produto.estoque;
   }
 
+  function estoqueDisponivelCombo(
+    combo: Produto,
+    escolhas?: EscolhasCombo
+  ) {
+    const energeticos = produtos.filter(
+      (produto) =>
+        produto.nome.startsWith("Furioso 2L - ") &&
+        estoqueProdutoIndividual(produto) > 0
+    );
+    const energeticoEscolhido = escolhas?.energetico
+      ? energeticos.find(
+          (produto) =>
+            produto.nome === `Furioso 2L - ${escolhas.energetico}`
+        )
+      : undefined;
+    const estoqueEnergetico = escolhas?.energetico
+      ? energeticoEscolhido
+        ? estoqueProdutoIndividual(energeticoEscolhido)
+        : 0
+      : energeticos.reduce(
+          (total, produto) => total + estoqueProdutoIndividual(produto),
+          0
+        );
+
+    const geloDeSabor = produtos.find(
+      (produto) => normalizarTexto(produto.nome) === "gelo de sabor"
+    );
+    const estoqueTotalGelos = geloDeSabor
+      ? Math.floor(estoqueProdutoIndividual(geloDeSabor) / 6)
+      : 0;
+    const estoqueGelosPorSabor =
+      escolhas?.gelos && geloDeSabor?.estoque_opcoes
+        ? Object.entries(
+            escolhas.gelos.reduce<Record<string, number>>((total, sabor) => {
+              total[sabor] = (total[sabor] ?? 0) + 1;
+              return total;
+            }, {})
+          ).reduce(
+            (limite, [sabor, quantidadePorCombo]) =>
+              Math.min(
+                limite,
+                Math.floor(
+                  (geloDeSabor.estoque_opcoes?.[sabor] ?? 0) /
+                    quantidadePorCombo
+                )
+              ),
+            Number.POSITIVE_INFINITY
+          )
+        : Number.POSITIVE_INFINITY;
+
+    const nomeCombo = normalizarTexto(combo.nome);
+    let estoqueDestilado = estoqueProdutoIndividual(combo);
+    if (nomeCombo === "combo askov") {
+      const askovs = produtos.filter((produto) =>
+        produto.nome.startsWith("Askov 1L - ")
+      );
+      const askovEscolhida = escolhas?.askov
+        ? askovs.find(
+            (produto) => produto.nome === `Askov 1L - ${escolhas.askov}`
+          )
+        : undefined;
+      estoqueDestilado = escolhas?.askov
+        ? askovEscolhida
+          ? estoqueProdutoIndividual(askovEscolhida)
+          : 0
+        : askovs.reduce(
+            (total, produto) => total + estoqueProdutoIndividual(produto),
+            0
+          );
+    } else if (combo.produto_base_id) {
+      const base = produtos.find(
+        (produto) => produto.id === combo.produto_base_id
+      );
+      if (!base) {
+        estoqueDestilado = 0;
+      } else if (escolhas?.whisky && base.estoque_opcoes) {
+        estoqueDestilado = Math.min(
+          estoqueProdutoIndividual(base),
+          base.estoque_opcoes[escolhas.whisky] ?? 0
+        );
+      } else if (base.estoque_opcoes) {
+        estoqueDestilado = Math.min(
+          estoqueProdutoIndividual(base),
+          Object.values(base.estoque_opcoes).reduce(
+            (total, estoque) => total + Math.max(0, estoque),
+            0
+          )
+        );
+      } else {
+        estoqueDestilado = estoqueProdutoIndividual(base);
+      }
+    }
+
+    return Math.max(
+      0,
+      Math.min(
+        estoqueDestilado,
+        estoqueEnergetico,
+        estoqueTotalGelos,
+        estoqueGelosPorSabor
+      )
+    );
+  }
+
+  function estoqueDisponivel(produto: Produto) {
+    return normalizarTexto(produto.nome).startsWith("combo ")
+      ? estoqueDisponivelCombo(produto)
+      : estoqueProdutoIndividual(produto);
+  }
+
   const categoriaCervejasId = categorias.find(
     (categoria) => normalizarTexto(categoria.nome) === "cervejas"
   )?.id;
 
-  const produtosFiltrados = useMemo(
-    () => {
+  const produtosFiltrados = (() => {
       const termo = normalizarTexto(busca);
       const filtrados = produtos.filter((produto) => {
         const correspondeCategoria =
@@ -533,9 +643,7 @@ export default function Catalogo({
             )
             .slice(0, 8)
         : filtrados;
-    },
-    [busca, categoriaAtiva, produtos, categoriaCervejasId]
-  );
+  })();
   const categoriaTabacariaId = categorias.find(
     (categoria) => normalizarTexto(categoria.nome) === "tabacaria"
   )?.id;
@@ -654,7 +762,11 @@ export default function Catalogo({
     .reduce((total, item) => total + item.quantidade, 0);
 
   const saboresAskov = produtos
-    .filter((produto) => produto.nome.startsWith("Askov 1L - "))
+    .filter(
+      (produto) =>
+        produto.nome.startsWith("Askov 1L - ") &&
+        estoqueProdutoIndividual(produto) > 0
+    )
     .map((produto) => produto.nome.replace("Askov 1L - ", ""));
   const ginEternity = produtos.find(
     (produto) => normalizarTexto(produto.nome) === "gin eternity"
@@ -671,7 +783,29 @@ export default function Catalogo({
         estoqueDisponivel(produto) > 0
     )
     .map((produto) => produto.nome.replace("Furioso 2L - ", ""));
-  const saboresDeGelo = ["Laranja", "Maca Verde", "Limao", "Morango", "Coco", "Maracuja", "Melancia", "Uva Verde", "Amora", "Abacaxi", "Sal e Limao", "Brisa"];
+  const produtoGeloDeSabor = produtos.find(
+    (produto) => normalizarTexto(produto.nome) === "gelo de sabor"
+  );
+  const saboresDeGelo = produtoGeloDeSabor?.estoque_opcoes
+    ? Object.entries(produtoGeloDeSabor.estoque_opcoes)
+        .filter(([, estoque]) => estoque > 0)
+        .map(([sabor]) => sabor)
+    : produtoGeloDeSabor && estoqueProdutoIndividual(produtoGeloDeSabor) > 0
+      ? [
+          "Laranja",
+          "Maca Verde",
+          "Limao",
+          "Morango",
+          "Coco",
+          "Maracuja",
+          "Melancia",
+          "Uva Verde",
+          "Amora",
+          "Abacaxi",
+          "Sal e Limao",
+          "Brisa",
+        ]
+      : [];
   const produtoJackDaniels = produtos.find(
     (produto) => produto.nome.trim().toLowerCase() === "whisky jack daniels"
   );
@@ -801,10 +935,14 @@ export default function Catalogo({
           ? ginEternity?.estoque_opcoes?.[produto.escolhasCombo.whisky]
           : undefined;
       const estoqueMaximo =
-        estoqueGinSelecionado ??
-        (produto.sabor
-          ? produto.estoque_opcoes?.[produto.sabor] ?? estoqueDisponivel(produto)
-          : estoqueDisponivel(produto));
+        produto.escolhasCombo &&
+        normalizarTexto(produto.nome).startsWith("combo ")
+          ? estoqueDisponivelCombo(produto, produto.escolhasCombo)
+          : estoqueGinSelecionado ??
+            (produto.sabor
+              ? produto.estoque_opcoes?.[produto.sabor] ??
+                estoqueDisponivel(produto)
+              : estoqueDisponivel(produto));
 
       if (!itemAtual && alteracao > 0) {
         return [...itens, { ...produto, quantidade: 1 }];
@@ -895,11 +1033,11 @@ export default function Catalogo({
   }
 
   function abrirConfiguracaoCombo(produto: Produto) {
-    if (somenteRetiradaHoje) return;
-    setSaborAskov(saboresAskov[0] ?? "Tradicional");
+    if (somenteRetiradaHoje || estoqueDisponivelCombo(produto) <= 0) return;
+    setSaborAskov(saboresAskov[0] ?? "");
     setSaborGinEternity(saboresGinEternity[0] ?? "");
-    setSaborEnergetico(saboresEnergetico[0] ?? "Tradicional");
-    setSaboresGelo(Array(6).fill(saboresDeGelo[0]));
+    setSaborEnergetico(saboresEnergetico[0] ?? "");
+    setSaboresGelo(Array(6).fill(saboresDeGelo[0] ?? ""));
     setSaborWhisky(saboresWhiskyJack[0] ?? "");
     setComboEmConfiguracao(produto);
   }
@@ -908,6 +1046,8 @@ export default function Catalogo({
     if (
       !comboEmConfiguracao ||
       !saborEnergetico ||
+      saboresGelo.length !== 6 ||
+      saboresGelo.some((sabor) => !sabor) ||
       (comboEmConfiguracao.nome.toLowerCase().includes("askov") &&
         !saborAskov) ||
       (comboEmConfiguracao.nome.toLowerCase().includes("gin eternity") &&
@@ -923,6 +1063,12 @@ export default function Catalogo({
         : {}),
       ...(comboEmConfiguracao.nome.toLowerCase().includes("jack daniel") ? { whisky: saborWhisky } : {}),
     };
+    if (estoqueDisponivelCombo(comboEmConfiguracao, escolhas) <= 0) {
+      alert(
+        "Um dos itens escolhidos acabou. Atualize a página e escolha outra opção."
+      );
+      return;
+    }
     setCarrinho((itens) => [...itens, { ...comboEmConfiguracao, quantidade: 1, escolhasCombo: escolhas }]);
     setConfirmacaoProduto(
       `${formatarNomeProduto(comboEmConfiguracao.nome)} ADICIONADO ✓`

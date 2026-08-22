@@ -199,21 +199,13 @@ export async function POST(request: Request) {
     }
   }
 
-  const idsProdutos = [
-    ...new Set(
-      itens.map((item) =>
-        typeof item.produto_id === "string" ? item.produto_id : ""
-      )
-    ),
-  ].filter(Boolean);
   const [{ data: produtos, error: erroProdutos }, { data: categorias, error: erroCategorias }] =
     await Promise.all([
       supabaseAdmin
         .from("produtos")
         .select(
-          "id,nome,descricao,preco,categoria_id,disponivel,tipo_venda"
-        )
-        .in("id", idsProdutos),
+          "id,nome,descricao,preco,categoria_id,disponivel,tipo_venda,estoque,estoque_opcoes,produto_base_id"
+        ),
       supabaseAdmin.from("categorias").select("id,nome"),
     ]);
 
@@ -262,6 +254,179 @@ export async function POST(request: Request) {
       { error: "Um ou mais produtos não estão disponíveis." },
       { status: 409 }
     );
+  }
+
+  const produtosPorNome = new Map(
+    (produtos ?? []).map((produto) => [normalizar(produto.nome), produto])
+  );
+  const consumoProdutos = new Map<string, number>();
+  const consumoOpcoes = new Map<string, Map<string, number>>();
+  const adicionarConsumoProduto = (produtoId: string, quantidade: number) => {
+    consumoProdutos.set(
+      produtoId,
+      (consumoProdutos.get(produtoId) ?? 0) + quantidade
+    );
+  };
+  const adicionarConsumoOpcao = (
+    produtoId: string,
+    opcao: string,
+    quantidade: number
+  ) => {
+    const opcoesDoProduto = consumoOpcoes.get(produtoId) ?? new Map();
+    opcoesDoProduto.set(
+      opcao,
+      (opcoesDoProduto.get(opcao) ?? 0) + quantidade
+    );
+    consumoOpcoes.set(produtoId, opcoesDoProduto);
+  };
+
+  for (const item of itens) {
+    const produto =
+      typeof item.produto_id === "string"
+        ? produtosPorId.get(item.produto_id)
+        : undefined;
+    if (!produto) continue;
+
+    const quantidade = Number(item.quantidade);
+    const escolhas =
+      item.escolhas_combo &&
+      typeof item.escolhas_combo === "object" &&
+      !Array.isArray(item.escolhas_combo)
+        ? (item.escolhas_combo as Record<string, unknown>)
+        : null;
+    const nomeProduto = normalizar(produto.nome);
+
+    if (!nomeProduto.startsWith("combo ")) {
+      adicionarConsumoProduto(produto.id, quantidade);
+
+      if (produto.estoque_opcoes) {
+        const sabor = escolhas?.sabor;
+        if (
+          typeof sabor !== "string" ||
+          !sabor.trim() ||
+          !(sabor in produto.estoque_opcoes)
+        ) {
+          return NextResponse.json(
+            { error: `Escolha um sabor disponível de ${produto.nome}.` },
+            { status: 400 }
+          );
+        }
+        adicionarConsumoOpcao(produto.id, sabor, quantidade);
+      }
+      continue;
+    }
+
+    const energetico = escolhas?.energetico;
+    const gelos = escolhas?.gelos;
+    const escolhaDestilado =
+      nomeProduto === "combo askov" ? escolhas?.askov : escolhas?.whisky;
+    const exigeEscolhaDestilado =
+      nomeProduto === "combo askov" ||
+      nomeProduto === "combo gin eternity" ||
+      nomeProduto === "combo jack daniels";
+
+    if (
+      typeof energetico !== "string" ||
+      !energetico.trim() ||
+      !Array.isArray(gelos) ||
+      gelos.length !== 6 ||
+      gelos.some((sabor) => typeof sabor !== "string" || !sabor.trim()) ||
+      (exigeEscolhaDestilado &&
+        (typeof escolhaDestilado !== "string" ||
+          !escolhaDestilado.trim()))
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Monte novamente o combo escolhendo o destilado, o energético e os 6 gelos.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const produtoEnergetico = produtosPorNome.get(
+      normalizar(`Furioso 2L - ${energetico}`)
+    );
+    const produtoGelo = produtosPorNome.get("gelo de sabor");
+    if (!produtoEnergetico?.disponivel || !produtoGelo?.disponivel) {
+      return NextResponse.json(
+        { error: "Um dos itens escolhidos para o combo está indisponível." },
+        { status: 409 }
+      );
+    }
+
+    adicionarConsumoProduto(produtoEnergetico.id, quantidade);
+    adicionarConsumoProduto(produtoGelo.id, quantidade * gelos.length);
+    for (const sabor of gelos as string[]) {
+      if (
+        produtoGelo.estoque_opcoes &&
+        !(sabor in produtoGelo.estoque_opcoes)
+      ) {
+        return NextResponse.json(
+          { error: `O gelo de ${sabor} está indisponível.` },
+          { status: 409 }
+        );
+      }
+      if (produtoGelo.estoque_opcoes) {
+        adicionarConsumoOpcao(produtoGelo.id, sabor, quantidade);
+      }
+    }
+
+    if (nomeProduto === "combo askov") {
+      const vodka = produtosPorNome.get(
+        normalizar(`Askov 1L - ${String(escolhaDestilado)}`)
+      );
+      if (!vodka?.disponivel) {
+        return NextResponse.json(
+          { error: `A Askov ${String(escolhaDestilado)} está indisponível.` },
+          { status: 409 }
+        );
+      }
+      adicionarConsumoProduto(vodka.id, quantidade);
+    } else if (produto.produto_base_id) {
+      const base = produtosPorId.get(produto.produto_base_id);
+      if (!base?.disponivel) {
+        return NextResponse.json(
+          { error: `O destilado de ${produto.nome} está indisponível.` },
+          { status: 409 }
+        );
+      }
+      adicionarConsumoProduto(base.id, quantidade);
+      if (base.estoque_opcoes) {
+        const opcao = String(escolhaDestilado ?? "");
+        if (!opcao || !(opcao in base.estoque_opcoes)) {
+          return NextResponse.json(
+            { error: `Escolha um sabor disponível de ${base.nome}.` },
+            { status: 409 }
+          );
+        }
+        adicionarConsumoOpcao(base.id, opcao, quantidade);
+      }
+    } else {
+      adicionarConsumoProduto(produto.id, quantidade);
+    }
+  }
+
+  for (const [produtoId, quantidade] of consumoProdutos) {
+    const produto = produtosPorId.get(produtoId);
+    if (!produto || produto.estoque < quantidade) {
+      return NextResponse.json(
+        { error: `Estoque insuficiente para ${produto?.nome ?? "um dos itens"}.` },
+        { status: 409 }
+      );
+    }
+  }
+
+  for (const [produtoId, opcoes] of consumoOpcoes) {
+    const produto = produtosPorId.get(produtoId);
+    for (const [opcao, quantidade] of opcoes) {
+      if ((produto?.estoque_opcoes?.[opcao] ?? 0) < quantidade) {
+        return NextResponse.json(
+          { error: `Estoque insuficiente para ${produto?.nome ?? "item"} ${opcao}.` },
+          { status: 409 }
+        );
+      }
+    }
   }
 
   const itensParaPedidoMinimo = itensValidados.map((item) => ({

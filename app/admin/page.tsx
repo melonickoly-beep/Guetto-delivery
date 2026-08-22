@@ -22,6 +22,7 @@ type Produto = {
   imagem: string;
   destaque: boolean;
   tipo_venda: "caixa" | "avulso" | null;
+  produto_base_id?: string | null;
   estoque_opcoes?: Record<string, number> | null;
   grupo_estoque?: string | null;
   unidades_por_venda?: number | null;
@@ -76,6 +77,21 @@ type DetalheSabor = {
 
 type DetalhesEssencias = Record<string, Record<string, DetalheSabor>>;
 
+const SABORES_GELO = [
+  "Abacaxi",
+  "Amora",
+  "Brisa",
+  "Coco",
+  "Laranja",
+  "Limão",
+  "Maçã Verde",
+  "Maracujá",
+  "Melancia",
+  "Morango",
+  "Sal e Limão",
+  "Uva Verde",
+];
+
 const statusPedido = [
   { valor: "novo", rotulo: "Novo" },
   { valor: "em_preparo", rotulo: "Em preparo" },
@@ -126,6 +142,9 @@ export default function AdminPage() {
   );
   const [produtosSalvos, setProdutosSalvos] = useState<Set<string>>(new Set());
   const [estoquesEmEdicao, setEstoquesEmEdicao] = useState<
+    Record<string, string>
+  >({});
+  const [estoquesOpcoesEmEdicao, setEstoquesOpcoesEmEdicao] = useState<
     Record<string, string>
   >({});
   const confirmacoesSalvasRef = useRef<Record<string, number>>({});
@@ -432,6 +451,10 @@ export default function AdminPage() {
       }
       setProdutosSalvos((atuais) => new Set(atuais).add(id));
 
+      if ("estoque" in alteracoes || "estoque_opcoes" in alteracoes) {
+        await carregarProdutos();
+      }
+
       window.clearTimeout(confirmacoesSalvasRef.current[id]);
       confirmacoesSalvasRef.current[id] = window.setTimeout(() => {
         setProdutosSalvos((atuais) => {
@@ -624,6 +647,39 @@ export default function AdminPage() {
       ...estoqueOpcoes,
       [nomeOpcao]: Math.max(0, (estoqueOpcoes[nomeOpcao] ?? 0) + alteracao),
     });
+  }
+
+  async function salvarEstoqueOpcaoDigitado(
+    produto: Produto,
+    nomeOpcao: string
+  ) {
+    const chave = `${produto.id}:${nomeOpcao}`;
+    const valorDigitado =
+      estoquesOpcoesEmEdicao[chave] ??
+      String(produto.estoque_opcoes?.[nomeOpcao] ?? 0);
+    const estoqueNormalizado = Number(valorDigitado);
+
+    if (
+      !valorDigitado.trim() ||
+      !Number.isInteger(estoqueNormalizado) ||
+      estoqueNormalizado < 0
+    ) {
+      alert("Informe uma quantidade inteira, igual ou maior que zero.");
+      return;
+    }
+
+    const salvou = await salvarEstoqueOpcoes(produto, {
+      ...(produto.estoque_opcoes ?? {}),
+      [nomeOpcao]: estoqueNormalizado,
+    });
+
+    if (salvou) {
+      setEstoquesOpcoesEmEdicao((atuais) => {
+        const proximos = { ...atuais };
+        delete proximos[chave];
+        return proximos;
+      });
+    }
   }
 
   async function adicionarOpcaoEstoque(produto: Produto) {
@@ -1379,6 +1435,200 @@ export default function AdminPage() {
           .toLowerCase()
           .includes(termoEstoque))
   );
+
+  const produtosEnergeticos = produtos.filter((produto) =>
+    normalizarTexto(produto.nome).startsWith("furioso 2l - ")
+  );
+  const produtosAskov = produtos.filter((produto) =>
+    normalizarTexto(produto.nome).startsWith("askov 1l - ")
+  );
+  const produtoGeloDeSabor = produtos.find(
+    (produto) => normalizarTexto(produto.nome) === "gelo de sabor"
+  );
+
+  function controleEstoqueComponente(produto: Produto, rotulo: string) {
+    return (
+      <form
+        key={produto.id}
+        className="flex items-center gap-2 rounded-lg bg-zinc-900 p-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void salvarEstoqueDigitado(produto);
+        }}
+      >
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold" title={rotulo}>
+          {rotulo}
+        </span>
+        <input
+          type="number"
+          min="0"
+          step="1"
+          value={
+            estoquesEmEdicao[produto.id] ??
+            String(estoqueDisponivelProduto(produto))
+          }
+          onChange={(event) =>
+            setEstoquesEmEdicao((atuais) => ({
+              ...atuais,
+              [produto.id]: event.target.value,
+            }))
+          }
+          className="w-20 rounded-md bg-zinc-800 px-2 py-1.5 text-center text-sm"
+          aria-label={`Estoque compartilhado de ${rotulo}`}
+        />
+        <button
+          type="submit"
+          disabled={
+            produtosSalvando.has(produto.id) ||
+            !(produto.id in estoquesEmEdicao)
+          }
+          className="rounded-md bg-yellow-400 px-2 py-1.5 text-xs font-bold text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {produtosSalvando.has(produto.id) ? "..." : "Salvar"}
+        </button>
+      </form>
+    );
+  }
+
+  function controleEstoqueOpcaoComponente(
+    produto: Produto,
+    sabor: string,
+    quantidade: number
+  ) {
+    const chave = `${produto.id}:${sabor}`;
+
+    return (
+      <form
+        key={chave}
+        className="flex items-center gap-2 rounded-lg bg-zinc-900 p-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void salvarEstoqueOpcaoDigitado(produto, sabor);
+        }}
+      >
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold" title={sabor}>
+          {sabor}
+        </span>
+        <input
+          type="number"
+          min="0"
+          step="1"
+          value={estoquesOpcoesEmEdicao[chave] ?? String(quantidade)}
+          onChange={(event) =>
+            setEstoquesOpcoesEmEdicao((atuais) => ({
+              ...atuais,
+              [chave]: event.target.value,
+            }))
+          }
+          className="w-20 rounded-md bg-zinc-800 px-2 py-1.5 text-center text-sm"
+          aria-label={`Estoque compartilhado de ${sabor} em ${produto.nome}`}
+        />
+        <button
+          type="submit"
+          disabled={
+            estoquesOpcoesSalvando.has(produto.id) ||
+            !(chave in estoquesOpcoesEmEdicao)
+          }
+          className="rounded-md bg-yellow-400 px-2 py-1.5 text-xs font-bold text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {estoquesOpcoesSalvando.has(produto.id) ? "..." : "Salvar"}
+        </button>
+      </form>
+    );
+  }
+
+  function painelEstoqueComponentesCombo(combo: Produto) {
+    const nomeCombo = normalizarTexto(combo.nome);
+    const baseDoCombo = combo.produto_base_id
+      ? produtos.find((produto) => produto.id === combo.produto_base_id)
+      : undefined;
+    const destilados = nomeCombo === "combo askov"
+      ? produtosAskov
+      : baseDoCombo
+        ? [baseDoCombo]
+        : [];
+
+    return (
+      <details className="mt-4 rounded-xl border border-yellow-400/30 bg-yellow-400/5 p-3">
+        <summary className="cursor-pointer font-bold text-yellow-300">
+          Editar estoque dos itens deste combo
+        </summary>
+        <p className="mt-2 text-xs text-zinc-400">
+          Estoque compartilhado: qualquer alteração feita aqui também muda o
+          produto avulso e os outros combos que usam o mesmo item.
+        </p>
+
+        {destilados.length > 0 && (
+          <div className="mt-4">
+            <p className="mb-2 text-sm font-bold text-zinc-200">
+              {nomeCombo === "combo askov"
+                ? "Vodkas por sabor"
+                : baseDoCombo?.estoque_opcoes
+                  ? normalizarTexto(baseDoCombo.nome).includes("gin")
+                    ? "Gin por sabor"
+                    : "Whisky por sabor"
+                  : "Destilado"}
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {destilados.flatMap((destilado) =>
+                destilado.estoque_opcoes
+                  ? Object.entries(destilado.estoque_opcoes)
+                      .sort(([saborA], [saborB]) =>
+                        saborA.localeCompare(saborB, "pt-BR")
+                      )
+                      .map(([sabor, quantidade]) =>
+                        controleEstoqueOpcaoComponente(
+                          destilado,
+                          sabor,
+                          quantidade
+                        )
+                      )
+                  : [
+                      controleEstoqueComponente(
+                        destilado,
+                        destilado.nome
+                          .replace(/^Askov 1L - /i, "")
+                          .replace(/^Whisky /i, "")
+                      ),
+                    ]
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-4">
+          <p className="mb-2 text-sm font-bold text-zinc-200">
+            Energéticos por sabor
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {produtosEnergeticos.map((energetico) =>
+              controleEstoqueComponente(
+                energetico,
+                energetico.nome.replace(/^Furioso 2L - /i, "")
+              )
+            )}
+          </div>
+        </div>
+
+        {produtoGeloDeSabor && (
+          <div className="mt-4">
+            <p className="mb-2 text-sm font-bold text-zinc-200">
+              Gelos por sabor
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {SABORES_GELO.map((sabor) =>
+                controleEstoqueOpcaoComponente(
+                  produtoGeloDeSabor,
+                  sabor,
+                  produtoGeloDeSabor.estoque_opcoes?.[sabor] ?? 0
+                )
+              )}
+            </div>
+          </div>
+        )}
+      </details>
+    );
+  }
 
   if (verificandoAcesso) {
     return (
@@ -2249,6 +2499,9 @@ export default function AdminPage() {
                       </form>
                     )}
                   </div>
+
+                  {normalizarTexto(produto.nome).startsWith("combo ") &&
+                    painelEstoqueComponentesCombo(produto)}
 
                   {produto.estoque_opcoes && (
                     <div className="mt-4 rounded-xl border border-zinc-700 bg-black/20 p-3">

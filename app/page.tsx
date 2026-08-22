@@ -36,7 +36,7 @@ export default async function Home() {
     supabase
       .from("produtos")
       .select(
-        "id,categoria_id,nome,descricao,preco,estoque,imagem,destaque,tipo_venda,grupo_estoque,unidades_por_venda,estoque_unidades,estoque_opcoes"
+        "id,categoria_id,nome,descricao,preco,estoque,imagem,destaque,tipo_venda,produto_base_id,grupo_estoque,unidades_por_venda,estoque_unidades,estoque_opcoes"
       )
       .eq("disponivel", true)
       .order("nome"),
