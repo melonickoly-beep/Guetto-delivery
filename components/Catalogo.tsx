@@ -248,6 +248,118 @@ const calcularSubtotalItem = (
   return item.preco * item.quantidade;
 };
 
+const estoqueProdutoIndividual = (produto: Produto) => {
+  if (produto.grupo_estoque && typeof produto.estoque_unidades === "number") {
+    return Math.floor(
+      produto.estoque_unidades / (produto.unidades_por_venda || 1)
+    );
+  }
+  return produto.estoque;
+};
+
+const calcularEstoqueDisponivelCombo = (
+  combo: Produto,
+  escolhas: EscolhasCombo | undefined,
+  produtos: Produto[]
+) => {
+  const energeticos = produtos.filter(
+    (produto) =>
+      produto.nome.startsWith("Furioso 2L - ") &&
+      estoqueProdutoIndividual(produto) > 0
+  );
+  const energeticoEscolhido = escolhas?.energetico
+    ? energeticos.find(
+        (produto) =>
+          produto.nome === `Furioso 2L - ${escolhas.energetico}`
+      )
+    : undefined;
+  const estoqueEnergetico = escolhas?.energetico
+    ? energeticoEscolhido
+      ? estoqueProdutoIndividual(energeticoEscolhido)
+      : 0
+    : energeticos.reduce(
+        (total, produto) => total + estoqueProdutoIndividual(produto),
+        0
+      );
+
+  const geloDeSabor = produtos.find(
+    (produto) => normalizarTexto(produto.nome) === "gelo de sabor"
+  );
+  const estoqueTotalGelos = geloDeSabor
+    ? Math.floor(estoqueProdutoIndividual(geloDeSabor) / 6)
+    : 0;
+  const estoqueGelosPorSabor =
+    escolhas?.gelos && geloDeSabor?.estoque_opcoes
+      ? Object.entries(
+          escolhas.gelos.reduce<Record<string, number>>((total, sabor) => {
+            total[sabor] = (total[sabor] ?? 0) + 1;
+            return total;
+          }, {})
+        ).reduce(
+          (limite, [sabor, quantidadePorCombo]) =>
+            Math.min(
+              limite,
+              Math.floor(
+                (geloDeSabor.estoque_opcoes?.[sabor] ?? 0) /
+                  quantidadePorCombo
+              )
+            ),
+          Number.POSITIVE_INFINITY
+        )
+      : Number.POSITIVE_INFINITY;
+
+  const nomeCombo = normalizarTexto(combo.nome);
+  let estoqueDestilado = estoqueProdutoIndividual(combo);
+  if (nomeCombo === "combo askov") {
+    const askovs = produtos.filter((produto) =>
+      produto.nome.startsWith("Askov 1L - ")
+    );
+    const askovEscolhida = escolhas?.askov
+      ? askovs.find(
+          (produto) => produto.nome === `Askov 1L - ${escolhas.askov}`
+        )
+      : undefined;
+    estoqueDestilado = escolhas?.askov
+      ? askovEscolhida
+        ? estoqueProdutoIndividual(askovEscolhida)
+        : 0
+      : askovs.reduce(
+          (total, produto) => total + estoqueProdutoIndividual(produto),
+          0
+        );
+  } else if (combo.produto_base_id) {
+    const base = produtos.find((produto) => produto.id === combo.produto_base_id);
+    if (!base) {
+      estoqueDestilado = 0;
+    } else if (escolhas?.whisky && base.estoque_opcoes) {
+      estoqueDestilado = Math.min(
+        estoqueProdutoIndividual(base),
+        base.estoque_opcoes[escolhas.whisky] ?? 0
+      );
+    } else if (base.estoque_opcoes) {
+      estoqueDestilado = Math.min(
+        estoqueProdutoIndividual(base),
+        Object.values(base.estoque_opcoes).reduce(
+          (total, estoque) => total + Math.max(0, estoque),
+          0
+        )
+      );
+    } else {
+      estoqueDestilado = estoqueProdutoIndividual(base);
+    }
+  }
+
+  return Math.max(
+    0,
+    Math.min(
+      estoqueDestilado,
+      estoqueEnergetico,
+      estoqueTotalGelos,
+      estoqueGelosPorSabor
+    )
+  );
+};
+
 export default function Catalogo({
   categorias,
   produtos,
@@ -362,9 +474,16 @@ export default function Catalogo({
                     )
                   : produtoAtual.estoque;
               const estoqueAtual =
-                item.sabor && produtoAtual.estoque_opcoes
-                  ? produtoAtual.estoque_opcoes[item.sabor] ?? 0
-                  : estoqueGeral;
+                item.escolhasCombo &&
+                normalizarTexto(produtoAtual.nome).startsWith("combo ")
+                  ? calcularEstoqueDisponivelCombo(
+                      produtoAtual,
+                      item.escolhasCombo,
+                      produtos
+                    )
+                  : item.sabor && produtoAtual.estoque_opcoes
+                    ? produtoAtual.estoque_opcoes[item.sabor] ?? 0
+                    : estoqueGeral;
               const quantidade = Math.min(item.quantidade, estoqueAtual);
 
               if (
@@ -477,115 +596,11 @@ export default function Catalogo({
     }
   }, []);
 
-  function estoqueProdutoIndividual(produto: Produto) {
-    if (produto.grupo_estoque && typeof produto.estoque_unidades === "number") {
-      return Math.floor(produto.estoque_unidades / (produto.unidades_por_venda || 1));
-    }
-    return produto.estoque;
-  }
-
   function estoqueDisponivelCombo(
     combo: Produto,
     escolhas?: EscolhasCombo
   ) {
-    const energeticos = produtos.filter(
-      (produto) =>
-        produto.nome.startsWith("Furioso 2L - ") &&
-        estoqueProdutoIndividual(produto) > 0
-    );
-    const energeticoEscolhido = escolhas?.energetico
-      ? energeticos.find(
-          (produto) =>
-            produto.nome === `Furioso 2L - ${escolhas.energetico}`
-        )
-      : undefined;
-    const estoqueEnergetico = escolhas?.energetico
-      ? energeticoEscolhido
-        ? estoqueProdutoIndividual(energeticoEscolhido)
-        : 0
-      : energeticos.reduce(
-          (total, produto) => total + estoqueProdutoIndividual(produto),
-          0
-        );
-
-    const geloDeSabor = produtos.find(
-      (produto) => normalizarTexto(produto.nome) === "gelo de sabor"
-    );
-    const estoqueTotalGelos = geloDeSabor
-      ? Math.floor(estoqueProdutoIndividual(geloDeSabor) / 6)
-      : 0;
-    const estoqueGelosPorSabor =
-      escolhas?.gelos && geloDeSabor?.estoque_opcoes
-        ? Object.entries(
-            escolhas.gelos.reduce<Record<string, number>>((total, sabor) => {
-              total[sabor] = (total[sabor] ?? 0) + 1;
-              return total;
-            }, {})
-          ).reduce(
-            (limite, [sabor, quantidadePorCombo]) =>
-              Math.min(
-                limite,
-                Math.floor(
-                  (geloDeSabor.estoque_opcoes?.[sabor] ?? 0) /
-                    quantidadePorCombo
-                )
-              ),
-            Number.POSITIVE_INFINITY
-          )
-        : Number.POSITIVE_INFINITY;
-
-    const nomeCombo = normalizarTexto(combo.nome);
-    let estoqueDestilado = estoqueProdutoIndividual(combo);
-    if (nomeCombo === "combo askov") {
-      const askovs = produtos.filter((produto) =>
-        produto.nome.startsWith("Askov 1L - ")
-      );
-      const askovEscolhida = escolhas?.askov
-        ? askovs.find(
-            (produto) => produto.nome === `Askov 1L - ${escolhas.askov}`
-          )
-        : undefined;
-      estoqueDestilado = escolhas?.askov
-        ? askovEscolhida
-          ? estoqueProdutoIndividual(askovEscolhida)
-          : 0
-        : askovs.reduce(
-            (total, produto) => total + estoqueProdutoIndividual(produto),
-            0
-          );
-    } else if (combo.produto_base_id) {
-      const base = produtos.find(
-        (produto) => produto.id === combo.produto_base_id
-      );
-      if (!base) {
-        estoqueDestilado = 0;
-      } else if (escolhas?.whisky && base.estoque_opcoes) {
-        estoqueDestilado = Math.min(
-          estoqueProdutoIndividual(base),
-          base.estoque_opcoes[escolhas.whisky] ?? 0
-        );
-      } else if (base.estoque_opcoes) {
-        estoqueDestilado = Math.min(
-          estoqueProdutoIndividual(base),
-          Object.values(base.estoque_opcoes).reduce(
-            (total, estoque) => total + Math.max(0, estoque),
-            0
-          )
-        );
-      } else {
-        estoqueDestilado = estoqueProdutoIndividual(base);
-      }
-    }
-
-    return Math.max(
-      0,
-      Math.min(
-        estoqueDestilado,
-        estoqueEnergetico,
-        estoqueTotalGelos,
-        estoqueGelosPorSabor
-      )
-    );
+    return calcularEstoqueDisponivelCombo(combo, escolhas, produtos);
   }
 
   function estoqueDisponivel(produto: Produto) {

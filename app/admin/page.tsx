@@ -613,14 +613,17 @@ export default function AdminPage() {
       (total, quantidade) => total + Number(quantidade),
       0
     );
-    const produtoEhEssencia = normalizarTexto(produto.nome).startsWith(
-      "essencia"
-    );
+    const nomeProdutoNormalizado = normalizarTexto(produto.nome);
+    const produtoEhEssencia = nomeProdutoNormalizado.startsWith("essencia");
+    const produtoEhGeloDeSabor = nomeProdutoNormalizado === "gelo de sabor";
+    const opcoesDisponiveis = Object.entries(opcoesOrdenadas)
+      .filter(([, quantidade]) => quantidade > 0)
+      .map(([nomeOpcao]) => nomeOpcao);
     const alteracoes = {
       estoque_opcoes: opcoesOrdenadas,
       estoque: estoqueTotal,
-      ...(produtoEhEssencia
-        ? { descricao: Object.keys(opcoesOrdenadas).join(", ") }
+      ...(produtoEhEssencia || produtoEhGeloDeSabor
+        ? { descricao: opcoesDisponiveis.join(", ") }
         : {}),
     };
 

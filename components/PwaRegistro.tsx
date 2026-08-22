@@ -22,7 +22,10 @@ export default function PwaRegistro() {
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => undefined);
+      navigator.serviceWorker
+        .register("/sw.js", { scope: "/", updateViaCache: "none" })
+        .then((registro) => registro.update())
+        .catch(() => undefined);
     }
 
     const modoStandalone =
