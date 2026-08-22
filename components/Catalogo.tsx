@@ -612,6 +612,17 @@ export default function Catalogo({
   const categoriaCervejasId = categorias.find(
     (categoria) => normalizarTexto(categoria.nome) === "cervejas"
   )?.id;
+  const nomeCategoriaPorId = new Map(
+    categorias.map((categoria) => [categoria.id, categoria.nome])
+  );
+
+  function prioridadeCervejaNaBusca(produto: Produto) {
+    if (produto.categoria_id !== categoriaCervejasId) return 3;
+    if (produto.tipo_venda === "caixa") {
+      return estoqueDisponivel(produto) > 0 ? 0 : 1;
+    }
+    return 2;
+  }
 
   const produtosFiltrados = (() => {
       const termo = normalizarTexto(busca);
@@ -622,10 +633,18 @@ export default function Catalogo({
             ? produto.mais_vendido
             : produto.categoria_id === categoriaAtiva);
         const textoProduto = normalizarTexto(
-          `${produto.nome} ${produto.descricao ?? ""}`
+          `${produto.nome} ${produto.descricao ?? ""} ${nomeCategoriaPorId.get(produto.categoria_id) ?? ""}`
         );
         return correspondeCategoria && (!termo || textoProduto.includes(termo));
       });
+
+      if (termo) {
+        return [...filtrados].sort(
+          (produtoA, produtoB) =>
+            prioridadeCervejaNaBusca(produtoA) -
+            prioridadeCervejaNaBusca(produtoB)
+        );
+      }
 
       return categoriaAtiva === "mais-vendidos" && !termo
         ? filtrados
@@ -639,18 +658,9 @@ export default function Catalogo({
             )
             .sort(
               (produtoA, produtoB) => {
-                const caixaCervejaA =
-                  produtoA.categoria_id === categoriaCervejasId &&
-                  produtoA.tipo_venda === "caixa"
-                    ? 0
-                    : 1;
-                const caixaCervejaB =
-                  produtoB.categoria_id === categoriaCervejasId &&
-                  produtoB.tipo_venda === "caixa"
-                    ? 0
-                    : 1;
                 return (
-                  caixaCervejaA - caixaCervejaB ||
+                  prioridadeCervejaNaBusca(produtoA) -
+                    prioridadeCervejaNaBusca(produtoB) ||
                   Number(produtoA.posicao_mais_vendido ?? 999) -
                     Number(produtoB.posicao_mais_vendido ?? 999)
                 );
