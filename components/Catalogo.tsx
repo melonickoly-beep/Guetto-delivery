@@ -1867,19 +1867,41 @@ export default function Catalogo({
         </div>
       )}
 
-      <div className="sticky top-0 z-30 -mx-4 border-y border-white/10 bg-zinc-950/95 px-4 py-3 shadow-xl backdrop-blur sm:-mx-5 sm:px-5">
-        <label className="relative block">
-          <span className="sr-only">Pesquisar produtos</span>
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={20} />
-          <input
-            type="search"
-            name="busca-produtos"
-            value={busca}
-            onChange={(event) => setBusca(event.target.value)}
-            placeholder="Pesquisar produto, marca ou sabor"
-            aria-label="Pesquisar produto, marca ou sabor"
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 py-2.5 pl-12 pr-4 outline-none focus:border-yellow-400"
-          />
+      <div className="sticky top-0 z-30 -mx-4 border-y-2 border-yellow-400 bg-zinc-950/95 px-4 py-4 shadow-2xl shadow-black/70 backdrop-blur sm:-mx-5 sm:px-5">
+        <label className="block">
+          <span className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-black uppercase tracking-wide text-yellow-300">
+            <Search size={20} aria-hidden="true" />
+            Busque seu produto
+            <span className="text-xs font-semibold normal-case tracking-normal text-zinc-300">
+              Digite o nome, a marca ou o sabor
+            </span>
+          </span>
+          <span className="relative block">
+            <Search
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-900"
+              size={24}
+              aria-hidden="true"
+            />
+            <input
+              type="search"
+              name="busca-produtos"
+              value={busca}
+              onChange={(event) => setBusca(event.target.value)}
+              placeholder="Ex.: gelo, Heineken, whisky..."
+              aria-label="Pesquisar produto, marca ou sabor"
+              className="h-14 w-full rounded-2xl border-2 border-yellow-400 bg-white pl-14 pr-12 text-base font-bold text-zinc-950 shadow-lg outline-none placeholder:font-semibold placeholder:text-zinc-500 focus:ring-4 focus:ring-yellow-400/30"
+            />
+            {busca && (
+              <button
+                type="button"
+                onClick={() => setBusca("")}
+                className="absolute right-2 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-xl bg-zinc-200 text-zinc-900 transition hover:bg-zinc-300"
+                aria-label="Limpar pesquisa"
+              >
+                <X size={20} aria-hidden="true" />
+              </button>
+            )}
+          </span>
         </label>
         <select
           value={busca ? "" : categoriaAtiva ?? ""}
