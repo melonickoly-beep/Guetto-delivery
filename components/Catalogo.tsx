@@ -174,8 +174,24 @@ const prioridadeCategorias = new Map(
   ].map((categoria, indice) => [categoria, indice])
 );
 
-const ordenarCategorias = (categorias: Categoria[]) =>
-  [...categorias].sort((categoriaA, categoriaB) => {
+const ordenarCategorias = (
+  categorias: Categoria[],
+  categoriasMaisVendidas: string[] = []
+) => {
+  const ordemMaisVendidas = new Map(
+    categoriasMaisVendidas.map((categoriaId, indice) => [categoriaId, indice])
+  );
+
+  return [...categorias].sort((categoriaA, categoriaB) => {
+    const posicaoA = ordemMaisVendidas.get(categoriaA.id);
+    const posicaoB = ordemMaisVendidas.get(categoriaB.id);
+
+    if (posicaoA !== undefined || posicaoB !== undefined) {
+      if (posicaoA === undefined) return 1;
+      if (posicaoB === undefined) return -1;
+      if (posicaoA !== posicaoB) return posicaoA - posicaoB;
+    }
+
     const prioridadeA =
       prioridadeCategorias.get(normalizarTexto(categoriaA.nome)) ??
       Number.POSITIVE_INFINITY;
@@ -188,6 +204,7 @@ const ordenarCategorias = (categorias: Categoria[]) =>
       sensitivity: "base",
     });
   });
+};
 
 const separarEnderecoSalvo = (endereco: string) => {
   const enderecoLimpo = endereco.trim();
@@ -367,6 +384,7 @@ export default function Catalogo({
   horarioAbertura,
   horarioFechamento,
   somenteRetiradaConfigurada,
+  categoriasMaisVendidas = [],
 }: {
   categorias: Categoria[];
   produtos: Produto[];
@@ -374,8 +392,9 @@ export default function Catalogo({
   horarioAbertura: string;
   horarioFechamento: string;
   somenteRetiradaConfigurada: boolean;
+  categoriasMaisVendidas?: string[];
 }) {
-  const categoriasOrdenadas = ordenarCategorias(categorias);
+  const categoriasOrdenadas = ordenarCategorias(categorias, categoriasMaisVendidas);
   const temProdutosMaisVendidos = produtos.some(
     (produto) => produto.mais_vendido
   );
@@ -648,25 +667,16 @@ export default function Catalogo({
 
       return categoriaAtiva === "mais-vendidos" && !termo
         ? filtrados
-            .filter(
-              (produto) =>
-                estoqueDisponivel(produto) > 0 &&
-                !(
-                  produto.categoria_id === categoriaCervejasId &&
-                  produto.tipo_venda === "avulso"
-                )
-            )
+            .filter((produto) => estoqueDisponivel(produto) > 0)
             .sort(
               (produtoA, produtoB) => {
                 return (
-                  prioridadeCervejaNaBusca(produtoA) -
-                    prioridadeCervejaNaBusca(produtoB) ||
                   Number(produtoA.posicao_mais_vendido ?? 999) -
-                    Number(produtoB.posicao_mais_vendido ?? 999)
+                  Number(produtoB.posicao_mais_vendido ?? 999)
                 );
               }
             )
-            .slice(0, 8)
+            .slice(0, 20)
         : filtrados;
   })();
   const categoriaTabacariaId = categorias.find(
@@ -2006,6 +2016,10 @@ export default function Catalogo({
               )}
               <div
                 className={`grid gap-5 sm:grid-cols-2 lg:grid-cols-3 ${
+                  categoriaAtiva === "mais-vendidos" && !busca.trim()
+                    ? "grid-cols-2 gap-3 sm:gap-5"
+                    : ""
+                } ${
                   secao.titulo ? "mt-4" : ""
                 }`}
               >
@@ -2042,10 +2056,10 @@ export default function Catalogo({
                       src={produto.imagem}
                       alt={formatarNomeProduto(produto.nome)}
                       fill
-                      className={`object-contain p-4 ${
+                      className={`object-contain p-2 sm:p-4 ${
                         semEstoque ? "grayscale opacity-60" : ""
                       }`}
-                      sizes="(max-width: 640px) calc(100vw - 2.5rem), (max-width: 1024px) 50vw, 33vw"
+                      sizes="(max-width: 640px) calc((100vw - 3.25rem) / 2), (max-width: 1024px) 50vw, 33vw"
                     />
                   ) : (
                     <div className="grid h-full place-items-center text-zinc-500">
@@ -2053,50 +2067,50 @@ export default function Catalogo({
                     </div>
                   )}
                   {produto.mais_vendido ? (
-                    <span className="absolute left-3 top-3 rounded-full bg-red-600 px-3 py-1 text-xs font-bold text-white">
+                    <span className="absolute left-2 top-2 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white sm:left-3 sm:top-3 sm:px-3 sm:py-1 sm:text-xs">
                       🔥 MAIS PEDIDO
                     </span>
                   ) : produto.destaque ? (
-                    <span className="absolute left-3 top-3 rounded-full bg-yellow-400 px-3 py-1 text-xs font-bold text-black">
+                    <span className="absolute left-2 top-2 rounded-full bg-yellow-400 px-2 py-0.5 text-[10px] font-bold text-black sm:left-3 sm:top-3 sm:px-3 sm:py-1 sm:text-xs">
                       Destaque
                     </span>
                   ) : null}
                   {semEstoque && (
-                    <span className="absolute right-3 top-3 rounded-full bg-zinc-950 px-3 py-1 text-xs font-bold text-zinc-200">
+                    <span className="absolute right-2 top-2 rounded-full bg-zinc-950 px-2 py-0.5 text-[10px] font-bold text-zinc-200 sm:right-3 sm:top-3 sm:px-3 sm:py-1 sm:text-xs">
                       Esgotado
                     </span>
                   )}
-                  <span className="absolute bottom-3 right-3 rounded-lg bg-black/85 px-3 py-1.5 text-sm font-black text-white shadow-lg">
+                  <span className="absolute bottom-2 right-2 rounded-lg bg-black/85 px-2 py-1 text-xs font-black text-white shadow-lg sm:bottom-3 sm:right-3 sm:px-3 sm:py-1.5 sm:text-sm">
                     {rotuloQuantidadeProduto(produto, categoriaProduto)}
                   </span>
                 </div>
-                <div className="flex flex-1 flex-col p-4 sm:p-5">
-                  <h3 className="line-clamp-2 min-h-12 text-lg font-bold sm:min-h-14 sm:text-xl">
+                <div className="flex flex-1 flex-col p-3 sm:p-5">
+                  <h3 className="line-clamp-2 min-h-10 text-sm font-bold sm:min-h-14 sm:text-xl">
                     {formatarNomeProduto(produto.nome)}
                   </h3>
                   {produtoEhEssencia && produto.estoque_opcoes ? (
-                    <div className="mt-2 min-h-10 text-sm text-zinc-400">
+                    <div className="mt-1 min-h-8 text-xs text-zinc-400 sm:mt-2 sm:min-h-10 sm:text-sm">
                       <span className="font-bold text-zinc-300">
                         Escolha o sabor
                       </span>
                     </div>
                   ) : eGeloDeSabor ? (
-                    <p className="mt-2 min-h-10 text-sm font-bold text-zinc-300">
+                    <p className="mt-1 min-h-8 text-xs font-bold text-zinc-300 sm:mt-2 sm:min-h-10 sm:text-sm">
                       Escolha o sabor ao adicionar
                     </p>
                   ) : (
                     produto.descricao && (
-                      <p className="mt-2 line-clamp-2 min-h-10 text-sm text-zinc-400">
+                      <p className="mt-1 line-clamp-2 min-h-8 text-xs text-zinc-400 sm:mt-2 sm:min-h-10 sm:text-sm">
                         {produto.descricao}
                       </p>
                     )
                   )}
-                  <div className="mt-auto flex items-end justify-between gap-3 pt-5">
+                  <div className="mt-auto flex flex-col gap-2 pt-3 sm:flex-row sm:items-end sm:justify-between sm:gap-3 sm:pt-5">
                     <div>
-                      <p className="price-tag inline-flex rounded-md bg-red-600 px-3 py-1.5 text-xl font-black text-white">
+                      <p className="price-tag inline-flex rounded-md bg-red-600 px-2 py-1 text-base font-black text-white sm:px-3 sm:py-1.5 sm:text-xl">
                         {formatarPreco(produto.preco)}
                       </p>
-                      <p className="mt-1 text-xs text-zinc-400">
+                      <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">
                         {semEstoque
                           ? "Indisponível"
                           : estoqueDisponivel(produto) <= 5
@@ -2105,30 +2119,30 @@ export default function Catalogo({
                       </p>
                     </div>
                     {semEstoque ? (
-                      <span className="rounded-lg border border-zinc-600 bg-zinc-800 px-3 py-2 text-center text-xs font-bold text-zinc-300">
+                      <span className="self-end rounded-lg border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-center text-xs font-bold text-zinc-300 sm:py-2">
                         Indisponível
                       </span>
                     ) : somenteRetiradaHoje ? (
-                      <span className="rounded-lg border border-yellow-400/40 bg-yellow-400/10 px-3 py-2 text-center text-xs font-bold text-yellow-200">
+                      <span className="self-end rounded-lg border border-yellow-400/40 bg-yellow-400/10 px-3 py-1.5 text-center text-xs font-bold text-yellow-200 sm:py-2">
                         Venda somente na loja
                       </span>
                     ) : item && !exigeEscolhaDeSabor ? (
-                      <div className="flex items-center gap-3 rounded-lg bg-zinc-800 p-1">
+                      <div className="flex self-end items-center gap-2 rounded-lg bg-zinc-800 p-1 sm:gap-3">
                         <button
                           onClick={() => alterarQuantidade(produto, -1)}
-                          className="rounded-md p-2 hover:bg-zinc-700"
+                          className="rounded-md p-1.5 hover:bg-zinc-700 sm:p-2"
                           aria-label={`Remover uma unidade de ${produto.nome}`}
                         >
-                          <Minus size={18} />
+                          <Minus size={16} />
                         </button>
                         <span className="w-5 text-center font-bold">{item.quantidade}</span>
                         <button
                         onClick={() => alterarQuantidade(produto, 1)}
                         disabled={item.quantidade >= estoqueDisponivel(produto)}
-                          className="rounded-md p-2 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="rounded-md p-1.5 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 sm:p-2"
                           aria-label={`Adicionar uma unidade de ${produto.nome}`}
                         >
-                          <Plus size={18} />
+                          <Plus size={16} />
                         </button>
                       </div>
                     ) : (
@@ -2141,7 +2155,7 @@ export default function Catalogo({
                               : alterarQuantidade(produto, 1)
                         }
                         disabled={semEstoque || !atendimentoAberto}
-                        className="rounded-lg bg-yellow-400 px-4 py-2 font-bold text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+                        className="self-end whitespace-nowrap rounded-lg bg-yellow-400 px-3 py-1.5 text-xs font-bold text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400 sm:px-4 sm:py-2 sm:text-base"
                       >
                         {eCombo
                           ? "Montar combo"

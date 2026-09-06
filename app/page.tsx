@@ -5,7 +5,7 @@ import Catalogo from "@/components/Catalogo";
 import Manutencao from "@/components/Manutencao";
 import { SITE_EM_MANUTENCAO } from "@/lib/site-config";
 import { supabase } from "@/lib/supabase";
-import { obterProdutosMaisVendidos } from "@/lib/resumo-sorteio";
+import { obterProdutosMaisVendidosHoje } from "@/lib/resumo-sorteio";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +30,7 @@ export default async function Home() {
     { data: categorias },
     { data: produtos },
     { data: configuracoes },
-    produtosMaisVendidos,
+    produtosMaisVendidosHoje,
   ] = await Promise.all([
     supabase.from("categorias").select("id,nome,icone").order("nome"),
     supabase
@@ -50,7 +50,7 @@ export default async function Home() {
         "somente_retirada",
         "detalhes_essencias",
       ]),
-    obterProdutosMaisVendidos(12),
+    obterProdutosMaisVendidosHoje(20),
   ]);
 
   const configuracao = new Map(
@@ -68,7 +68,7 @@ export default async function Home() {
     detalhesEssencias = {};
   }
   const posicaoMaisVendidos = new Map(
-    produtosMaisVendidos.map((produtoId, indice) => [produtoId, indice + 1])
+    produtosMaisVendidosHoje.map((produtoId, indice) => [produtoId, indice + 1])
   );
   const produtosComDetalhes = (produtos ?? []).map((produto) => ({
     ...produto,
@@ -76,6 +76,17 @@ export default async function Home() {
     mais_vendido: posicaoMaisVendidos.has(produto.id),
     posicao_mais_vendido: posicaoMaisVendidos.get(produto.id) ?? null,
   }));
+  const categoriasMaisVendidas = Array.from(
+    new Set(
+      produtosMaisVendidosHoje
+        .map(
+          (produtoId) =>
+            produtosComDetalhes.find((produto) => produto.id === produtoId)
+              ?.categoria_id
+        )
+        .filter((categoriaId): categoriaId is string => Boolean(categoriaId))
+    )
+  );
   const tempoEntrega = Number(configuracao.get("tempo_entrega")) || 20;
   const somenteRetiradaConfigurada =
     configuracao.get("somente_retirada") === "true";
@@ -125,6 +136,7 @@ export default async function Home() {
         horarioAbertura={configuracao.get("horario_abertura") ?? ""}
         horarioFechamento={configuracao.get("horario_fechamento") ?? ""}
         somenteRetiradaConfigurada={somenteRetiradaConfigurada}
+        categoriasMaisVendidas={categoriasMaisVendidas}
       />
 
       <footer

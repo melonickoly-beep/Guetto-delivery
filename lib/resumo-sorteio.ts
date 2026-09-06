@@ -20,6 +20,15 @@ export type ParticipanteSorteio = {
   total: number;
 };
 
+export type PedidoParaResumo = {
+  id: string;
+  created_at: string;
+  cliente_nome: string;
+  telefone: string;
+  itens: ItemResumoSorteio[] | null;
+  total: number | string;
+};
+
 function dataEmSaoPaulo(data: string | Date) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo",
@@ -120,10 +129,42 @@ export async function obterProdutosMaisVendidos(limite = 12) {
   }
 }
 
+export async function obterProdutosMaisVendidosHoje(limite = 12) {
+  try {
+    const pedidosDeHoje = await listarResumoDoDia(dataEmSaoPaulo(new Date()));
+    const ranking = new Map<string, number>();
+
+    for (const pedido of pedidosDeHoje) {
+      for (const item of pedido.itens) {
+        if (!item.produto_id) continue;
+        ranking.set(
+          item.produto_id,
+          (ranking.get(item.produto_id) ?? 0) + Number(item.quantidade || 0)
+        );
+      }
+    }
+
+    return Array.from(ranking.entries())
+      .filter(([, quantidade]) => quantidade > 0)
+      .sort(([, quantidadeA], [, quantidadeB]) => quantidadeB - quantidadeA)
+      .slice(0, limite)
+      .map(([produtoId]) => produtoId);
+  } catch (error) {
+    console.error("Erro ao carregar produtos mais vendidos de hoje:", error);
+    return [];
+  }
+}
+
 export async function registrarPedidoNoResumo(pedidoId: string) {
   const pedido = await buscarPedidoParaResumo(pedidoId);
   if (!pedido || pedido.status === "cancelado") return;
 
+  await registrarDadosPedidoNoResumo(pedido);
+}
+
+export async function registrarDadosPedidoNoResumo(
+  pedido: PedidoParaResumo
+) {
   await garantirBucketResumos();
   const participante: ParticipanteSorteio = {
     pedido_id: pedido.id,

@@ -241,7 +241,7 @@ export function avaliarPedidoMinimo(
   }
 
   if (!temLataCervejaAvulsa) {
-    const minimoReferencia = somenteTabacaria
+    const minimoReferencia = cidade === "Paranacity" && somenteTabacaria
       ? PEDIDO_MINIMO_TABACARIA
       : minimoCidade;
     const falta = Math.max(0, minimoReferencia - valorTotal);
@@ -250,7 +250,11 @@ export function avaliarPedidoMinimo(
       atingido: falta === 0,
       falta,
       liberadoPor:
-        falta === 0 ? (somenteTabacaria ? "tabacaria" : "cidade") : null,
+        falta === 0
+          ? cidade === "Paranacity" && somenteTabacaria
+            ? "tabacaria"
+            : "cidade"
+          : null,
       minimoReferencia,
       faltaLatasParaCaixaMista,
       quantidadeLatasAvulsas,
@@ -313,7 +317,7 @@ export function avaliarPedidoMinimo(
     };
   }
 
-  if (faltaTabacaria === 0) {
+  if (cidade === "Paranacity" && faltaTabacaria === 0) {
     return {
       atingido: true,
       falta: 0,
@@ -327,7 +331,8 @@ export function avaliarPedidoMinimo(
     };
   }
 
-  const caminhoTabacariaMaisProximo = faltaTabacaria < faltaCidade;
+  const caminhoTabacariaMaisProximo =
+    cidade === "Paranacity" && faltaTabacaria < faltaCidade;
 
   return {
     atingido: false,
