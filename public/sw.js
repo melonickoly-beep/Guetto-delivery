@@ -1,4 +1,4 @@
-const CACHE = "guetto-delivery-v5";
+const CACHE = "guetto-delivery-v6";
 const ESSENCIAIS = [
   "/offline",
   "/icons/icon-192.png",

@@ -129,28 +129,49 @@ export async function obterProdutosMaisVendidos(limite = 12) {
   }
 }
 
-export async function obterProdutosMaisVendidosHoje(limite = 12) {
+export async function obterProdutosMaisVendidosDiaESemana(limite = 20) {
   try {
-    const pedidosDeHoje = await listarResumoDoDia(dataEmSaoPaulo(new Date()));
+    const hoje = dataEmSaoPaulo(new Date());
+    // Semana móvel: hoje e os seis dias anteriores, no horário de São Paulo.
+    const dias = Array.from({ length: 7 }, (_, indice) => {
+      const data = new Date(`${hoje}T12:00:00-03:00`);
+      data.setUTCDate(data.getUTCDate() - indice);
+      return dataEmSaoPaulo(data);
+    });
+    const resumos = await Promise.all(dias.map((dia) => listarResumoDoDia(dia)));
+    const rankingHoje = new Map<string, number>();
     const ranking = new Map<string, number>();
 
-    for (const pedido of pedidosDeHoje) {
-      for (const item of pedido.itens) {
-        if (!item.produto_id) continue;
-        ranking.set(
-          item.produto_id,
-          (ranking.get(item.produto_id) ?? 0) + Number(item.quantidade || 0)
-        );
+    for (const [indice, pedidos] of resumos.entries()) {
+      for (const pedido of pedidos) {
+        for (const item of pedido.itens) {
+          if (!item.produto_id) continue;
+          if (indice === 0) {
+            rankingHoje.set(
+              item.produto_id,
+              (rankingHoje.get(item.produto_id) ?? 0) + Number(item.quantidade || 0)
+            );
+          }
+          ranking.set(
+            item.produto_id,
+            (ranking.get(item.produto_id) ?? 0) + Number(item.quantidade || 0)
+          );
+        }
       }
     }
 
-    return Array.from(ranking.entries())
+    const ordenar = (valores: Map<string, number>) => Array.from(valores.entries())
       .filter(([, quantidade]) => quantidade > 0)
-      .sort(([, quantidadeA], [, quantidadeB]) => quantidadeB - quantidadeA)
-      .slice(0, limite)
+      .sort(([idA, quantidadeA], [idB, quantidadeB]) =>
+        quantidadeB - quantidadeA || idA.localeCompare(idB)
+      )
       .map(([produtoId]) => produtoId);
+    return Array.from(new Set([
+      ...ordenar(rankingHoje),
+      ...ordenar(ranking),
+    ])).slice(0, limite);
   } catch (error) {
-    console.error("Erro ao carregar produtos mais vendidos de hoje:", error);
+    console.error("Erro ao carregar produtos mais vendidos do dia e da semana:", error);
     return [];
   }
 }

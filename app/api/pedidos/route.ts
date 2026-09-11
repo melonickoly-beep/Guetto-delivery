@@ -1,3 +1,4 @@
+import { dividirCervejaEmEmbalagens, subtotalCerveja } from "@/lib/preco-cervejas";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import {
@@ -204,7 +205,7 @@ export async function POST(request: Request) {
       supabaseAdmin
         .from("produtos")
         .select(
-          "id,nome,descricao,preco,categoria_id,disponivel,tipo_venda,estoque,estoque_opcoes,produto_base_id"
+          "id,nome,descricao,preco,categoria_id,disponivel,tipo_venda,estoque,estoque_opcoes,produto_base_id,grupo_estoque,unidades_por_venda"
         ),
       supabaseAdmin.from("categorias").select("id,nome"),
     ]);
@@ -237,7 +238,7 @@ export async function POST(request: Request) {
       normalizar(produto.nome) === "seda zomo"
         ? Math.floor(quantidade / 3) * 10 +
           (quantidade % 3) * Number(produto.preco)
-        : quantidade * Number(produto.preco);
+        : subtotalCerveja(produto, quantidade, produtos ?? [], categoriasPorId.get(produto.categoria_id) ?? "");
 
     return [
       {
@@ -497,7 +498,13 @@ export async function POST(request: Request) {
     p_telefone: body.telefone,
     p_endereco: `${endereco} — Bairro: ${bairro}`,
     p_referencia: typeof body.referencia === "string" ? body.referencia : "",
-    p_itens: itens,
+    p_itens: itens.flatMap((item) => {
+      const produto = produtosPorId.get(String(item.produto_id))!;
+      return dividirCervejaEmEmbalagens(
+        produto, Number(item.quantidade), produtos ?? [],
+        categoriasPorId.get(produto.categoria_id) ?? ""
+      ).map((parte) => ({ ...item, produto_id: parte.produto.id, quantidade: parte.quantidade }));
+    }),
     p_pagamento: Array.isArray(body.pagamento) ? body.pagamento.slice(0, 3) : [],
     p_tempo_entrega: Number(body.tempo_entrega) || 20,
     p_observacao: typeof body.observacao === "string" ? body.observacao : "",

@@ -5,7 +5,7 @@ import Catalogo from "@/components/Catalogo";
 import Manutencao from "@/components/Manutencao";
 import { SITE_EM_MANUTENCAO } from "@/lib/site-config";
 import { supabase } from "@/lib/supabase";
-import { obterProdutosMaisVendidosHoje } from "@/lib/resumo-sorteio";
+import { obterProdutosMaisVendidosDiaESemana } from "@/lib/resumo-sorteio";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +30,7 @@ export default async function Home() {
     { data: categorias },
     { data: produtos },
     { data: configuracoes },
-    produtosMaisVendidosHoje,
+    produtosMaisVendidos,
   ] = await Promise.all([
     supabase.from("categorias").select("id,nome,icone").order("nome"),
     supabase
@@ -50,7 +50,7 @@ export default async function Home() {
         "somente_retirada",
         "detalhes_essencias",
       ]),
-    obterProdutosMaisVendidosHoje(20),
+    obterProdutosMaisVendidosDiaESemana(Infinity),
   ]);
 
   const configuracao = new Map(
@@ -67,8 +67,15 @@ export default async function Home() {
   } catch {
     detalhesEssencias = {};
   }
+  // Destaques manuais vêm primeiro, seguidos das vendas do dia e da semana.
+  // O catálogo aplica os filtros de estoque antes de limitar a grade a 20.
+  const rankingCompleto = Array.from(new Set([
+    ...(produtos ?? []).filter((produto) => produto.destaque).map((produto) => produto.id),
+    ...produtosMaisVendidos,
+    ...(produtos ?? []).map((produto) => produto.id),
+  ]));
   const posicaoMaisVendidos = new Map(
-    produtosMaisVendidosHoje.map((produtoId, indice) => [produtoId, indice + 1])
+    rankingCompleto.map((produtoId, indice) => [produtoId, indice + 1])
   );
   const produtosComDetalhes = (produtos ?? []).map((produto) => ({
     ...produto,
@@ -78,7 +85,7 @@ export default async function Home() {
   }));
   const categoriasMaisVendidas = Array.from(
     new Set(
-      produtosMaisVendidosHoje
+      produtosMaisVendidos
         .map(
           (produtoId) =>
             produtosComDetalhes.find((produto) => produto.id === produtoId)

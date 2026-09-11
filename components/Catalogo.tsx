@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { subtotalCerveja } from "@/lib/preco-cervejas";
 import Link from "next/link";
 import {
   Search,
@@ -253,18 +254,6 @@ const rotuloQuantidadeProduto = (
   return "1 UN";
 };
 
-const calcularSubtotalItem = (
-  item: Pick<ItemCarrinho, "nome" | "preco" | "quantidade">
-) => {
-  if (item.nome.trim().toLowerCase() === "seda zomo") {
-    const trios = Math.floor(item.quantidade / 3);
-    const unidadesRestantes = item.quantidade % 3;
-    return trios * 10 + unidadesRestantes * item.preco;
-  }
-
-  return item.preco * item.quantidade;
-};
-
 const estoqueProdutoIndividual = (produto: Produto) => {
   if (produto.grupo_estoque && typeof produto.estoque_unidades === "number") {
     return Math.floor(
@@ -394,6 +383,13 @@ export default function Catalogo({
   somenteRetiradaConfigurada: boolean;
   categoriasMaisVendidas?: string[];
 }) {
+  const calcularSubtotalItem = (item: ItemCarrinho) => {
+    if (normalizarTexto(item.nome) === "seda zomo") {
+      return Math.floor(item.quantidade / 3) * 10 + (item.quantidade % 3) * item.preco;
+    }
+    return subtotalCerveja(item, item.quantidade, produtos,
+      categorias.find((categoria) => categoria.id === item.categoria_id)?.nome ?? "");
+  };
   const categoriasOrdenadas = ordenarCategorias(categorias, categoriasMaisVendidas);
   const temProdutosMaisVendidos = produtos.some(
     (produto) => produto.mais_vendido
@@ -646,6 +642,9 @@ export default function Catalogo({
   const produtosFiltrados = (() => {
       const termo = normalizarTexto(busca);
       const filtrados = produtos.filter((produto) => {
+        if (!termo && produto.categoria_id === categoriaCervejasId && produto.tipo_venda === "avulso") {
+          return false;
+        }
         const correspondeCategoria =
           termo.length > 0 ||
           (categoriaAtiva === "mais-vendidos"
@@ -1608,7 +1607,7 @@ export default function Catalogo({
                 {avaliacaoPedidoMinimo.liberadoPor === "caixa_cerveja"
                   ? "Latas avulsas liberadas pela caixa/pack fechado de cerveja."
                   : avaliacaoPedidoMinimo.liberadoPor === "caixa_mista"
-                    ? "Caixa mista completa: 12 latas. O total usa o preço avulso de cada lata."
+                    ? "Mínimo de 12 latas atingido. Cada 12 da mesma cerveja recebem o preço da caixa; as demais mantêm o preço avulso."
                     : avaliacaoPedidoMinimo.liberadoPor ===
                         "pack_misto_long_neck"
                       ? "Latas avulsas liberadas pelo pack misto de 6 long necks."
@@ -1622,7 +1621,7 @@ export default function Catalogo({
               <p className="mt-2 text-xs text-zinc-300">
                 {avaliacaoPedidoMinimoLongNeck.quantidade >=
                 avaliacaoPedidoMinimoLongNeck.minimo
-                  ? "Pack misto completo: 6 long necks. Você pode misturar marcas e o total usa o preço avulso de cada unidade."
+                  ? "Mínimo de 6 long necks atingido. Cada 6 da mesma cerveja recebem o preço do pack; as demais mantêm o preço avulso."
                   : avaliacaoPedidoMinimoLongNeck.liberadoPorOutrosProdutos
                     ? "Long necks avulsas liberadas pelos outros produtos do pedido."
                     : `Você pode misturar marcas. ${avaliacaoPedidoMinimoLongNeck.falta === 1 ? "Falta 1 long neck" : `Faltam ${avaliacaoPedidoMinimoLongNeck.falta} long necks`} para completar um pack misto de 6; o total usa os preços avulsos.`}
