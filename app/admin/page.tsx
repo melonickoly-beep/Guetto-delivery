@@ -960,7 +960,10 @@ export default function AdminPage() {
           ${(pedido.pagamento ?? []).map((pagamento) => `<div class="pagamento ${/troco/i.test(pagamento) ? "troco" : ""}"><span class="pagamento-titulo">FORMA DE PAGAMENTO${/troco/i.test(pagamento) ? " / TROCO" : ""}</span>${textoSeguro(pagamento)}</div>`).join("")}
           ${observacaoImpressao ? `<p><strong>Observação:</strong> ${textoSeguro(observacaoImpressao)}</p>` : ""}
           <p class="rodape">Separar e conferir antes da ${pedido.endereco === "Retirada na loja" ? "retirada" : "entrega"}</p>
-          <script>window.addEventListener("load", () => setTimeout(() => window.print(), 200));<\/script>
+          <script>
+            window.addEventListener("afterprint", () => window.close(), { once: true });
+            window.addEventListener("load", () => setTimeout(() => window.print(), 200), { once: true });
+          <\/script>
         </body>
       </html>`);
     janelaImpressao.document.close();
