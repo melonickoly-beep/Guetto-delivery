@@ -148,6 +148,9 @@ export default function AdminPage() {
   const [estoquesOpcoesEmEdicao, setEstoquesOpcoesEmEdicao] = useState<
     Record<string, string>
   >({});
+  const [nomesOpcoesEmEdicao, setNomesOpcoesEmEdicao] = useState<
+    Record<string, string>
+  >({});
   const confirmacoesSalvasRef = useRef<Record<string, number>>({});
   const [detalhesEssencias, setDetalhesEssencias] = useState<DetalhesEssencias>({});
   const detalhesEssenciasRef = useRef<DetalhesEssencias>({});
@@ -714,6 +717,51 @@ export default function AdminPage() {
     const estoqueOpcoes = { ...(produto.estoque_opcoes ?? {}) };
     delete estoqueOpcoes[nomeOpcao];
     await salvarEstoqueOpcoes(produto, estoqueOpcoes);
+  }
+
+  async function renomearOpcaoEstoque(produto: Produto, nomeAtual: string) {
+    const chave = `${produto.id}:${nomeAtual}`;
+    const novoNome = (nomesOpcoesEmEdicao[chave] ?? nomeAtual).trim();
+    if (!novoNome || normalizarTexto(novoNome) === normalizarTexto(nomeAtual)) return;
+
+    const opcoesAtuais = produto.estoque_opcoes ?? {};
+    const duplicado = Object.keys(opcoesAtuais).some(
+      (nome) => nome !== nomeAtual && normalizarTexto(nome) === normalizarTexto(novoNome)
+    );
+    if (duplicado) {
+      alert("Este sabor já está cadastrado.");
+      return;
+    }
+
+    const opcoesRenomeadas = Object.fromEntries(
+      Object.entries(opcoesAtuais).map(([nome, quantidade]) => [
+        nome === nomeAtual ? novoNome : nome,
+        quantidade,
+      ])
+    );
+    const salvou = await salvarEstoqueOpcoes(produto, opcoesRenomeadas);
+    if (salvou) {
+      const detalhesAtuais = detalhesEssenciasRef.current;
+      const detalhesMarca = detalhesAtuais[produto.id];
+      if (detalhesMarca?.[nomeAtual]) {
+        const detalhesAtualizados: DetalhesEssencias = {
+          ...detalhesAtuais,
+          [produto.id]: { ...detalhesMarca, [novoNome]: detalhesMarca[nomeAtual] },
+        };
+        delete detalhesAtualizados[produto.id][nomeAtual];
+        detalhesEssenciasRef.current = detalhesAtualizados;
+        setDetalhesEssencias(detalhesAtualizados);
+        await supabase.from("configuracoes").upsert({
+          chave: "detalhes_essencias",
+          valor: JSON.stringify(detalhesAtualizados),
+        });
+      }
+      setNomesOpcoesEmEdicao((atuais) => {
+        const proximos = { ...atuais };
+        delete proximos[chave];
+        return proximos;
+      });
+    }
   }
 
   async function carregarPedidos() {
@@ -2542,9 +2590,28 @@ export default function AdminPage() {
                                 className="rounded-lg bg-zinc-800 p-3"
                               >
                                 <div className="flex items-center justify-between gap-2">
-                                  <span className="min-w-0 flex-1 truncate text-sm font-semibold" title={sabor}>
-                                    {sabor}
-                                  </span>
+                                  <input
+                                    type="text"
+                                    value={nomesOpcoesEmEdicao[`${produto.id}:${sabor}`] ?? sabor}
+                                    onChange={(event) =>
+                                      setNomesOpcoesEmEdicao((atuais) => ({
+                                        ...atuais,
+                                        [`${produto.id}:${sabor}`]: event.target.value,
+                                      }))
+                                    }
+                                    onBlur={() =>
+                                      void renomearOpcaoEstoque(produto, sabor)
+                                    }
+                                    onKeyDown={(event) => {
+                                      if (event.key === "Enter") {
+                                        event.preventDefault();
+                                        event.currentTarget.blur();
+                                      }
+                                    }}
+                                    className="min-w-0 flex-1 rounded bg-transparent px-1 py-1 text-sm font-semibold outline-none focus:bg-zinc-900 focus:ring-1 focus:ring-yellow-400"
+                                    aria-label={`Nome do sabor ${sabor}`}
+                                    title="Edite o nome e saia do campo para salvar"
+                                  />
                                   <div className="flex shrink-0 items-center gap-1">
                                     <button
                                       type="button"
