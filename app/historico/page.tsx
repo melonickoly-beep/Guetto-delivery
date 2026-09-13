@@ -16,6 +16,7 @@ type ItemHistorico = {
   nome: string;
   quantidade: number;
   preco: number;
+  subtotal?: number;
   sabor?: string;
   escolhasCombo?: EscolhasCombo;
 };
@@ -34,6 +35,7 @@ const formatarPreco = (valor: number) =>
   }).format(valor);
 
 const calcularSubtotal = (item: ItemHistorico) => {
+  if (typeof item.subtotal === "number") return item.subtotal;
   if (item.nome.trim().toLowerCase() === "seda zomo") {
     const trios = Math.floor(item.quantidade / 3);
     return trios * 10 + (item.quantidade % 3) * Number(item.preco);

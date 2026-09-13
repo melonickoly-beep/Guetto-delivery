@@ -54,6 +54,7 @@ type Pedido = {
     nome: string;
     quantidade: number;
     preco_unitario: number;
+    subtotal?: number;
     escolhas_combo?: Record<string, string | string[]> | null;
   }>;
   total: number;
@@ -956,7 +957,7 @@ export default function AdminPage() {
             return `<div class="detalhe">${textoSeguro(rotuloEscolha)}: ${textoSeguro(escolha)}</div>`;
           })
           .join("");
-        const subtotalItem = Number(item.preco_unitario) * item.quantidade;
+        const subtotalItem = item.subtotal ?? Number(item.preco_unitario) * item.quantidade;
 
         return `
           <div class="item">
