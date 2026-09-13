@@ -662,6 +662,7 @@ export default function AdminPage() {
     nomeOpcao: string
   ) {
     const chave = `${produto.id}:${nomeOpcao}`;
+    if (!(chave in estoquesOpcoesEmEdicao) || estoquesOpcoesSalvando.has(produto.id)) return;
     const valorDigitado =
       estoquesOpcoesEmEdicao[chave] ??
       String(produto.estoque_opcoes?.[nomeOpcao] ?? 0);
@@ -2628,9 +2629,28 @@ export default function AdminPage() {
                                     >
                                       −
                                     </button>
-                                    <strong className="w-7 text-center text-yellow-300">
-                                      {quantidade}
-                                    </strong>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      inputMode="numeric"
+                                      value={estoquesOpcoesEmEdicao[chaveDetalhe] ?? quantidade}
+                                      onChange={(event) => setEstoquesOpcoesEmEdicao((atuais) => ({
+                                        ...atuais,
+                                        [chaveDetalhe]: event.target.value,
+                                      }))}
+                                      onBlur={() => void salvarEstoqueOpcaoDigitado(produto, sabor)}
+                                      onKeyDown={(event) => {
+                                        if (event.key === "Enter") {
+                                          event.preventDefault();
+                                          event.currentTarget.blur();
+                                        }
+                                      }}
+                                      disabled={estoquesOpcoesSalvando.has(produto.id)}
+                                      className="w-20 rounded border border-zinc-600 bg-zinc-900 px-2 py-1 text-center font-bold text-yellow-300 outline-none focus:border-yellow-400 disabled:opacity-50"
+                                      aria-label={`Quantidade disponível de ${sabor}`}
+                                      title="Digite a quantidade. Salva ao sair do campo ou pressionar Enter."
+                                    />
                                     <button
                                       type="button"
                                       onClick={() =>
