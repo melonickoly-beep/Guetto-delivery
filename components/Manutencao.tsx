@@ -13,10 +13,11 @@ export default function Manutencao() {
           className="mx-auto"
         />
         <h1 className="mt-7 text-3xl font-black text-yellow-400">
-          Estamos preparando novidades
+          SITE EM MANUTENÇÃO
         </h1>
         <p className="mt-3 text-lg text-white/80">
-          Nosso delivery estará disponível em breve.
+          Estamos atualizando os preços dos nossos produtos.
+          Voltamos em 01/10, às 10h, com o atendimento do delivery.
         </p>
       </section>
     </main>

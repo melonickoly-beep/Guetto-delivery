@@ -63,7 +63,7 @@ type Pedido = {
   status: string;
 };
 
-type AbaEstoque = "com-estoque" | "baixo-estoque" | "sem-estoque";
+type AbaEstoque = "com-estoque" | "baixo-estoque" | "sem-estoque" | "destaques";
 
 type ResumoPedidosHoje = {
   data: string | null;
@@ -1474,12 +1474,15 @@ export default function AdminPage() {
   const produtosSemEstoque = produtos.filter(
     (produto) => estoqueDisponivelProduto(produto) <= 0
   );
+  const produtosEmDestaque = produtos.filter((produto) => produto.destaque);
   const produtosDaAba =
     abaEstoque === "com-estoque"
       ? produtosComEstoque
       : abaEstoque === "baixo-estoque"
         ? produtosComEstoqueBaixo
-        : produtosSemEstoque;
+        : abaEstoque === "destaques"
+          ? produtosEmDestaque
+          : produtosSemEstoque;
   const termoEstoque = buscaEstoque.trim().toLowerCase();
   const produtosVisiveis = produtosDaAba.filter(
     (produto) =>
@@ -2221,7 +2224,7 @@ export default function AdminPage() {
           Produtos cadastrados
         </h2>
 
-        <div className="mb-6 flex gap-2 border-b border-zinc-700" role="tablist" aria-label="Filtrar produtos por estoque">
+        <div className="mb-6 flex flex-wrap gap-2 border-b border-zinc-700" role="tablist" aria-label="Filtrar produtos por estoque ou destaque">
           <button
             type="button"
             role="tab"
@@ -2260,6 +2263,19 @@ export default function AdminPage() {
             }`}
           >
             Sem estoque ({produtosSemEstoque.length})
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={abaEstoque === "destaques"}
+            onClick={() => setAbaEstoque("destaques")}
+            className={`rounded-t-lg px-5 py-3 font-semibold transition ${
+              abaEstoque === "destaques"
+                ? "bg-yellow-400 text-black"
+                : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+            }`}
+          >
+            Em destaque ({produtosEmDestaque.length})
           </button>
         </div>
 

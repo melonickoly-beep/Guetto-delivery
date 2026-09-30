@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import Catalogo from "@/components/Catalogo";
+import AvisoReajuste from "@/components/AvisoReajuste";
 import Manutencao from "@/components/Manutencao";
-import { SITE_EM_MANUTENCAO } from "@/lib/site-config";
+import { SITE_EM_MANUTENCAO, siteEmManutencao, horarioAberturaDoDia } from "@/lib/site-config";
+import MonitorManutencao from "@/components/MonitorManutencao";
 import { supabase } from "@/lib/supabase";
 import { obterProdutosMaisVendidosDiaESemana } from "@/lib/resumo-sorteio";
 
@@ -22,8 +24,8 @@ export const metadata: Metadata = SITE_EM_MANUTENCAO
     };
 
 export default async function Home() {
-  if (SITE_EM_MANUTENCAO) {
-    return <Manutencao />;
+  if (siteEmManutencao()) {
+    return <MonitorManutencao ativoInicial={true}><Manutencao /></MonitorManutencao>;
   }
 
   const [
@@ -56,6 +58,7 @@ export default async function Home() {
   const configuracao = new Map(
     (configuracoes ?? []).map((item) => [item.chave, item.valor])
   );
+  configuracao.set("horario_abertura", horarioAberturaDoDia(configuracao.get("horario_abertura") ?? ""));
   let detalhesEssencias: Record<
     string,
     Record<string, { descricao?: string; imagem?: string }>
@@ -105,7 +108,12 @@ export default async function Home() {
   const somenteRetiradaHoje = somenteRetiradaConfigurada || tercaFeira;
 
   return (
+    <MonitorManutencao ativoInicial={false}>
     <main className="min-h-screen text-white">
+      <AvisoReajuste ativoInicial={
+        Date.now() >= Date.parse("2026-09-30T00:00:00-03:00") &&
+        Date.now() < Date.parse("2026-10-01T00:00:00-03:00")
+      } />
       <section className="border-b border-white/10 px-5 py-3 sm:py-6">
         <div
           className={`mx-auto flex max-w-[90rem] items-center justify-between gap-3 text-left sm:gap-5 sm:text-right ${
@@ -202,5 +210,6 @@ export default async function Home() {
       </footer>
 
     </main>
+    </MonitorManutencao>
   );
 }

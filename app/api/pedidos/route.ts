@@ -11,6 +11,7 @@ import {
   type CidadeEntrega,
 } from "@/lib/pedido-minimo";
 import { registrarPedidoNoResumo } from "@/lib/resumo-sorteio";
+import { siteEmManutencao } from "@/lib/site-config";
 
 type ItemRecebido = {
   produto_id?: unknown;
@@ -41,6 +42,12 @@ const numeroEnderecoValido = (numero: string) =>
   /^\d[\dA-Za-z\s/-]{0,19}$/.test(numero.trim());
 
 export async function POST(request: Request) {
+  if (siteEmManutencao()) {
+    return NextResponse.json(
+      { error: "Site em manutenção. Voltamos em 01/10, às 10h, com os preços atualizados." },
+      { status: 503 }
+    );
+  }
   const body = await request.json().catch(() => null);
   const itens: ItemRecebido[] = Array.isArray(body?.itens) ? body.itens : [];
   const tipoAtendimento =
