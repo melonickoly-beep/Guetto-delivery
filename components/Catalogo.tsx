@@ -1,7 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { ehLataPromocional, subtotalCerveja } from "@/lib/preco-cervejas";
+import { subtotalCerveja } from "@/lib/preco-cervejas";
+import { ehSedaZomoPromocional, subtotalSedaZomo } from "@/lib/preco-sedas";
 import Link from "next/link";
 import {
   Search,
@@ -385,8 +386,8 @@ export default function Catalogo({
   categoriasMaisVendidas?: string[];
 }) {
   const calcularSubtotalItem = (item: ItemCarrinho) => {
-    if (normalizarTexto(item.nome) === "seda zomo") {
-      return Math.floor(item.quantidade / 3) * 10 + (item.quantidade % 3) * item.preco;
+    if (ehSedaZomoPromocional(item.nome)) {
+      return subtotalSedaZomo(item.quantidade, item.preco);
     }
     return subtotalCerveja(item, item.quantidade, produtos,
       categorias.find((categoria) => categoria.id === item.categoria_id)?.nome ?? "");
@@ -2108,9 +2109,6 @@ export default function Catalogo({
                       <p className="price-tag inline-flex rounded-md bg-red-600 px-2 py-1 text-base font-black text-white sm:px-3 sm:py-1.5 sm:text-xl">
                         {formatarPreco(produto.preco)}
                       </p>
-                      {ehLataPromocional(produto) && (
-                        <p className="mt-1 text-xs font-bold text-yellow-300">3 latas por R$ 10,00 da mesma marca</p>
-                      )}
                       <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">
                         {semEstoque
                           ? "Indisponível"
@@ -2815,7 +2813,6 @@ export default function Catalogo({
                         <p className="truncate font-bold">{formatarNomeProduto(item.nome)}</p>
                         {item.sabor && <p className="text-xs text-zinc-300">Sabor: {item.sabor}</p>}
                         <p className="text-sm text-yellow-400">{formatarPreco(item.preco)}</p>
-                        {ehLataPromocional(item) && <p className="text-xs text-yellow-300">3 por R$ 10,00 · Subtotal: {formatarPreco(calcularSubtotalItem(item))}</p>}
                         {item.escolhasCombo && <p className="mt-1 text-xs text-zinc-400">{item.escolhasCombo.askov ? `Askov: ${item.escolhasCombo.askov} · ` : ""}{item.escolhasCombo.whisky && item.nome.toLowerCase().includes("gin eternity") ? `Gin Eternity: ${item.escolhasCombo.whisky} · ` : ""}Energético: {item.escolhasCombo.energetico} · 6 gelos{item.escolhasCombo.whisky && item.nome.toLowerCase().includes("jack daniel") ? ` · Jack Daniel’s: ${item.escolhasCombo.whisky}` : ""}</p>}
                       </div>
                       <div className="flex items-center gap-1">

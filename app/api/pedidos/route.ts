@@ -1,4 +1,5 @@
 import { dividirCervejaEmEmbalagens, subtotalCerveja } from "@/lib/preco-cervejas";
+import { ehSedaZomoPromocional, subtotalSedaZomo } from "@/lib/preco-sedas";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import {
@@ -242,9 +243,8 @@ export async function POST(request: Request) {
 
     const quantidade = Number(item.quantidade);
     const subtotal =
-      normalizar(produto.nome) === "seda zomo"
-        ? Math.floor(quantidade / 3) * 10 +
-          (quantidade % 3) * Number(produto.preco)
+      ehSedaZomoPromocional(produto.nome)
+        ? subtotalSedaZomo(quantidade, Number(produto.preco))
         : subtotalCerveja(produto, quantidade, produtos ?? [], categoriasPorId.get(produto.categoria_id) ?? "");
 
     return [

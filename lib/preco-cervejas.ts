@@ -9,12 +9,6 @@ type ProdutoPreco = {
   disponivel?: boolean;
 };
 
-export function ehLataPromocional(produto: Pick<ProdutoPreco, "nome" | "tipo_venda">) {
-  const nome = produto.nome.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  return produto.tipo_venda === "avulso" && /\blata\b/.test(nome) &&
-    /^(imperio\s+puro\s+malte|glacial)\b/.test(nome.trim());
-}
-
 // O grupo de estoque identifica a mesma cerveja, variante e embalagem.
 // Nunca agrupar apenas pela marca (ex.: tradicional e zero álcool).
 export function dividirCervejaEmEmbalagens<T extends ProdutoPreco>(
@@ -61,8 +55,6 @@ export function subtotalCerveja<T extends ProdutoPreco>(
   return dividirCervejaEmEmbalagens(produto, quantidade, produtos, categoria)
     .reduce((total, parte) => {
       const preco = Math.round(parte.produto.preco * 100);
-      return total + (ehLataPromocional(parte.produto)
-        ? Math.floor(parte.quantidade / 3) * 1000 + (parte.quantidade % 3) * preco
-        : preco * parte.quantidade);
+      return total + preco * parte.quantidade;
     }, 0) / 100;
 }
