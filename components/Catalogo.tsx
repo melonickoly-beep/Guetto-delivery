@@ -2112,7 +2112,7 @@ export default function Catalogo({
                         {formatarPreco(produto.preco)}
                       </p>
                       {ehImperioUltra(produto) && caixaImperioUltra && (
-                        <p className="mt-1 text-xs font-bold text-yellow-300">12 unidades por {formatarPreco(caixaImperioUltra.preco)} · avulsas ou packs</p>
+                        <p className="mt-1 text-xs font-bold text-yellow-300">Comprando a caixa com 12, a unidade sai por menos de R$ 5,45</p>
                       )}
                       <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">
                         {semEstoque
