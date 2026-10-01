@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { subtotalCerveja } from "@/lib/preco-cervejas";
+import { ehImperioUltra, subtotalCerveja } from "@/lib/preco-cervejas";
 import { ehSedaZomoPromocional, subtotalSedaZomo } from "@/lib/preco-sedas";
 import Link from "next/link";
 import {
@@ -385,12 +385,14 @@ export default function Catalogo({
   somenteRetiradaConfigurada: boolean;
   categoriasMaisVendidas?: string[];
 }) {
+  const caixaImperioUltra = produtos.find(p => ehImperioUltra(p) && p.unidades_por_venda === 12);
   const calcularSubtotalItem = (item: ItemCarrinho) => {
     if (ehSedaZomoPromocional(item.nome)) {
       return subtotalSedaZomo(item.quantidade, item.preco);
     }
     return subtotalCerveja(item, item.quantidade, produtos,
-      categorias.find((categoria) => categoria.id === item.categoria_id)?.nome ?? "");
+      categorias.find((categoria) => categoria.id === item.categoria_id)?.nome ?? "",
+      { itens: carrinho, indice: carrinho.indexOf(item) });
   };
   const categoriasOrdenadas = ordenarCategorias(categorias, categoriasMaisVendidas);
   const temProdutosMaisVendidos = produtos.some(
@@ -2109,6 +2111,9 @@ export default function Catalogo({
                       <p className="price-tag inline-flex rounded-md bg-red-600 px-2 py-1 text-base font-black text-white sm:px-3 sm:py-1.5 sm:text-xl">
                         {formatarPreco(produto.preco)}
                       </p>
+                      {ehImperioUltra(produto) && caixaImperioUltra && (
+                        <p className="mt-1 text-xs font-bold text-yellow-300">12 unidades por {formatarPreco(caixaImperioUltra.preco)} · avulsas ou packs</p>
+                      )}
                       <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">
                         {semEstoque
                           ? "Indisponível"
@@ -2813,6 +2818,7 @@ export default function Catalogo({
                         <p className="truncate font-bold">{formatarNomeProduto(item.nome)}</p>
                         {item.sabor && <p className="text-xs text-zinc-300">Sabor: {item.sabor}</p>}
                         <p className="text-sm text-yellow-400">{formatarPreco(item.preco)}</p>
+                        {ehImperioUltra(item) && <p className="text-xs text-yellow-300">Subtotal: {formatarPreco(calcularSubtotalItem(item))} · preço de caixa a cada 12 unidades</p>}
                         {item.escolhasCombo && <p className="mt-1 text-xs text-zinc-400">{item.escolhasCombo.askov ? `Askov: ${item.escolhasCombo.askov} · ` : ""}{item.escolhasCombo.whisky && item.nome.toLowerCase().includes("gin eternity") ? `Gin Eternity: ${item.escolhasCombo.whisky} · ` : ""}Energético: {item.escolhasCombo.energetico} · 6 gelos{item.escolhasCombo.whisky && item.nome.toLowerCase().includes("jack daniel") ? ` · Jack Daniel’s: ${item.escolhasCombo.whisky}` : ""}</p>}
                       </div>
                       <div className="flex items-center gap-1">

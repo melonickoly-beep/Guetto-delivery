@@ -9,6 +9,16 @@ type ProdutoPreco = {
   disponivel?: boolean;
 };
 
+export function ehImperioUltra(produto: ProdutoPreco) {
+  return produto.grupo_estoque === "cerveja-imperio-ultra-long-neck" &&
+    [1, 6, 12].includes(produto.unidades_por_venda ?? 0);
+}
+
+type ContextoCarrinho = {
+  itens: Array<{ id: string; quantidade: number }>;
+  indice: number;
+};
+
 // O grupo de estoque identifica a mesma cerveja, variante e embalagem.
 // Nunca agrupar apenas pela marca (ex.: tradicional e zero álcool).
 export function dividirCervejaEmEmbalagens<T extends ProdutoPreco>(
@@ -18,6 +28,8 @@ export function dividirCervejaEmEmbalagens<T extends ProdutoPreco>(
   categoria: string
 ): Array<{ produto: T; quantidade: number }> {
   const nome = produto.nome.toLowerCase();
+  // A Ultra mantém as embalagens escolhidas: o desconto agrupa o carrinho.
+  if (ehImperioUltra(produto)) return [{ produto, quantidade }];
   const tamanho = /long\s*neck/.test(nome) ? 6 : /\blata\b/.test(nome) ? 12 : 0;
   if (
     categoria.trim().toLowerCase() !== "cervejas" ||
@@ -50,8 +62,31 @@ export function dividirCervejaEmEmbalagens<T extends ProdutoPreco>(
 }
 
 export function subtotalCerveja<T extends ProdutoPreco>(
-  produto: T, quantidade: number, produtos: T[], categoria: string
+  produto: T, quantidade: number, produtos: T[], categoria: string,
+  contexto?: ContextoCarrinho
 ) {
+  if (categoria.trim().toLowerCase() === "cervejas" && ehImperioUltra(produto)) {
+    const grupo = produtos.filter(p => p.categoria_id === produto.categoria_id && ehImperioUltra(p));
+    const unidade = grupo.find(p => p.unidades_por_venda === 1);
+    const caixa = grupo.find(p => p.unidades_por_venda === 12);
+    if (unidade && caixa) {
+      const linhas = contexto?.itens ?? [{ id: produto.id, quantidade }];
+      const indice = contexto?.indice ?? 0;
+      const unidades = linhas.map(linha => {
+        const item = grupo.find(p => p.id === linha.id);
+        return item ? linha.quantidade * (item.unidades_por_venda ?? 1) : 0;
+      });
+      const totalUnidades = unidades.reduce((soma, valor) => soma + valor, 0);
+      if (totalUnidades > 0) {
+        const totalCentavos = Math.floor(totalUnidades / 12) * Math.round(caixa.preco * 100) +
+          (totalUnidades % 12) * Math.round(unidade.preco * 100);
+        const anteriores = unidades.slice(0, indice).reduce((soma, valor) => soma + valor, 0);
+        // Rateio em centavos garante que as linhas somem exatamente o total.
+        return (Math.round(totalCentavos * (anteriores + unidades[indice]) / totalUnidades) -
+          Math.round(totalCentavos * anteriores / totalUnidades)) / 100;
+      }
+    }
+  }
   return dividirCervejaEmEmbalagens(produto, quantidade, produtos, categoria)
     .reduce((total, parte) => {
       const preco = Math.round(parte.produto.preco * 100);

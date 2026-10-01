@@ -234,7 +234,10 @@ export async function POST(request: Request) {
       normalizar(categoria.nome),
     ])
   );
-  const itensValidados = itens.flatMap((item) => {
+  const contextoPrecos = itens.map(item => ({
+    id: String(item.produto_id), quantidade: Number(item.quantidade),
+  }));
+  const itensValidados = itens.flatMap((item, indice) => {
     const produto =
       typeof item.produto_id === "string"
         ? produtosPorId.get(item.produto_id)
@@ -245,7 +248,8 @@ export async function POST(request: Request) {
     const subtotal =
       ehSedaZomoPromocional(produto.nome)
         ? subtotalSedaZomo(quantidade, Number(produto.preco))
-        : subtotalCerveja(produto, quantidade, produtos ?? [], categoriasPorId.get(produto.categoria_id) ?? "");
+        : subtotalCerveja(produto, quantidade, produtos ?? [], categoriasPorId.get(produto.categoria_id) ?? "",
+          { itens: contextoPrecos, indice });
 
     return [
       {
