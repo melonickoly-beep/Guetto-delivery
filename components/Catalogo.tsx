@@ -1,5 +1,7 @@
 "use client";
 
+import { selecionarVitrineInicial } from "@/lib/vitrine-inicial";
+
 import Image from "next/image";
 import { ehImperioUltra, subtotalCerveja } from "@/lib/preco-cervejas";
 import { ehSedaZomoPromocional, subtotalSedaZomo } from "@/lib/preco-sedas";
@@ -636,6 +638,9 @@ export default function Catalogo({
 
   const produtosFiltrados = (() => {
       const termo = normalizarTexto(busca);
+      if (categoriaAtiva === "mais-vendidos" && !termo) {
+        return selecionarVitrineInicial(produtos, estoqueDisponivel);
+      }
       const filtrados = produtos.filter((produto) => {
         const correspondeCategoria =
           termo.length > 0 ||
@@ -656,26 +661,20 @@ export default function Catalogo({
         );
       }
 
-      return categoriaAtiva === "mais-vendidos" && !termo
-        ? filtrados
-            .filter((produto) => estoqueDisponivel(produto) > 0)
-            .sort(
-              (produtoA, produtoB) => {
-                return (
-                  Number(produtoB.destaque) - Number(produtoA.destaque) ||
-                  Number(produtoA.posicao_mais_vendido ?? 999) -
-                  Number(produtoB.posicao_mais_vendido ?? 999)
-                );
-              }
-            )
-        : [...filtrados].sort((a, b) => prioridadeCervejaNaBusca(a) - prioridadeCervejaNaBusca(b));
+      return [...filtrados].sort((a, b) => prioridadeCervejaNaBusca(a) - prioridadeCervejaNaBusca(b));
   })();
   const categoriaTabacariaId = categorias.find(
     (categoria) => normalizarTexto(categoria.nome) === "tabacaria"
   )?.id;
   const exibirSubsecoesTabacaria =
     !busca.trim() && categoriaAtiva === categoriaTabacariaId;
-  const secoesProdutos = exibirSubsecoesTabacaria
+  const secoesProdutos = categoriaAtiva === "mais-vendidos" && !busca.trim()
+    ? [
+        { id: "destaques", titulo: "Destaques", descricao: "Nossa seleção para você.", produtos: produtosFiltrados.filter((p) => p.destaque) },
+        { id: "mais-vendidos", titulo: "Mais vendidos", descricao: "Os mais vendidos da semana, em pelo menos 3 pedidos diferentes.", produtos: produtosFiltrados.filter((p) => !p.destaque && p.mais_vendido) },
+        { id: "sugestoes", titulo: "Confira também", descricao: "Mais opções disponíveis para completar seu pedido.", produtos: produtosFiltrados.filter((p) => !p.destaque && !p.mais_vendido) },
+      ].filter((secao) => secao.produtos.length > 0)
+    : exibirSubsecoesTabacaria
     ? [
         {
           id: "essencias",
@@ -1969,7 +1968,7 @@ export default function Catalogo({
       {produtosFiltrados.length === 0 ? (
         <div className="mt-8 rounded-xl border border-dashed border-zinc-700 p-10 text-center text-zinc-400">
           {categoriaAtiva === "mais-vendidos" && !busca.trim()
-            ? "Nenhum destaque ou mais vendido disponível no momento. Confira as categorias."
+            ? "Nenhum produto disponível no momento. Confira as categorias."
             : "Nenhum produto encontrado nesta categoria."}
         </div>
       ) : (
@@ -1982,7 +1981,7 @@ export default function Catalogo({
               {secao.titulo && (
                 <div className="rounded-2xl border border-yellow-400/30 bg-yellow-400/10 px-5 py-4">
                   <p className="text-xs font-black uppercase tracking-[0.2em] text-yellow-400">
-                    Tabacaria
+                    {exibirSubsecoesTabacaria ? "Tabacaria" : "Guetto Delivery"}
                   </p>
                   <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
                     <div>
