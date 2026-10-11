@@ -1,3 +1,4 @@
+import { classificarMaisVendidos } from "@/lib/mais-vendidos";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const BUCKET_RESUMOS = "resumos-sorteio";
@@ -129,7 +130,7 @@ export async function obterProdutosMaisVendidos(limite = 12) {
   }
 }
 
-export async function obterProdutosMaisVendidosDiaESemana(limite = 20) {
+export async function obterProdutosMaisVendidosDaSemana(limite = 12) {
   try {
     const hoje = dataEmSaoPaulo(new Date());
     // Semana móvel: hoje e os seis dias anteriores, no horário de São Paulo.
@@ -139,39 +140,9 @@ export async function obterProdutosMaisVendidosDiaESemana(limite = 20) {
       return dataEmSaoPaulo(data);
     });
     const resumos = await Promise.all(dias.map((dia) => listarResumoDoDia(dia)));
-    const rankingHoje = new Map<string, number>();
-    const ranking = new Map<string, number>();
-
-    for (const [indice, pedidos] of resumos.entries()) {
-      for (const pedido of pedidos) {
-        for (const item of pedido.itens) {
-          if (!item.produto_id) continue;
-          if (indice === 0) {
-            rankingHoje.set(
-              item.produto_id,
-              (rankingHoje.get(item.produto_id) ?? 0) + Number(item.quantidade || 0)
-            );
-          }
-          ranking.set(
-            item.produto_id,
-            (ranking.get(item.produto_id) ?? 0) + Number(item.quantidade || 0)
-          );
-        }
-      }
-    }
-
-    const ordenar = (valores: Map<string, number>) => Array.from(valores.entries())
-      .filter(([, quantidade]) => quantidade > 0)
-      .sort(([idA, quantidadeA], [idB, quantidadeB]) =>
-        quantidadeB - quantidadeA || idA.localeCompare(idB)
-      )
-      .map(([produtoId]) => produtoId);
-    return Array.from(new Set([
-      ...ordenar(rankingHoje),
-      ...ordenar(ranking),
-    ])).slice(0, limite);
+    return classificarMaisVendidos(resumos.flat(), limite);
   } catch (error) {
-    console.error("Erro ao carregar produtos mais vendidos do dia e da semana:", error);
+    console.error("Erro ao carregar produtos mais vendidos da semana:", error);
     return [];
   }
 }

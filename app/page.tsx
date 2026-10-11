@@ -7,7 +7,7 @@ import Manutencao from "@/components/Manutencao";
 import { SITE_EM_MANUTENCAO, siteEmManutencao, horarioAberturaDoDia } from "@/lib/site-config";
 import MonitorManutencao from "@/components/MonitorManutencao";
 import { supabase } from "@/lib/supabase";
-import { obterProdutosMaisVendidosDiaESemana } from "@/lib/resumo-sorteio";
+import { obterProdutosMaisVendidosDaSemana } from "@/lib/resumo-sorteio";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +52,7 @@ export default async function Home() {
         "somente_retirada",
         "detalhes_essencias",
       ]),
-    obterProdutosMaisVendidosDiaESemana(Infinity),
+    obterProdutosMaisVendidosDaSemana(),
   ]);
 
   const configuracao = new Map(
@@ -70,15 +70,9 @@ export default async function Home() {
   } catch {
     detalhesEssencias = {};
   }
-  // Destaques manuais vêm primeiro, seguidos das vendas do dia e da semana.
-  // O catálogo aplica os filtros de estoque antes de limitar a grade a 20.
-  const rankingCompleto = Array.from(new Set([
-    ...(produtos ?? []).filter((produto) => produto.destaque).map((produto) => produto.id),
-    ...produtosMaisVendidos,
-    ...(produtos ?? []).map((produto) => produto.id),
-  ]));
+  // Destaques são editoriais; apenas o ranking de vendas recebe o selo.
   const posicaoMaisVendidos = new Map(
-    rankingCompleto.map((produtoId, indice) => [produtoId, indice + 1])
+    produtosMaisVendidos.map((produtoId, indice) => [produtoId, indice + 1])
   );
   const produtosComDetalhes = (produtos ?? []).map((produto) => ({
     ...produto,

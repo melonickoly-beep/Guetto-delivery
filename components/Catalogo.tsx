@@ -395,16 +395,7 @@ export default function Catalogo({
       { itens: carrinho, indice: carrinho.indexOf(item) });
   };
   const categoriasOrdenadas = ordenarCategorias(categorias, categoriasMaisVendidas);
-  const temProdutosMaisVendidos = produtos.some(
-    (produto) => produto.mais_vendido
-  );
-  const categoriaInicial =
-    temProdutosMaisVendidos
-      ? "mais-vendidos"
-      : categoriasOrdenadas[0]?.id ?? null;
-  const [categoriaAtiva, setCategoriaAtiva] = useState<string | null>(
-    categoriaInicial
-  );
+  const [categoriaAtiva, setCategoriaAtiva] = useState<string | null>("mais-vendidos");
   const [busca, setBusca] = useState("");
   const [carrinhoAberto, setCarrinhoAberto] = useState(false);
   const [revisaoAberta, setRevisaoAberta] = useState(false);
@@ -649,7 +640,7 @@ export default function Catalogo({
         const correspondeCategoria =
           termo.length > 0 ||
           (categoriaAtiva === "mais-vendidos"
-            ? produto.mais_vendido
+            ? produto.destaque || produto.mais_vendido
             : produto.categoria_id === categoriaAtiva);
         const textoProduto = normalizarTexto(
           `${produto.nome} ${produto.descricao ?? ""} ${nomeCategoriaPorId.get(produto.categoria_id) ?? ""}`
@@ -671,12 +662,12 @@ export default function Catalogo({
             .sort(
               (produtoA, produtoB) => {
                 return (
+                  Number(produtoB.destaque) - Number(produtoA.destaque) ||
                   Number(produtoA.posicao_mais_vendido ?? 999) -
                   Number(produtoB.posicao_mais_vendido ?? 999)
                 );
               }
             )
-            .slice(0, 20)
         : [...filtrados].sort((a, b) => prioridadeCervejaNaBusca(a) - prioridadeCervejaNaBusca(b));
   })();
   const categoriaTabacariaId = categorias.find(
@@ -1934,9 +1925,7 @@ export default function Catalogo({
           className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 p-2.5 font-bold text-white outline-none focus:border-yellow-400 sm:hidden"
         >
           {busca && <option value="">Resultados da busca</option>}
-          {temProdutosMaisVendidos && (
-            <option value="mais-vendidos">🔥 Mais vendidos</option>
-          )}
+          <option value="mais-vendidos">⭐ Destaques e mais vendidos</option>
           {categoriasOrdenadas.map((categoria) => (
             <option key={categoria.id} value={categoria.id}>
               {categoria.icone} {categoria.nome}
@@ -1944,8 +1933,7 @@ export default function Catalogo({
           ))}
         </select>
         <div className="mt-2 hidden gap-2 overflow-x-auto pb-1 sm:flex">
-          {temProdutosMaisVendidos && (
-            <button
+          <button
               type="button"
               onClick={() => {
                 setBusca("");
@@ -1957,9 +1945,8 @@ export default function Catalogo({
                   : "border-zinc-700 bg-zinc-900 hover:border-yellow-400"
               }`}
             >
-              🔥 Mais vendidos
+              ⭐ Destaques e mais vendidos
             </button>
-          )}
           {categoriasOrdenadas.map((categoria) => (
             <button
               key={categoria.id}
@@ -1981,7 +1968,9 @@ export default function Catalogo({
 
       {produtosFiltrados.length === 0 ? (
         <div className="mt-8 rounded-xl border border-dashed border-zinc-700 p-10 text-center text-zinc-400">
-          Nenhum produto encontrado nesta categoria.
+          {categoriaAtiva === "mais-vendidos" && !busca.trim()
+            ? "Nenhum destaque ou mais vendido disponível no momento. Confira as categorias."
+            : "Nenhum produto encontrado nesta categoria."}
         </div>
       ) : (
         <div className="mt-8 space-y-10">
