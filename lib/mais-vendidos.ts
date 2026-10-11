@@ -7,8 +7,7 @@ type PedidoComItens = {
 const MINIMO_PEDIDOS = 3;
 
 export function classificarMaisVendidos(
-  pedidos: PedidoComItens[],
-  limite = 12
+  pedidos: PedidoComItens[]
 ): string[] {
   const ranking = new Map<string, { quantidade: number; pedidos: Set<string> }>();
   const pedidosProcessados = new Set<string>();
@@ -29,6 +28,5 @@ export function classificarMaisVendidos(
     .sort(([idA, a], [idB, b]) =>
       b.quantidade - a.quantidade || b.pedidos.size - a.pedidos.size || idA.localeCompare(idB)
     )
-    .slice(0, limite)
     .map(([id]) => id);
 }

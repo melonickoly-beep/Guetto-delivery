@@ -130,7 +130,7 @@ export async function obterProdutosMaisVendidos(limite = 12) {
   }
 }
 
-export async function obterProdutosMaisVendidosDaSemana(limite = 12) {
+export async function obterProdutosMaisVendidosDaSemana() {
   try {
     const hoje = dataEmSaoPaulo(new Date());
     // Semana móvel: hoje e os seis dias anteriores, no horário de São Paulo.
@@ -140,7 +140,7 @@ export async function obterProdutosMaisVendidosDaSemana(limite = 12) {
       return dataEmSaoPaulo(data);
     });
     const resumos = await Promise.all(dias.map((dia) => listarResumoDoDia(dia)));
-    return classificarMaisVendidos(resumos.flat(), limite);
+    return classificarMaisVendidos(resumos.flat());
   } catch (error) {
     console.error("Erro ao carregar produtos mais vendidos da semana:", error);
     return [];
