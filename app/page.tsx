@@ -70,14 +70,14 @@ export default async function Home() {
   } catch {
     detalhesEssencias = {};
   }
-  // Destaques são editoriais; apenas o ranking de vendas recebe o selo.
+  // Destaques manuais também recebem o selo de mais vendido.
   const posicaoMaisVendidos = new Map(
     produtosMaisVendidos.map((produtoId, indice) => [produtoId, indice + 1])
   );
   const produtosComDetalhes = (produtos ?? []).map((produto) => ({
     ...produto,
     detalhes_opcoes: detalhesEssencias[produto.id] ?? null,
-    mais_vendido: posicaoMaisVendidos.has(produto.id),
+    mais_vendido: produto.destaque || posicaoMaisVendidos.has(produto.id),
     posicao_mais_vendido: posicaoMaisVendidos.get(produto.id) ?? null,
   }));
   const categoriasMaisVendidas = Array.from(

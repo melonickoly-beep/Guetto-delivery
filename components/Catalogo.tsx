@@ -668,13 +668,7 @@ export default function Catalogo({
   )?.id;
   const exibirSubsecoesTabacaria =
     !busca.trim() && categoriaAtiva === categoriaTabacariaId;
-  const secoesProdutos = categoriaAtiva === "mais-vendidos" && !busca.trim()
-    ? [
-        { id: "destaques", titulo: "Destaques", descricao: "Nossa seleção para você.", produtos: produtosFiltrados.filter((p) => p.destaque) },
-        { id: "mais-vendidos", titulo: "Mais vendidos", descricao: "Os mais vendidos da semana, em pelo menos 3 pedidos diferentes.", produtos: produtosFiltrados.filter((p) => !p.destaque && p.mais_vendido) },
-        { id: "sugestoes", titulo: "Confira também", descricao: "Mais opções disponíveis para completar seu pedido.", produtos: produtosFiltrados.filter((p) => !p.destaque && !p.mais_vendido) },
-      ].filter((secao) => secao.produtos.length > 0)
-    : exibirSubsecoesTabacaria
+  const secoesProdutos = exibirSubsecoesTabacaria
     ? [
         {
           id: "essencias",
@@ -1924,7 +1918,7 @@ export default function Catalogo({
           className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 p-2.5 font-bold text-white outline-none focus:border-yellow-400 sm:hidden"
         >
           {busca && <option value="">Resultados da busca</option>}
-          <option value="mais-vendidos">⭐ Destaques e mais vendidos</option>
+          <option value="mais-vendidos">🔥 Mais vendidos</option>
           {categoriasOrdenadas.map((categoria) => (
             <option key={categoria.id} value={categoria.id}>
               {categoria.icone} {categoria.nome}
@@ -1944,7 +1938,7 @@ export default function Catalogo({
                   : "border-zinc-700 bg-zinc-900 hover:border-yellow-400"
               }`}
             >
-              ⭐ Destaques e mais vendidos
+              🔥 Mais vendidos
             </button>
           {categoriasOrdenadas.map((categoria) => (
             <button
