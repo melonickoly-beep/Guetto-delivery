@@ -1,5 +1,7 @@
 "use client";
 
+import { ehCopinhoTrots } from "@/lib/copinhos-trots";
+
 import { useEffect, useRef, useState, ChangeEvent, ClipboardEvent, FormEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -2600,7 +2602,7 @@ export default function AdminPage() {
                             const chaveDetalhe = `${produto.id}:${sabor}`;
                             const produtoEhEssencia = normalizarTexto(
                               produto.nome
-                            ).startsWith("essencia");
+                            ).startsWith("essencia") || ehCopinhoTrots(produto);
 
                             return (
                               <div

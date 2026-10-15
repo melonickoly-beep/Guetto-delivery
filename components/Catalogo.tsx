@@ -1,6 +1,7 @@
 "use client";
 
 import { selecionarVitrineInicial } from "@/lib/vitrine-inicial";
+import { ehCopinhoTrots } from "@/lib/copinhos-trots";
 
 import Image from "next/image";
 import { ehImperioUltra, subtotalCerveja } from "@/lib/preco-cervejas";
@@ -227,6 +228,9 @@ const numeroEnderecoValido = (numero: string) =>
 const ehEssencia = (produto: Pick<Produto, "nome">) =>
   normalizarTexto(produto.nome).startsWith("essencia");
 
+const permiteConsultarSabores = (produto: Produto) =>
+  ehEssencia(produto) || ehCopinhoTrots(produto);
+
 const formatarNomeProduto = (nome: string) =>
   nome
     .replace(/\bcoca\s*-\s*cola\b/gi, "Coca Cola")
@@ -249,6 +253,7 @@ const rotuloQuantidadeProduto = (
   const nome = normalizarTexto(produto.nome);
   const categoriaNormalizada = normalizarTexto(categoria ?? "");
   if (nome.includes("combo")) return "1 COMBO";
+  if (ehCopinhoTrots(produto)) return "1 COPINHO";
   if (categoriaNormalizada === "erva para terere") return "PACOTE 500G";
   if (categoriaNormalizada === "vinhos") return "UNIDADE";
   if (categoriaNormalizada === "salgadinhos") return "PACOTE";
@@ -636,19 +641,20 @@ export default function Catalogo({
     return 2;
   }
 
+  const produtosVitrine = produtos;
   const produtosFiltrados = (() => {
       const termo = normalizarTexto(busca);
       if (categoriaAtiva === "mais-vendidos" && !termo) {
-        return selecionarVitrineInicial(produtos, estoqueDisponivel);
+        return selecionarVitrineInicial(produtosVitrine, estoqueDisponivel);
       }
-      const filtrados = produtos.filter((produto) => {
+      const filtrados = produtosVitrine.filter((produto) => {
         const correspondeCategoria =
           termo.length > 0 ||
           (categoriaAtiva === "mais-vendidos"
             ? produto.destaque || produto.mais_vendido
             : produto.categoria_id === categoriaAtiva);
         const textoProduto = normalizarTexto(
-          `${produto.nome} ${produto.descricao ?? ""} ${nomeCategoriaPorId.get(produto.categoria_id) ?? ""}`
+          `${produto.nome} ${produto.descricao ?? ""} ${Object.keys(produto.estoque_opcoes ?? {}).join(" ")} ${nomeCategoriaPorId.get(produto.categoria_id) ?? ""}`
         );
         return correspondeCategoria && (!termo || textoProduto.includes(termo));
       });
@@ -682,6 +688,21 @@ export default function Catalogo({
           titulo: "Outros produtos de tabacaria",
           descricao: "Acessórios, carvão, sedas e outros itens.",
           produtos: produtosFiltrados.filter((produto) => !ehEssencia(produto)),
+        },
+      ].filter((secao) => secao.produtos.length > 0)
+    : !busca.trim() && normalizarTexto(nomeCategoriaPorId.get(categoriaAtiva ?? "") ?? "") === "erva para terere"
+    ? [
+        {
+          id: "copinhos-trots",
+          titulo: "Copinhos TROT’S",
+          descricao: "Escolha o sabor para consultar a foto e a descrição do copinho.",
+          produtos: produtosFiltrados.filter(ehCopinhoTrots),
+        },
+        {
+          id: "ervas-terere",
+          titulo: "Ervas para tereré",
+          descricao: "Ervas em pacote para preparar seu tereré.",
+          produtos: produtosFiltrados.filter((produto) => !ehCopinhoTrots(produto)),
         },
       ].filter((secao) => secao.produtos.length > 0)
     : [
@@ -986,7 +1007,7 @@ export default function Catalogo({
   function saboresDoProduto(produto: Produto) {
     if (produto.estoque_opcoes) {
       return Object.entries(produto.estoque_opcoes)
-        .filter(([, estoque]) => estoque > 0)
+        .filter(([, estoque]) => estoque > 0 || (permiteConsultarSabores(produto) && (!atendimentoAberto || somenteRetiradaHoje)))
         .map(([sabor]) => sabor);
     }
 
@@ -1004,7 +1025,7 @@ export default function Catalogo({
   }
 
   function abrirConfiguracaoGelo(produto: Produto) {
-    if (somenteRetiradaHoje) return;
+    if (somenteRetiradaHoje && !permiteConsultarSabores(produto)) return;
     const sabores = saboresDoProduto(produto);
     setGeloEmConfiguracao(produto);
     setSaborGeloAvulso(sabores[0] ?? "");
@@ -1012,7 +1033,7 @@ export default function Catalogo({
   }
 
   function confirmarGelo() {
-    if (!geloEmConfiguracao || !saborGeloAvulso) return;
+    if (!atendimentoAberto || somenteRetiradaHoje || !geloEmConfiguracao || !saborGeloAvulso) return;
 
     const estoqueDoSabor =
       geloEmConfiguracao.estoque_opcoes?.[saborGeloAvulso] ??
@@ -1021,6 +1042,7 @@ export default function Catalogo({
       estoqueDoSabor,
       Math.max(1, quantidadeGeloAvulso)
     );
+    if (quantidade <= 0) return;
     const novoItem = {
       ...geloEmConfiguracao,
       sabor: saborGeloAvulso,
@@ -2017,7 +2039,7 @@ export default function Catalogo({
               produto.nome.trim().toLowerCase()
             );
             const eJackDaniels = produto.nome.trim().toLowerCase() === "whisky jack daniels";
-            const produtoEhEssencia = ehEssencia(produto);
+            const produtoEhEssencia = permiteConsultarSabores(produto);
             const exigeEscolhaDeSabor =
               eCombo ||
               eGeloDeSabor ||
@@ -2074,7 +2096,7 @@ export default function Catalogo({
                   {produtoEhEssencia && produto.estoque_opcoes ? (
                     <div className="mt-1 min-h-8 text-xs text-zinc-400 sm:mt-2 sm:min-h-10 sm:text-sm">
                       <span className="font-bold text-zinc-300">
-                        Escolha o sabor
+                        {!atendimentoAberto || somenteRetiradaHoje ? "Consulte os sabores" : "Escolha o sabor"}
                       </span>
                     </div>
                   ) : eGeloDeSabor ? (
@@ -2104,7 +2126,15 @@ export default function Catalogo({
                             : "Disponível"}
                       </p>
                     </div>
-                    {semEstoque ? (
+                    {produtoEhEssencia && produto.estoque_opcoes && (!atendimentoAberto || somenteRetiradaHoje) ? (
+                      <button
+                        type="button"
+                        onClick={() => abrirConfiguracaoGelo(produto)}
+                        className="self-end whitespace-nowrap rounded-lg bg-yellow-400 px-3 py-1.5 text-xs font-bold text-black hover:bg-yellow-300 sm:px-4 sm:py-2 sm:text-base"
+                      >
+                        Consultar sabores
+                      </button>
+                    ) : semEstoque ? (
                       <span className="self-end rounded-lg border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-center text-xs font-bold text-zinc-300 sm:py-2">
                         Indisponível
                       </span>
@@ -2161,9 +2191,9 @@ export default function Catalogo({
         </div>
       )}
 
-      {!somenteRetiradaHoje && geloEmConfiguracao && (
+      {geloEmConfiguracao && (!somenteRetiradaHoje || permiteConsultarSabores(geloEmConfiguracao)) && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4" onClick={() => setGeloEmConfiguracao(null)}>
-          <div className="w-full max-w-md rounded-2xl border border-yellow-400/50 bg-zinc-950 p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+          <div className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl border border-yellow-400/50 bg-zinc-950 p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-black text-yellow-400">
@@ -2171,7 +2201,11 @@ export default function Catalogo({
                     ? "Whisky Jack Daniel’s"
                     : formatarNomeProduto(geloEmConfiguracao.nome)}
                 </h2>
-                <p className="text-zinc-300">Escolha o sabor e a quantidade.</p>
+                <p className="text-zinc-300">
+                  {!atendimentoAberto || somenteRetiradaHoje
+                    ? "Consulte os sabores. Pedidos pelo site indisponíveis no momento."
+                    : "Escolha o sabor e a quantidade."}
+                </p>
               </div>
               <button type="button" onClick={() => setGeloEmConfiguracao(null)} className="rounded-lg p-2 hover:bg-zinc-800"><X /></button>
             </div>
@@ -2196,14 +2230,16 @@ export default function Catalogo({
 
             {(detalheSaborSelecionado?.imagem ||
               detalheSaborSelecionado?.descricao) && (
-              <div className="mt-4 flex gap-4 rounded-xl border border-zinc-800 bg-zinc-900 p-3">
+              <div className={`mt-4 flex gap-4 rounded-xl border border-zinc-800 bg-zinc-900 p-3 ${ehCopinhoTrots(geloEmConfiguracao) ? "flex-col" : ""}`}>
                 {detalheSaborSelecionado.imagem && (
                   <Image
                     src={detalheSaborSelecionado.imagem}
                     alt={`${saborGeloAvulso} - ${geloEmConfiguracao.nome}`}
-                    width={88}
-                    height={88}
-                    className="h-[88px] w-[88px] shrink-0 rounded-lg bg-white object-contain p-1"
+                    width={ehCopinhoTrots(geloEmConfiguracao) ? 320 : 88}
+                    height={ehCopinhoTrots(geloEmConfiguracao) ? 320 : 88}
+                    className={ehCopinhoTrots(geloEmConfiguracao)
+                      ? "h-56 w-full rounded-lg bg-white object-contain p-2"
+                      : "h-[88px] w-[88px] shrink-0 rounded-lg bg-white object-contain p-1"}
                   />
                 )}
                 <div className="min-w-0">
@@ -2211,7 +2247,7 @@ export default function Catalogo({
                     {saborGeloAvulso}
                   </p>
                   {detalheSaborSelecionado.descricao && (
-                    <p className="mt-1 text-sm text-zinc-300">
+                    <p className="mt-1 whitespace-pre-line text-sm text-zinc-300">
                       {detalheSaborSelecionado.descricao}
                     </p>
                   )}
@@ -2219,6 +2255,14 @@ export default function Catalogo({
               </div>
             )}
 
+            {ehCopinhoTrots(geloEmConfiguracao) && (
+              <p className="mt-4 font-bold text-yellow-300">
+                {formatarPreco(geloEmConfiguracao.preco)} por copinho
+              </p>
+            )}
+
+            {atendimentoAberto && !somenteRetiradaHoje && (
+            <>
             <label className="mt-4 block text-sm font-bold">
               Quantidade
               <input
@@ -2237,6 +2281,8 @@ export default function Catalogo({
             <button type="button" onClick={confirmarGelo} className="mt-6 w-full rounded-lg bg-yellow-400 px-4 py-3 font-bold text-black hover:bg-yellow-300">
               Adicionar ao carrinho
             </button>
+            </>
+            )}
           </div>
         </div>
       )}
