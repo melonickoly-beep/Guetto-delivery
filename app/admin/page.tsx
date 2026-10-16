@@ -1,6 +1,7 @@
 "use client";
 
 import { ehCopinhoTrots } from "@/lib/copinhos-trots";
+import { COMPONENTES_COMBO_SMIRNOFF, ehComboSmirnoff, estoqueComboSmirnoff } from "@/lib/combo-smirnoff";
 
 import { useEffect, useRef, useState, ChangeEvent, ClipboardEvent, FormEvent } from "react";
 import Image from "next/image";
@@ -1380,7 +1381,9 @@ export default function AdminPage() {
       nome,
       descricao,
       preco: Number(preco),
-      estoque: Number(estoque),
+      ...(produtoEmEdicao && ehComboSmirnoff({ id: produtoEmEdicao })
+        ? {}
+        : { estoque: Number(estoque) }),
       destaque,
       tipo_venda: tipoVenda,
     };
@@ -1597,6 +1600,28 @@ export default function AdminPage() {
   }
 
   function painelEstoqueComponentesCombo(combo: Produto) {
+    if (ehComboSmirnoff(combo)) {
+      return (
+        <details className="mt-4 rounded-xl border border-yellow-400/30 bg-yellow-400/5 p-3">
+          <summary className="cursor-pointer font-bold text-yellow-300">
+            Editar estoque dos itens deste combo
+          </summary>
+          <p className="mt-2 text-xs text-zinc-400">
+            Disponíveis: {estoqueComboSmirnoff(produtos)} combos. Cada combo usa 1 Smirnoff,
+            1 suco Garoto 2 L, 1 gelo potável 2 kg e 3 copos com canudo.
+            Vendas avulsas e combos usam o mesmo estoque.
+          </p>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {COMPONENTES_COMBO_SMIRNOFF.map(({ produtoId, quantidade }) => {
+              const componente = produtos.find((produto) => produto.id === produtoId);
+              return componente
+                ? controleEstoqueComponente(componente, `${componente.nome} (${quantidade} por combo)`)
+                : <p key={produtoId} className="text-red-400">Componente não encontrado.</p>;
+            })}
+          </div>
+        </details>
+      );
+    }
     const nomeCombo = normalizarTexto(combo.nome);
     const baseDoCombo = combo.produto_base_id
       ? produtos.find((produto) => produto.id === combo.produto_base_id)
@@ -2482,7 +2507,11 @@ export default function AdminPage() {
                       />
                     </label>
 
-                    {produto.estoque_opcoes ? (
+                    {ehComboSmirnoff(produto) ? (
+                      <span className="rounded-md bg-zinc-800 px-3 py-1.5 text-sm font-semibold text-yellow-300">
+                        Estoque pelos componentes: {estoqueComboSmirnoff(produtos)}
+                      </span>
+                    ) : produto.estoque_opcoes ? (
                       <span className="rounded-md bg-zinc-800 px-3 py-1.5 text-sm font-semibold text-yellow-300">
                         Estoque total: {produto.estoque}
                       </span>

@@ -13,6 +13,7 @@ import {
 } from "@/lib/pedido-minimo";
 import { registrarPedidoNoResumo } from "@/lib/resumo-sorteio";
 import { siteEmManutencao } from "@/lib/site-config";
+import { COMPONENTES_COMBO_SMIRNOFF, ehComboSmirnoff } from "@/lib/combo-smirnoff";
 
 type ItemRecebido = {
   produto_id?: unknown;
@@ -307,6 +308,25 @@ export async function POST(request: Request) {
         ? (item.escolhas_combo as Record<string, unknown>)
         : null;
     const nomeProduto = normalizar(produto.nome);
+
+    if (ehComboSmirnoff(produto)) {
+      if (escolhas && Object.keys(escolhas).length > 0) {
+        return NextResponse.json(
+          { error: "O Combo Smirnoff tem composição fixa. Adicione-o novamente ao carrinho." },
+          { status: 400 }
+        );
+      }
+      for (const componente of COMPONENTES_COMBO_SMIRNOFF) {
+        if (!produtosPorId.get(componente.produtoId)?.disponivel) {
+          return NextResponse.json(
+            { error: "Um dos itens do Combo Smirnoff está indisponível." },
+            { status: 409 }
+          );
+        }
+        adicionarConsumoProduto(componente.produtoId, quantidade * componente.quantidade);
+      }
+      continue;
+    }
 
     if (!nomeProduto.startsWith("combo ")) {
       adicionarConsumoProduto(produto.id, quantidade);

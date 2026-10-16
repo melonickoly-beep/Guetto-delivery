@@ -2,6 +2,7 @@
 
 import { selecionarVitrineInicial } from "@/lib/vitrine-inicial";
 import { ehCopinhoTrots } from "@/lib/copinhos-trots";
+import { ehComboSmirnoff, estoqueComboSmirnoff } from "@/lib/combo-smirnoff";
 
 import Image from "next/image";
 import { ehImperioUltra, subtotalCerveja } from "@/lib/preco-cervejas";
@@ -277,6 +278,8 @@ const calcularEstoqueDisponivelCombo = (
   escolhas: EscolhasCombo | undefined,
   produtos: Produto[]
 ) => {
+  if (ehComboSmirnoff(combo)) return estoqueComboSmirnoff(produtos);
+
   const energeticos = produtos.filter(
     (produto) =>
       produto.nome.startsWith("Furioso 2L - ") &&
@@ -2041,7 +2044,7 @@ export default function Catalogo({
             const eJackDaniels = produto.nome.trim().toLowerCase() === "whisky jack daniels";
             const produtoEhEssencia = permiteConsultarSabores(produto);
             const exigeEscolhaDeSabor =
-              eCombo ||
+              (eCombo && !ehComboSmirnoff(produto)) ||
               eGeloDeSabor ||
               eJackDaniels ||
               Boolean(produto.estoque_opcoes);
@@ -2164,7 +2167,7 @@ export default function Catalogo({
                     ) : (
                       <button
                         onClick={() =>
-                          eCombo
+                          eCombo && !ehComboSmirnoff(produto)
                             ? abrirConfiguracaoCombo(produto)
                             : exigeEscolhaDeSabor
                               ? abrirConfiguracaoGelo(produto)
@@ -2173,7 +2176,7 @@ export default function Catalogo({
                         disabled={semEstoque || !atendimentoAberto}
                         className="self-end whitespace-nowrap rounded-lg bg-yellow-400 px-3 py-1.5 text-xs font-bold text-black hover:bg-yellow-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400 sm:px-4 sm:py-2 sm:text-base"
                       >
-                        {eCombo
+                        {eCombo && !ehComboSmirnoff(produto)
                           ? "Montar combo"
                           : exigeEscolhaDeSabor
                             ? "Escolher sabor"
