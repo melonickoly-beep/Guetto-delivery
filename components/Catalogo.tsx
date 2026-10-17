@@ -4,6 +4,7 @@ import { selecionarVitrineInicial } from "@/lib/vitrine-inicial";
 import { ehCopinhoTrots } from "@/lib/copinhos-trots";
 import { ehComboSmirnoff, estoqueComboSmirnoff } from "@/lib/combo-smirnoff";
 import { COPOS_COM_CANUDO_ID, COPOS_POR_COMBO } from "@/lib/estoque-combos";
+import { limparTentativaPedido, obterTentativaPedido, type TentativaPedido } from "@/lib/tentativa-pedido";
 
 import Image from "next/image";
 import { ehImperioUltra, subtotalCerveja } from "@/lib/preco-cervejas";
@@ -21,7 +22,6 @@ import {
   MapPin,
   MessageCircle,
   Store,
-  Truck,
   History,
   Check,
   CheckCircle2,
@@ -29,6 +29,7 @@ import {
   Banknote,
   QrCode,
   MoreHorizontal,
+  LayoutGrid,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -156,7 +157,6 @@ const pagamentoVazio: Pagamento = {
 };
 
 const WHATSAPP_GUETTO = "554491271708";
-const GOOGLE_EMPRESA_URL = "https://share.google/yohBwgZriRO6w4SWp";
 
 const formatarPreco = (valor: number) =>
   new Intl.NumberFormat("pt-BR", {
@@ -240,8 +240,7 @@ const formatarNomeProduto = (nome: string) =>
     .replace(/\benergetico\b/gi, "Energético")
     .replace(/\bimperio\b/gi, "Império")
     .replace(/\blimao\b/gi, "Limão")
-    .replace(/^boa\s+agudos$/i, "Boa")
-    .replace(/\s*-\s*agudos\s*-\s*caixa\s*12\s*latas/i, " - Caixa com 12")
+    .replace(/\bagudos\b/gi, "AG")
     .replace(/\bpack\s*6\b/i, "Pack com 6")
     .replace(/\blong neck\b/i, "Long neck")
     .replace(/\s*-\s*/g, " - ")
@@ -260,6 +259,8 @@ const rotuloQuantidadeProduto = (
   if (categoriaNormalizada === "vinhos") return "UNIDADE";
   if (categoriaNormalizada === "salgadinhos") return "PACOTE";
   if (nome === "gelo de sabor" || nome === "gelinho gourmet") return "1 UN";
+  const unidadesNaCaixa = categoriaNormalizada === "cervejas" ? nome.match(/cx com (\d+) unidades/) : null;
+  if (unidadesNaCaixa) return `${unidadesNaCaixa[1]} UN`;
   const unidades = produto.unidades_por_venda ?? 1;
   if (unidades > 1) return `${unidades} UN`;
   return "1 UN";
@@ -418,6 +419,9 @@ export default function Catalogo({
   const categoriasOrdenadas = ordenarCategorias(categorias, categoriasMaisVendidas);
   const [categoriaAtiva, setCategoriaAtiva] = useState<string | null>("mais-vendidos");
   const [busca, setBusca] = useState("");
+  const [categoriasAbertas, setCategoriasAbertas] = useState(false);
+  const tentativaPedidoRef = useRef<TentativaPedido | null>(null);
+  const envioPedidoRef = useRef(false);
   const [carrinhoAberto, setCarrinhoAberto] = useState(false);
   const [revisaoAberta, setRevisaoAberta] = useState(false);
   const [etapaCheckout, setEtapaCheckout] = useState<EtapaCheckout>(1);
@@ -1313,7 +1317,7 @@ export default function Catalogo({
   }
 
   async function finalizarPedido(confirmado = false) {
-    if (enviandoPedido) return;
+    if (enviandoPedido || envioPedidoRef.current) return;
     if (!validarIdentificacaoEEndereco() || !validarPagamento()) return;
 
     const pagamentos = pagamentosSelecionados();
@@ -1380,11 +1384,9 @@ export default function Catalogo({
     ].join("\n");
 
     setEnviandoPedido(true);
+    envioPedidoRef.current = true;
     try {
-      const respostaPedido = await fetch("/api/pedidos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const corpoPedido = JSON.stringify({
           cliente_nome: nomeCompleto.trim(),
           telefone: telefone.trim(),
           tipo_atendimento: somenteRetiradaHoje ? "retirada" : "delivery",
@@ -1424,7 +1426,15 @@ export default function Catalogo({
             "Cliente confirmou ter 18 anos ou mais.",
             ...(quantidadeGarrafas300 > 0 ? ["Vasilhame confirmado pelo cliente."] : []),
           ].join(" "),
-        }),
+        });
+      let armazenamento: Storage | null = null;
+      try { armazenamento = window.localStorage; } catch { /* Usar memória. */ }
+      const tentativa = await obterTentativaPedido(corpoPedido, tentativaPedidoRef.current, armazenamento);
+      tentativaPedidoRef.current = tentativa;
+      const respostaPedido = await fetch("/api/pedidos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": tentativa.chave },
+        body: corpoPedido,
       });
 
       if (!respostaPedido.ok) {
@@ -1452,20 +1462,23 @@ export default function Catalogo({
         referencia: referencia.trim(),
         cidadeEntrega,
       };
+      const salvarLocal = (chave: string, valor: string) => {
+        try { armazenamento?.setItem(chave, valor); } catch { /* O pedido já está confirmado. */ }
+      };
       if (salvarDadosNoAparelho) {
-        window.localStorage.setItem(
+        salvarLocal(
           "guetto_dados_cliente",
           JSON.stringify(dadosCliente)
         );
       } else {
-        window.localStorage.removeItem("guetto_dados_cliente");
+        try { armazenamento?.removeItem("guetto_dados_cliente"); } catch { /* Sem persistência. */ }
       }
-      window.localStorage.setItem(
+      salvarLocal(
         "guetto_ultimo_pedido",
         JSON.stringify(carrinho)
       );
-      window.localStorage.setItem("guetto_ultimo_pedido_id", pedidoId);
-      window.localStorage.setItem(
+      salvarLocal("guetto_ultimo_pedido_id", pedidoId);
+      salvarLocal(
         "guetto_ultimo_pedido_criado_em",
         pedidoCriadoEm
       );
@@ -1503,7 +1516,7 @@ export default function Catalogo({
       setUltimoPedido(carrinho);
       setUltimoPedidoId(pedidoId);
       setUltimoPedidoFoiAjustado(false);
-      window.localStorage.setItem("guetto_carrinho", "[]");
+      salvarLocal("guetto_carrinho", "[]");
       setCarrinho([]);
       setRevisaoAberta(false);
       setEtapaCheckout(1);
@@ -1514,6 +1527,8 @@ export default function Catalogo({
         linkAcompanhamento,
         linkWhatsApp,
       });
+      limparTentativaPedido(tentativa.chave, armazenamento);
+      tentativaPedidoRef.current = null;
 
       try {
         await navigator.clipboard.writeText(pedidoFinal);
@@ -1527,6 +1542,7 @@ export default function Catalogo({
         "NÃO FOI POSSÍVEL CONFIRMAR. VERIFIQUE SUA INTERNET E TENTE DE NOVO."
       );
     } finally {
+      envioPedidoRef.current = false;
       setEnviandoPedido(false);
     }
   }
@@ -1720,169 +1736,54 @@ export default function Catalogo({
         </div>
       )}
 
-      <div className="mb-4 rounded-2xl border border-white/10 bg-black/25 p-4 shadow-2xl backdrop-blur-sm sm:p-6">
-        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-3 rounded-2xl border border-white/10 bg-black/25 p-3 shadow-lg sm:p-4">
+        <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="hidden text-xs font-bold tracking-[0.24em] text-yellow-400 sm:block">
-              GUETTO DELIVERY
-            </p>
-            <h2 className="cardapio-title text-2xl font-black uppercase sm:mt-1 sm:text-3xl">
-              Cardápio
-            </h2>
-            <p className="mt-1 text-xs text-zinc-400 sm:text-sm">
-              {atendimentoAberto
-                ? somenteRetiradaHoje
-                  ? "Catálogo · compras presenciais"
-                  : "Aberto agora"
-                : "Fechado agora"}
+            <h2 className="cardapio-title text-xl font-black uppercase sm:text-2xl">Cardápio</h2>
+            <p className={"text-xs " + (atendimentoAberto ? "text-green-300" : "text-zinc-400")}>
+              {atendimentoAberto ? somenteRetiradaHoje ? "Catálogo · compras presenciais" : "Aberto agora" : "Fechado agora"}
             </p>
           </div>
-          <div className="flex w-full flex-wrap items-stretch gap-2 sm:w-auto sm:items-center">
-            {!somenteRetiradaHoje && ultimoPedido.length > 0 && (
-              <button
-                type="button"
-                onClick={repetirUltimoPedido}
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-yellow-400 px-3 py-2 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400/10 sm:flex-none"
-                aria-label="Refazer último pedido"
-              >
-                <RotateCcw size={18} aria-hidden="true" />
-                <span>Repetir último pedido</span>
-              </button>
-            )}
-            <details className="relative flex-1 sm:flex-none">
-              <summary className="flex cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-zinc-600 px-3 py-2 text-sm font-bold text-zinc-200 hover:bg-zinc-800">
-                <MoreHorizontal size={19} aria-hidden="true" /> Mais
+          <div className="flex items-center gap-2">
+            <details className="relative">
+              <summary className="flex cursor-pointer list-none items-center gap-1 rounded-lg border border-zinc-600 px-3 py-2 text-sm font-bold text-zinc-200 hover:bg-zinc-800">
+                <MoreHorizontal size={18} aria-hidden="true" /> Mais
               </summary>
               <div className="absolute right-0 top-12 z-40 grid min-w-56 gap-1 rounded-xl border border-zinc-700 bg-zinc-950 p-2 shadow-2xl">
+                {!somenteRetiradaHoje && ultimoPedido.length > 0 && (
+                  <button type="button" onClick={repetirUltimoPedido} className="flex items-center gap-2 rounded-lg px-3 py-3 text-left font-bold text-yellow-300 hover:bg-zinc-800">
+                    <RotateCcw size={18} /> Repetir último pedido
+                  </button>
+                )}
                 {ultimoPedidoId && (
-                  <button
-                    type="button"
-                    onClick={acompanharPedido}
-                    className="flex items-center gap-2 rounded-lg px-3 py-3 text-left font-bold text-blue-200 hover:bg-zinc-800"
-                  >
+                  <button type="button" onClick={acompanharPedido} className="flex items-center gap-2 rounded-lg px-3 py-3 text-left font-bold text-blue-200 hover:bg-zinc-800">
                     <Clock3 size={18} /> Acompanhar pedido
                   </button>
                 )}
-                <Link
-                  href="/historico"
-                  className="flex items-center gap-2 rounded-lg px-3 py-3 font-bold text-zinc-200 hover:bg-zinc-800"
-                >
+                <Link href="/historico" className="flex items-center gap-2 rounded-lg px-3 py-3 font-bold text-zinc-200 hover:bg-zinc-800">
                   <History size={18} /> Meus pedidos
                 </Link>
-                <a
-                  href="https://wa.me/554491271708?text=Olá!%20Preciso%20de%20ajuda%20com%20meu%20pedido."
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-2 rounded-lg px-3 py-3 font-bold text-green-300 hover:bg-zinc-800"
-                >
+                <a href="https://wa.me/554491271708?text=Olá!%20Preciso%20de%20ajuda%20com%20meu%20pedido." target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-lg px-3 py-3 font-bold text-green-300 hover:bg-zinc-800">
                   <MessageCircle size={18} /> Pedir ajuda
                 </a>
               </div>
             </details>
             {!somenteRetiradaHoje && (
-              <button
-                onClick={abrirCarrinhoParaPedido}
-                className="relative inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-yellow-400 px-3 py-2 text-sm font-bold text-black hover:bg-yellow-300 sm:flex-none sm:px-4"
-                aria-label="Abrir carrinho"
-              >
-                <ShoppingBag size={19} /> Carrinho
-                {quantidadeTotal > 0 && (
-                  <span className="absolute -right-2 -top-2 grid h-6 min-w-6 place-items-center rounded-full bg-red-600 px-1 text-xs text-white">
-                    {quantidadeTotal}
-                  </span>
-                )}
+              <button onClick={abrirCarrinhoParaPedido} className="relative inline-flex items-center gap-2 rounded-lg bg-yellow-400 px-3 py-2 text-sm font-bold text-black hover:bg-yellow-300" aria-label="Abrir carrinho">
+                <ShoppingBag size={18} /> Carrinho
+                {quantidadeTotal > 0 && <span className="absolute -right-2 -top-2 grid h-5 min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[10px] text-white">{quantidadeTotal}</span>}
               </button>
             )}
           </div>
         </div>
-
-        <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 lg:grid-cols-[1fr_auto] lg:items-end">
-          <div className="grid grid-cols-2 gap-2 text-xs sm:text-sm">
-            <div className="rounded-xl bg-zinc-900/80 p-3">
-              {somenteRetiradaHoje ? (
-                <Store className="mb-1 text-yellow-400" size={18} />
-              ) : (
-                <Truck className="mb-1 text-yellow-400" size={18} />
-              )}
-              <strong className="block text-white">
-                {somenteRetiradaHoje ? "Catálogo para consulta" : "Entrega grátis"}
-              </strong>
-              <span className="text-zinc-400">
-                {somenteRetiradaHoje ? "Veja produtos e preços" : "Sem taxa"}
-              </span>
-            </div>
-            <div className="rounded-xl bg-zinc-900/80 p-3">
-              <Clock3 className="mb-1 text-yellow-400" size={18} />
-              <strong className="block text-white">
-                {somenteRetiradaHoje
-                  ? "Compra presencial"
-                  : `Até ${tempoEntrega} min`}
-              </strong>
-              <span className="text-zinc-400">
-                {somenteRetiradaHoje ? "Diretamente na loja" : "Após confirmar"}
-              </span>
-            </div>
-            {somenteRetiradaHoje && (
-              <a
-                href={GOOGLE_EMPRESA_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-xl bg-blue-500/15 p-3 transition hover:bg-blue-500/25"
-                aria-label="Abrir a localização oficial da Guetto no Google"
-              >
-                <MapPin className="mb-1 text-blue-300" size={18} />
-                <strong className="block text-white">Como chegar?</strong>
-                <span className="text-blue-200">Abrir no Google</span>
-              </a>
-            )}
+        {!somenteRetiradaHoje && (
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-2 text-xs sm:text-sm">
+            <p className="text-zinc-200"><strong className="text-yellow-300">Entrega grátis</strong><span className="mx-2 text-zinc-500">•</span>Até {tempoEntrega} min após confirmar</p>
+            <button type="button" onClick={() => { setAbrirCheckoutAposCidade(false); setSeletorCidadeAberto(true); }} className="inline-flex items-center gap-1.5 rounded-lg border border-yellow-400/40 px-2.5 py-2 font-bold text-yellow-200 hover:bg-yellow-400/10" aria-label="Escolher cidade da entrega">
+              <MapPin size={15} /> {cidadeEntrega && pedidoMinimoAtual !== null ? cidadeEntrega + " · Mín. " + formatarPreco(pedidoMinimoAtual) : "Cidade e pedido mínimo"}
+            </button>
           </div>
-
-          {somenteRetiradaHoje ? (
-            <div className="rounded-xl border border-yellow-400/40 bg-yellow-400/10 p-3 text-sm lg:min-w-80">
-              <strong className="flex items-center gap-2 text-yellow-300">
-                <Store size={17} /> Somente compras presenciais
-              </strong>
-              <p className="mt-1 text-zinc-300">
-                O site está disponível apenas para consultar produtos e preços.
-              </p>
-              <a
-                href={GOOGLE_EMPRESA_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-2 inline-flex items-center gap-2 font-bold text-blue-200 underline underline-offset-4"
-              >
-                <MapPin size={16} /> Ver localização oficial
-              </a>
-            </div>
-          ) : (
-            <div className="text-sm font-bold text-zinc-200 lg:min-w-[28rem]">
-              <span className="mb-1.5 flex items-center gap-2">
-                <MapPin size={17} className="text-yellow-400" />
-                CIDADE DA ENTREGA
-              </span>
-              <div className="grid grid-cols-3 gap-2">
-                {CIDADES_ENTREGA.map((cidade) => (
-                  <button
-                    key={cidade.nome}
-                    type="button"
-                    onClick={() => escolherCidade(cidade.nome)}
-                    aria-pressed={cidadeEntrega === cidade.nome}
-                    className={`min-h-16 rounded-xl border px-2 py-2 text-center text-xs font-black transition sm:text-sm ${
-                      cidadeEntrega === cidade.nome
-                        ? "border-yellow-400 bg-yellow-400 text-black"
-                        : "border-zinc-700 bg-zinc-900 text-white hover:border-yellow-400"
-                    }`}
-                  >
-                    <span className="block">{cidade.nome}</span>
-                    <span className="mt-1 block text-[10px] font-bold opacity-75">
-                      MÍN. {formatarPreco(cidade.pedidoMinimo)}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
       {somenteRetiradaHoje && (
@@ -1908,12 +1809,19 @@ export default function Catalogo({
         </div>
       )}
 
-      <div className="sticky top-0 z-30 -mx-4 border-y-2 border-yellow-400 bg-zinc-950/95 px-4 py-4 shadow-2xl shadow-black/70 backdrop-blur sm:-mx-5 sm:px-5">
+      {!somenteRetiradaHoje && (
+        <details className="mb-3 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-xs text-zinc-300">
+          <summary className="cursor-pointer font-bold text-yellow-300">Regras para cervejas e vasilhames</summary>
+          <p className="mt-2">As condições para latas avulsas e long necks são conferidas no carrinho. Garrafas de 300ml: mínimo de 10 unidades e vasilhame obrigatório. Nas garrafas de 600ml, o vasilhame está incluso.</p>
+        </details>
+      )}
+
+      <div className="sticky top-0 z-30 -mx-4 border-y-2 border-yellow-400 bg-zinc-950/95 px-4 py-3 shadow-xl shadow-black/50 backdrop-blur sm:-mx-5 sm:px-5">
         <label className="block">
-          <span className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-black uppercase tracking-wide text-yellow-300">
+          <span className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-black uppercase tracking-wide text-yellow-300">
             <Search size={20} aria-hidden="true" />
             Busque seu produto
-            <span className="text-xs font-semibold normal-case tracking-normal text-zinc-300">
+            <span className="hidden text-xs font-semibold normal-case tracking-normal text-zinc-300 sm:inline">
               Digite o nome, a marca ou o sabor
             </span>
           </span>
@@ -1930,7 +1838,7 @@ export default function Catalogo({
               onChange={(event) => setBusca(event.target.value)}
               placeholder="Ex.: gelo, Heineken, whisky..."
               aria-label="Pesquisar produto, marca ou sabor"
-              className="h-14 w-full rounded-2xl border-2 border-yellow-400 bg-white pl-14 pr-12 text-base font-bold text-zinc-950 shadow-lg outline-none placeholder:font-semibold placeholder:text-zinc-500 focus:ring-4 focus:ring-yellow-400/30"
+              className="h-12 w-full rounded-xl border-2 border-yellow-400 bg-white pl-14 pr-12 text-base font-bold text-zinc-950 shadow-lg outline-none placeholder:font-semibold placeholder:text-zinc-500 focus:ring-4 focus:ring-yellow-400/30"
             />
             {busca && (
               <button
@@ -1944,23 +1852,20 @@ export default function Catalogo({
             )}
           </span>
         </label>
-        <select
-          value={busca ? "" : categoriaAtiva ?? ""}
-          onChange={(event) => {
-            setBusca("");
-            setCategoriaAtiva(event.target.value);
-          }}
-          aria-label="Escolher categoria"
-          className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 p-2.5 font-bold text-white outline-none focus:border-yellow-400 sm:hidden"
-        >
-          {busca && <option value="">Resultados da busca</option>}
-          <option value="mais-vendidos">🔥 Mais vendidos</option>
-          {categoriasOrdenadas.map((categoria) => (
-            <option key={categoria.id} value={categoria.id}>
-              {categoria.icone} {categoria.nome}
-            </option>
-          ))}
-        </select>
+        <button type="button" onClick={() => setCategoriasAbertas(!categoriasAbertas)} aria-expanded={categoriasAbertas} aria-controls="todas-categorias" className="mt-2 flex min-h-11 w-full items-center justify-between rounded-xl border border-yellow-400/50 bg-zinc-900 px-3 py-2 text-sm font-bold text-yellow-200 hover:bg-zinc-800">
+          <span className="inline-flex items-center gap-2"><LayoutGrid size={18} /> Todas as categorias</span>
+          <span aria-hidden="true">{categoriasAbertas ? "−" : "+"}</span>
+        </button>
+        {categoriasAbertas && (
+          <nav id="todas-categorias" aria-label="Todas as categorias" onKeyDown={(event) => { if (event.key === "Escape") setCategoriasAbertas(false); }} className="mt-2 grid max-h-[45vh] grid-cols-2 gap-2 overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-950 p-2 sm:grid-cols-3">
+            {[{ id: "mais-vendidos", nome: "Mais vendidos", icone: "🔥" }, ...categoriasOrdenadas].map((categoria) => (
+              <button key={categoria.id} type="button" aria-pressed={categoriaAtiva === categoria.id && !busca} onClick={() => { setBusca(""); setCategoriaAtiva(categoria.id); setCategoriasAbertas(false); }} className={"min-h-12 rounded-lg border px-3 py-2 text-left text-sm font-bold " + (categoriaAtiva === categoria.id && !busca ? "border-yellow-400 bg-yellow-400 text-black" : "border-zinc-700 bg-zinc-900 text-white hover:border-yellow-400")}>
+                {categoria.icone} {categoria.nome}
+              </button>
+            ))}
+          </nav>
+        )}
+
         <div className="mt-2 hidden gap-2 overflow-x-auto pb-1 sm:flex">
           <button
               type="button"
@@ -2002,7 +1907,7 @@ export default function Catalogo({
             : "Nenhum produto encontrado nesta categoria."}
         </div>
       ) : (
-        <div className="mt-8 space-y-10">
+        <div className="mt-5 space-y-8">
           {secoesProdutos.map((secao) => (
             <section
               key={secao.id}
@@ -2069,7 +1974,7 @@ export default function Catalogo({
                     : "border-white/10 hover:-translate-y-1 hover:border-yellow-400/60"
                 }`}
               >
-                <div className="relative aspect-[4/3] bg-white sm:aspect-square">
+                <div className="relative aspect-square bg-white">
                   {produto.imagem ? (
                     <Image
                       src={produto.imagem}
@@ -2104,7 +2009,7 @@ export default function Catalogo({
                   </span>
                 </div>
                 <div className="flex flex-1 flex-col p-3 sm:p-5">
-                  <h3 className="line-clamp-2 min-h-10 text-sm font-bold sm:min-h-14 sm:text-xl">
+                  <h3 className={`min-h-15 text-sm font-bold sm:min-h-21 sm:text-xl ${categoriaProduto === "Cervejas" ? "" : "line-clamp-3"}`}>
                     {formatarNomeProduto(produto.nome)}
                   </h3>
                   {produtoEhEssencia && produto.estoque_opcoes ? (

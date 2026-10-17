@@ -108,7 +108,7 @@ export default async function Home() {
         Date.now() >= Date.parse("2026-09-30T00:00:00-03:00") &&
         Date.now() < Date.parse("2026-10-01T00:00:00-03:00")
       } />
-      <section className="border-b border-white/10 px-5 py-3 sm:py-6">
+      <section className="border-b border-white/10 px-4 py-2">
         <div
           className={`mx-auto flex max-w-[90rem] items-center justify-between gap-3 text-left sm:gap-5 sm:text-right ${
             somenteRetiradaHoje ? "" : "xl:pr-[21rem]"
@@ -120,16 +120,16 @@ export default async function Home() {
             width={220}
             height={220}
             priority
-            className="h-20 w-20 shrink-0 object-contain sm:h-32 sm:w-32"
+            className="h-14 w-14 shrink-0 object-contain sm:h-16 sm:w-16"
           />
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-yellow-400 sm:text-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-yellow-400 sm:text-xs">
               {somenteRetiradaHoje ? "Catálogo · compras na loja" : "Delivery"}
             </p>
-            <h1 className="mt-1 text-lg font-black leading-tight sm:text-3xl">
+            <h1 className="text-base font-black leading-tight sm:text-xl">
               Bebidas, conveniência e mais
             </h1>
-            <p className="mt-1 text-xs text-zinc-300 sm:mt-2 sm:text-sm">
+            <p className="mt-0.5 hidden text-xs text-zinc-300 sm:block">
               {somenteRetiradaHoje
                 ? "Consulte nossos produtos e preços. Compras somente na loja."
               : "Escolha, monte e finalize seu pedido pelo WhatsApp."}

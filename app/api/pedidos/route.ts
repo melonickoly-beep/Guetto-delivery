@@ -15,6 +15,7 @@ import { registrarPedidoNoResumo } from "@/lib/resumo-sorteio";
 import { siteEmManutencao } from "@/lib/site-config";
 import { COMPONENTES_COMBO_SMIRNOFF, ehComboSmirnoff } from "@/lib/combo-smirnoff";
 import { COPOS_COM_CANUDO_ID, COPOS_POR_COMBO } from "@/lib/estoque-combos";
+import { createHash } from "node:crypto";
 
 type ItemRecebido = {
   produto_id?: unknown;
@@ -45,13 +46,29 @@ const numeroEnderecoValido = (numero: string) =>
   /^\d[\dA-Za-z\s/-]{0,19}$/.test(numero.trim());
 
 export async function POST(request: Request) {
+  const body = await request.json().catch(() => null);
+  const chave = request.headers.get("Idempotency-Key") ?? "";
+  if (!body || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chave)) {
+    return NextResponse.json({ error: "Atualize a página para enviar seu pedido com segurança." }, { status: 400 });
+  }
+  const assinatura = createHash("sha256").update(JSON.stringify(body)).digest("hex");
+  const { data: tentativaAnterior, error: erroTentativa } = await supabaseAdmin
+    .from("pedidos_idempotencia").select("pedido_id,assinatura").eq("chave", chave).maybeSingle();
+  if (erroTentativa) {
+    return NextResponse.json({ error: "Não foi possível verificar o envio. Tente novamente." }, { status: 503 });
+  }
+  if (tentativaAnterior) {
+    if (tentativaAnterior.assinatura !== assinatura) {
+      return NextResponse.json({ error: "Esta tentativa pertence a outro pedido. Atualize a página." }, { status: 409 });
+    }
+    return NextResponse.json({ id: tentativaAnterior.pedido_id }, { status: 200 });
+  }
   if (siteEmManutencao()) {
     return NextResponse.json(
       { error: "Site em manutenção. Voltamos em 01/10, às 10h, com os preços atualizados." },
       { status: 503 }
     );
   }
-  const body = await request.json().catch(() => null);
   const itens: ItemRecebido[] = Array.isArray(body?.itens) ? body.itens : [];
   const tipoAtendimento =
     body?.tipo_atendimento === undefined
@@ -533,7 +550,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const { data: pedidoId, error } = await supabaseAdmin.rpc("criar_pedido_seguro", {
+  const { data: pedidoId, error } = await supabaseAdmin.rpc("criar_pedido_idempotente", {
+    p_chave: chave,
+    p_assinatura: assinatura,
     p_cliente_nome: body.cliente_nome,
     p_telefone: body.telefone,
     p_endereco: `${endereco} — Bairro: ${bairro}`,
@@ -551,7 +570,7 @@ export async function POST(request: Request) {
   });
 
   if (error) {
-    const conflito = /estoque insuficiente|produto indisponível/i.test(error.message);
+    const conflito = /estoque insuficiente|produto indisponível|tentativa já pertence/i.test(error.message);
     return NextResponse.json(
       { error: conflito ? error.message : "Não foi possível registrar o pedido." },
       { status: conflito ? 409 : 500 }

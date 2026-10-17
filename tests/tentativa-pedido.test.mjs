@@ -1,0 +1,41 @@
+import { readFileSync } from "node:fs";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import ts from "typescript";
+
+const { outputText } = ts.transpileModule(readFileSync(new URL("../lib/tentativa-pedido.ts", import.meta.url), "utf8"), {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+});
+const { obterTentativaPedido, limparTentativaPedido } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+const storage = () => {
+  const valores = new Map();
+  return { getItem: chave => valores.get(chave) ?? null, setItem: (chave, valor) => valores.set(chave, valor), removeItem: chave => valores.delete(chave) };
+};
+
+test("repetição após falha e recarga preserva a tentativa sem guardar dados pessoais", async () => {
+  const local = storage();
+  const corpo = JSON.stringify({ cliente_nome: "Cliente de teste", itens: [{ produto_id: "teste", quantidade: 1 }] });
+  const primeira = await obterTentativaPedido(corpo, null, local);
+  assert.deepEqual(await obterTentativaPedido(corpo, null, local), primeira);
+  assert.ok(!local.getItem("guetto_tentativa_pedido").includes("Cliente de teste"));
+});
+test("uma compra alterada recebe outra chave", async () => {
+  const local = storage();
+  const primeira = await obterTentativaPedido('{"quantidade":1}', null, local);
+  const alterada = await obterTentativaPedido('{"quantidade":2}', primeira, local);
+  assert.notEqual(primeira.chave, alterada.chave);
+});
+test("armazenamento bloqueado mantém proteção em memória", async () => {
+  const bloqueado = { getItem() { throw Error("Bloqueado"); }, setItem() { throw Error("Bloqueado"); } };
+  const primeira = await obterTentativaPedido("pedido", null, bloqueado);
+  assert.deepEqual(await obterTentativaPedido("pedido", primeira, bloqueado), primeira);
+});
+test("confirmar libera nova compra igual e preserva outra tentativa em andamento", async () => {
+  const local = storage();
+  const primeira = await obterTentativaPedido("pedido", null, local);
+  limparTentativaPedido(primeira.chave, local);
+  const segunda = await obterTentativaPedido("pedido", null, local);
+  assert.notEqual(primeira.chave, segunda.chave);
+  limparTentativaPedido(primeira.chave, local);
+  assert.equal((await obterTentativaPedido("pedido", null, local)).chave, segunda.chave);
+});
