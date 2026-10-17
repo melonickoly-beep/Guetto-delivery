@@ -1809,13 +1809,6 @@ export default function Catalogo({
         </div>
       )}
 
-      {!somenteRetiradaHoje && (
-        <details className="mb-3 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-xs text-zinc-300">
-          <summary className="cursor-pointer font-bold text-yellow-300">Regras para cervejas e vasilhames</summary>
-          <p className="mt-2">As condições para latas avulsas e long necks são conferidas no carrinho. Garrafas de 300ml: mínimo de 10 unidades e vasilhame obrigatório. Nas garrafas de 600ml, o vasilhame está incluso.</p>
-        </details>
-      )}
-
       <div className="sticky top-0 z-30 -mx-4 border-y-2 border-yellow-400 bg-zinc-950/95 px-4 py-3 shadow-xl shadow-black/50 backdrop-blur sm:-mx-5 sm:px-5">
         <label className="block">
           <span className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-black uppercase tracking-wide text-yellow-300">
