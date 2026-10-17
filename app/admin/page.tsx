@@ -2,6 +2,7 @@
 
 import { ehCopinhoTrots } from "@/lib/copinhos-trots";
 import { COMPONENTES_COMBO_SMIRNOFF, ehComboSmirnoff, estoqueComboSmirnoff } from "@/lib/combo-smirnoff";
+import { COPOS_COM_CANUDO_ID, ehComboComEstoqueCompartilhado } from "@/lib/estoque-combos";
 
 import { useEffect, useRef, useState, ChangeEvent, ClipboardEvent, FormEvent } from "react";
 import Image from "next/image";
@@ -1381,7 +1382,7 @@ export default function AdminPage() {
       nome,
       descricao,
       preco: Number(preco),
-      ...(produtoEmEdicao && ehComboSmirnoff({ id: produtoEmEdicao })
+      ...(produtoEmEdicao && ehComboComEstoqueCompartilhado({ nome })
         ? {}
         : { estoque: Number(estoque) }),
       destaque,
@@ -1623,6 +1624,7 @@ export default function AdminPage() {
       );
     }
     const nomeCombo = normalizarTexto(combo.nome);
+    const coposComCanudo = produtos.find((produto) => produto.id === COPOS_COM_CANUDO_ID);
     const baseDoCombo = combo.produto_base_id
       ? produtos.find((produto) => produto.id === combo.produto_base_id)
       : undefined;
@@ -1708,6 +1710,12 @@ export default function AdminPage() {
                 )
               )}
             </div>
+          </div>
+        )}
+        {coposComCanudo && (
+          <div className="mt-4">
+            <p className="mb-2 text-sm font-bold text-zinc-200">Copos e canudos</p>
+            {controleEstoqueComponente(coposComCanudo, "Copo com canudo (3 por combo)")}
           </div>
         )}
       </details>
@@ -2507,9 +2515,9 @@ export default function AdminPage() {
                       />
                     </label>
 
-                    {ehComboSmirnoff(produto) ? (
+                    {ehComboComEstoqueCompartilhado(produto) ? (
                       <span className="rounded-md bg-zinc-800 px-3 py-1.5 text-sm font-semibold text-yellow-300">
-                        Estoque pelos componentes: {estoqueComboSmirnoff(produtos)}
+                        Estoque pelos componentes: {ehComboSmirnoff(produto) ? estoqueComboSmirnoff(produtos) : produto.estoque}
                       </span>
                     ) : produto.estoque_opcoes ? (
                       <span className="rounded-md bg-zinc-800 px-3 py-1.5 text-sm font-semibold text-yellow-300">

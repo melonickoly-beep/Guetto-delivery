@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { obterAdministrador } from "@/lib/supabase-server";
-import { COMBO_SMIRNOFF_ID, COMPONENTES_COMBO_SMIRNOFF } from "@/lib/combo-smirnoff";
+import { ehComboComEstoqueCompartilhado } from "@/lib/estoque-combos";
 
 export async function GET() {
   const { data, error } = await supabaseAdmin
@@ -125,15 +125,9 @@ export async function PATCH(request: Request) {
   }
 
   if ("estoque" in alteracoes) {
-    if (id === COMBO_SMIRNOFF_ID) {
-      return NextResponse.json(
-        { error: "O estoque do Combo Smirnoff é calculado pelos componentes. Edite o estoque dos itens do combo." },
-        { status: 400 }
-      );
-    }
     const { data: produtoAtual, error: erroProdutoAtual } = await supabaseAdmin
       .from("produtos")
-      .select("id,grupo_estoque,unidades_por_venda,estoque_unidades")
+      .select("id,nome,grupo_estoque,unidades_por_venda,estoque_unidades")
       .eq("id", id)
       .maybeSingle();
 
@@ -148,6 +142,13 @@ export async function PATCH(request: Request) {
       return NextResponse.json(
         { error: "Produto não encontrado." },
         { status: 404 }
+      );
+    }
+
+    if (ehComboComEstoqueCompartilhado(produtoAtual)) {
+      return NextResponse.json(
+        { error: "O estoque do combo é calculado pelos componentes. Edite o estoque dos itens do combo." },
+        { status: 400 }
       );
     }
 
@@ -272,13 +273,13 @@ export async function PATCH(request: Request) {
   }
 
   const relacionados = [data];
-  if (COMPONENTES_COMBO_SMIRNOFF.some((item) => item.produtoId === id)) {
-    const { data: combo, error: erroCombo } = await supabaseAdmin
-      .from("produtos").select("*").eq("id", COMBO_SMIRNOFF_ID).maybeSingle();
-    if (erroCombo) {
+  {
+    const { data: combos, error: erroCombos } = await supabaseAdmin
+      .from("produtos").select("*").ilike("nome", "Combo %");
+    if (erroCombos) {
       return NextResponse.json({ error: "Estoque salvo. Atualize a página para conferir o combo." }, { status: 500 });
     }
-    if (combo) relacionados.push(combo);
+    relacionados.push(...(combos ?? []).filter((combo) => combo.id !== id));
   }
   return NextResponse.json({ produto: data, produtos_relacionados: relacionados });
 }

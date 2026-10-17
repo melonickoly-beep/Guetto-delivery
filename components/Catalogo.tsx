@@ -3,6 +3,7 @@
 import { selecionarVitrineInicial } from "@/lib/vitrine-inicial";
 import { ehCopinhoTrots } from "@/lib/copinhos-trots";
 import { ehComboSmirnoff, estoqueComboSmirnoff } from "@/lib/combo-smirnoff";
+import { COPOS_COM_CANUDO_ID, COPOS_POR_COMBO } from "@/lib/estoque-combos";
 
 import Image from "next/image";
 import { ehImperioUltra, subtotalCerveja } from "@/lib/preco-cervejas";
@@ -304,7 +305,16 @@ const calcularEstoqueDisponivelCombo = (
     (produto) => normalizarTexto(produto.nome) === "gelo de sabor"
   );
   const estoqueTotalGelos = geloDeSabor
-    ? Math.floor(estoqueProdutoIndividual(geloDeSabor) / 6)
+    ? Math.floor(Math.min(
+        estoqueProdutoIndividual(geloDeSabor),
+        geloDeSabor.estoque_opcoes
+          ? Object.values(geloDeSabor.estoque_opcoes).reduce((total, estoque) => total + Math.max(0, estoque), 0)
+          : Number.POSITIVE_INFINITY
+      ) / 6)
+    : 0;
+  const coposComCanudo = produtos.find((produto) => produto.id === COPOS_COM_CANUDO_ID);
+  const estoqueCopos = coposComCanudo
+    ? Math.floor(estoqueProdutoIndividual(coposComCanudo) / COPOS_POR_COMBO)
     : 0;
   const estoqueGelosPorSabor =
     escolhas?.gelos && geloDeSabor?.estoque_opcoes
@@ -373,7 +383,8 @@ const calcularEstoqueDisponivelCombo = (
       estoqueDestilado,
       estoqueEnergetico,
       estoqueTotalGelos,
-      estoqueGelosPorSabor
+      estoqueGelosPorSabor,
+      estoqueCopos
     )
   );
 };

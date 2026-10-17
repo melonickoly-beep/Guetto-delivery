@@ -14,6 +14,7 @@ import {
 import { registrarPedidoNoResumo } from "@/lib/resumo-sorteio";
 import { siteEmManutencao } from "@/lib/site-config";
 import { COMPONENTES_COMBO_SMIRNOFF, ehComboSmirnoff } from "@/lib/combo-smirnoff";
+import { COPOS_COM_CANUDO_ID, COPOS_POR_COMBO } from "@/lib/estoque-combos";
 
 type ItemRecebido = {
   produto_id?: unknown;
@@ -388,6 +389,14 @@ export async function POST(request: Request) {
     }
 
     adicionarConsumoProduto(produtoEnergetico.id, quantidade);
+    const coposComCanudo = produtosPorId.get(COPOS_COM_CANUDO_ID);
+    if (!coposComCanudo?.disponivel) {
+      return NextResponse.json(
+        { error: "Os copos com canudo do combo estão indisponíveis." },
+        { status: 409 }
+      );
+    }
+    adicionarConsumoProduto(coposComCanudo.id, quantidade * COPOS_POR_COMBO);
     adicionarConsumoProduto(produtoGelo.id, quantidade * gelos.length);
     for (const sabor of gelos as string[]) {
       if (
