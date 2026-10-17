@@ -663,7 +663,7 @@ export default function Catalogo({
   const produtosFiltrados = (() => {
       const termo = normalizarTexto(busca);
       if (categoriaAtiva === "mais-vendidos" && !termo) {
-        return selecionarVitrineInicial(produtosVitrine, estoqueDisponivel);
+        return selecionarVitrineInicial(produtosVitrine, estoqueDisponivel, categoriaCervejasId);
       }
       const filtrados = produtosVitrine.filter((produto) => {
         const correspondeCategoria =
