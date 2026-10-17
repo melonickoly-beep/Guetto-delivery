@@ -178,7 +178,7 @@ const prioridadeCategorias = new Map(
     "tabacaria",
     "salgadinhos",
     "vinhos",
-    "balas e gomas",
+    "doces",
   ].map((categoria, indice) => [categoria, indice])
 );
 
