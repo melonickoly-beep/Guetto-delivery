@@ -2079,6 +2079,11 @@ export default function Catalogo({
                           Comprando 3, a unidade sai por R$ 6,00. Misture os sabores!
                         </p>
                       )}
+                      {ehSedaZomoPromocional(produto.nome) && (
+                        <p className="mt-1 text-xs font-bold text-yellow-300">
+                          Comprando 3, a unidade sai por menos de R$ 3,50.
+                        </p>
+                      )}
                       <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">
                         {semEstoque
                           ? "Indisponível"
