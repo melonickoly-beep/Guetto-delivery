@@ -139,8 +139,19 @@ export async function obterProdutosMaisVendidosDaSemana() {
       data.setUTCDate(data.getUTCDate() - indice);
       return dataEmSaoPaulo(data);
     });
-    const resumos = await Promise.all(dias.map((dia) => listarResumoDoDia(dia)));
-    return classificarMaisVendidos(resumos.flat());
+    const [resumos, rankingGeral] = await Promise.all([
+      Promise.all(dias.map((dia) => listarResumoDoDia(dia))),
+      baixarRankingProdutos().catch((error) => {
+        console.error("Erro ao complementar a vitrine com o histórico de vendas:", error);
+        return {} as Record<string, number>;
+      }),
+    ]);
+    const historico = Object.entries(rankingGeral)
+      .filter(([, quantidade]) => Number(quantidade) > 0)
+      .sort(([, a], [, b]) => Number(b) - Number(a))
+      .map(([id]) => id);
+    // Priorizar a semana e completar a vitrine com produtos que já foram vendidos.
+    return [...new Set([...classificarMaisVendidos(resumos.flat()), ...historico])];
   } catch (error) {
     console.error("Erro ao carregar produtos mais vendidos da semana:", error);
     return [];

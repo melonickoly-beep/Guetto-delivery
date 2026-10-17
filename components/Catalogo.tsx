@@ -1547,6 +1547,16 @@ export default function Catalogo({
     }
   }
 
+  function AvisoLatasAvulsas() {
+    if (somenteRetiradaHoje || !avaliacaoPedidoMinimo.temLataCervejaAvulsa) return null;
+    return (
+      <div className="rounded-xl border border-yellow-400/50 bg-yellow-400/10 p-4 text-sm" role="note">
+        <p className="font-bold text-yellow-300">Entrega de latas avulsas</p>
+        <p className="mt-1 text-zinc-200">A partir de 12 unidades. Você pode misturar marcas.</p>
+      </div>
+    );
+  }
+
   function IndicadorPedidoMinimo({
     compacto = false,
   }: {
@@ -2017,7 +2027,7 @@ export default function Catalogo({
                     </p>
                   ) : (
                     produto.descricao && (
-                      <p className="mt-1 line-clamp-2 min-h-8 text-xs text-zinc-400 sm:mt-2 sm:min-h-10 sm:text-sm">
+                      <p className={`mt-1 min-h-8 text-xs text-zinc-400 sm:mt-2 sm:min-h-10 sm:text-sm ${produto.grupo_estoque?.includes("long-neck") ? "" : "line-clamp-2"}`}>
                         {produto.descricao}
                       </p>
                     )
@@ -2477,6 +2487,7 @@ export default function Catalogo({
               )}
             </ol>
 
+            <div className="mt-5"><AvisoLatasAvulsas /></div>
             <div className="mt-5 space-y-3">
               {carrinho.map((item) => (
                 <div key={chaveItem(item)} className="rounded-xl bg-zinc-900 p-4">
@@ -2777,6 +2788,7 @@ export default function Catalogo({
                 <div className="mt-7 space-y-4 border-t border-zinc-800 pt-6">
                   {etapaCheckout === 1 && (
                     <>
+                  <AvisoLatasAvulsas />
                   <IndicadorPedidoMinimo />
                   {quantidadeGarrafas300 > 0 && (
                     <div className="rounded-xl border border-yellow-400/50 bg-yellow-400/10 p-4 text-sm">

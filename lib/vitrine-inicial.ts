@@ -15,5 +15,6 @@ export function selecionarVitrineInicial<T extends ProdutoVitrine>(
     .sort((a, b) =>
       Number(b.destaque) - Number(a.destaque) ||
       (a.posicao_mais_vendido ?? Infinity) - (b.posicao_mais_vendido ?? Infinity)
-    );
+    )
+    .slice(0, 24);
 }
