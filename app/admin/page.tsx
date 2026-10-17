@@ -1489,13 +1489,12 @@ export default function AdminPage() {
         : abaEstoque === "destaques"
           ? produtosEmDestaque
           : produtosSemEstoque;
-  const termoEstoque = buscaEstoque.trim().toLowerCase();
+  const termoEstoque = normalizarTexto(buscaEstoque);
   const produtosVisiveis = produtosDaAba.filter(
     (produto) =>
       (categoriaFiltro === "todas" || produto.categoria_id === categoriaFiltro) &&
       (!termoEstoque ||
-        `${produto.nome} ${produto.descricao ?? ""}`
-          .toLowerCase()
+        normalizarTexto(`${produto.nome} ${produto.descricao ?? ""}`)
           .includes(termoEstoque))
   );
 
