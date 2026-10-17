@@ -9,6 +9,7 @@ import { limparTentativaPedido, obterTentativaPedido, type TentativaPedido } fro
 import Image from "next/image";
 import { ehImperioUltra, subtotalCerveja } from "@/lib/preco-cervejas";
 import { ehSedaZomoPromocional, subtotalSedaZomo } from "@/lib/preco-sedas";
+import { ehChocolateBis, subtotalChocolateBis } from "@/lib/preco-bis";
 import Link from "next/link";
 import {
   Search,
@@ -409,6 +410,8 @@ export default function Catalogo({
 }) {
   const caixaImperioUltra = produtos.find(p => ehImperioUltra(p) && p.unidades_por_venda === 12);
   const calcularSubtotalItem = (item: ItemCarrinho) => {
+    const subtotalBis = subtotalChocolateBis(carrinho, carrinho.indexOf(item));
+    if (subtotalBis !== null) return subtotalBis;
     if (ehSedaZomoPromocional(item.nome)) {
       return subtotalSedaZomo(item.quantidade, item.preco);
     }
@@ -2070,6 +2073,11 @@ export default function Catalogo({
                       </p>
                       {ehImperioUltra(produto) && caixaImperioUltra && (
                         <p className="mt-1 text-xs font-bold text-yellow-300">Comprando a caixa com 12, a unidade sai por menos de R$ 5,45</p>
+                      )}
+                      {ehChocolateBis(produto.nome) && (
+                        <p className="mt-1 text-xs font-bold text-yellow-300">
+                          Comprando 3, a unidade sai por R$ 6,00. Misture os sabores!
+                        </p>
                       )}
                       <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">
                         {semEstoque

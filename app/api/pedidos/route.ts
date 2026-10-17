@@ -1,5 +1,6 @@
 import { dividirCervejaEmEmbalagens, subtotalCerveja } from "@/lib/preco-cervejas";
 import { ehSedaZomoPromocional, subtotalSedaZomo } from "@/lib/preco-sedas";
+import { subtotalChocolateBis } from "@/lib/preco-bis";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import {
@@ -256,6 +257,10 @@ export async function POST(request: Request) {
   const contextoPrecos = itens.map(item => ({
     id: String(item.produto_id), quantidade: Number(item.quantidade),
   }));
+  const contextoBis = itens.map(item => ({
+    nome: produtosPorId.get(String(item.produto_id))?.nome ?? "",
+    quantidade: Number(item.quantidade),
+  }));
   const itensValidados = itens.flatMap((item, indice) => {
     const produto =
       typeof item.produto_id === "string"
@@ -265,10 +270,10 @@ export async function POST(request: Request) {
 
     const quantidade = Number(item.quantidade);
     const subtotal =
-      ehSedaZomoPromocional(produto.nome)
+      subtotalChocolateBis(contextoBis, indice) ?? (ehSedaZomoPromocional(produto.nome)
         ? subtotalSedaZomo(quantidade, Number(produto.preco))
         : subtotalCerveja(produto, quantidade, produtos ?? [], categoriasPorId.get(produto.categoria_id) ?? "",
-          { itens: contextoPrecos, indice });
+          { itens: contextoPrecos, indice }));
 
     return [
       {
