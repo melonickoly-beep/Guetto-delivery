@@ -419,6 +419,7 @@ export default function Catalogo({
   const categoriasOrdenadas = ordenarCategorias(categorias, categoriasMaisVendidas);
   const [categoriaAtiva, setCategoriaAtiva] = useState<string | null>("mais-vendidos");
   const [busca, setBusca] = useState("");
+  const filtrosAnterioresRef = useRef({ busca, categoriaAtiva });
   const [categoriasAbertas, setCategoriasAbertas] = useState(false);
   const tentativaPedidoRef = useRef<TentativaPedido | null>(null);
   const envioPedidoRef = useRef(false);
@@ -469,6 +470,36 @@ export default function Catalogo({
   const [saborGeloAvulso, setSaborGeloAvulso] = useState("");
   const [quantidadeGeloAvulso, setQuantidadeGeloAvulso] = useState(1);
   const [agora, setAgora] = useState(() => new Date());
+
+  useEffect(() => {
+    const restauracaoAnterior = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+    let quadro = 0;
+    const voltarAoInicio = () => {
+      window.cancelAnimationFrame(quadro);
+      quadro = window.requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+      });
+    };
+
+    voltarAoInicio();
+    // Também cobre recarregamento e retorno pelo histórico do navegador.
+    window.addEventListener("pageshow", voltarAoInicio);
+    window.addEventListener("load", voltarAoInicio);
+    return () => {
+      window.cancelAnimationFrame(quadro);
+      window.removeEventListener("pageshow", voltarAoInicio);
+      window.removeEventListener("load", voltarAoInicio);
+      window.history.scrollRestoration = restauracaoAnterior;
+    };
+  }, []);
+
+  useEffect(() => {
+    const anteriores = filtrosAnterioresRef.current;
+    if (anteriores.busca === busca && anteriores.categoriaAtiva === categoriaAtiva) return;
+    filtrosAnterioresRef.current = { busca, categoriaAtiva };
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [busca, categoriaAtiva]);
 
   useEffect(() => {
     const intervalo = window.setInterval(() => setAgora(new Date()), 30_000);
