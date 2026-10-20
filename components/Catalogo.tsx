@@ -693,7 +693,12 @@ export default function Catalogo({
     return 2;
   }
 
-  const produtosVitrine = produtos;
+  const produtosVitrine = produtos.filter((produto) => {
+    if (!ehEssencia(produto)) return true;
+    if (estoqueDisponivel(produto) <= 0) return false;
+    return !produto.estoque_opcoes ||
+      Object.values(produto.estoque_opcoes).some((estoque) => estoque > 0);
+  });
   const produtosFiltrados = (() => {
       const termo = normalizarTexto(busca);
       if (categoriaAtiva === "mais-vendidos" && !termo) {
@@ -1059,7 +1064,11 @@ export default function Catalogo({
   function saboresDoProduto(produto: Produto) {
     if (produto.estoque_opcoes) {
       return Object.entries(produto.estoque_opcoes)
-        .filter(([, estoque]) => estoque > 0 || (permiteConsultarSabores(produto) && (!atendimentoAberto || somenteRetiradaHoje)))
+        .filter(([, estoque]) =>
+          estoque > 0 ||
+          (!ehEssencia(produto) && permiteConsultarSabores(produto) &&
+            (!atendimentoAberto || somenteRetiradaHoje))
+        )
         .map(([sabor]) => sabor);
     }
 
