@@ -1,5 +1,7 @@
 "use client";
 
+import { armazenamentoLocal } from "@/lib/armazenamento-local";
+
 import { Download, Share2, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -38,7 +40,7 @@ export default function PwaRegistro() {
     const android = /android/i.test(navigator.userAgent);
     setPlataforma(ios ? "ios" : android ? "android" : null);
 
-    const dispensadoEm = Number(localStorage.getItem(DISPENSADO_EM) ?? 0);
+    const dispensadoEm = Number(armazenamentoLocal.getItem(DISPENSADO_EM) ?? 0);
     if (!android && Date.now() - dispensadoEm < ESPERA_PARA_REEXIBIR) return;
 
     const aoSolicitarInstalacao = (event: Event) => {
@@ -76,7 +78,7 @@ export default function PwaRegistro() {
   }, []);
 
   function fechar() {
-    localStorage.setItem(DISPENSADO_EM, String(Date.now()));
+    armazenamentoLocal.setItem(DISPENSADO_EM, String(Date.now()));
     setVisivel(false);
     setMostrarAjudaManual(false);
   }

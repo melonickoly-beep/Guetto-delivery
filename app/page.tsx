@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { unstable_cache } from "next/cache";
 import Image from "next/image";
 import Link from "next/link";
 import Catalogo from "@/components/Catalogo";
@@ -10,6 +11,13 @@ import { supabase } from "@/lib/supabase";
 import { obterProdutosMaisVendidosDaSemana } from "@/lib/resumo-sorteio";
 
 export const dynamic = "force-dynamic";
+
+// Apenas a ordem da vitrine pode esperar; preços e estoque seguem atualizados.
+const obterRankingVitrine = unstable_cache(
+  obterProdutosMaisVendidosDaSemana,
+  ["ranking-vitrine-semanal-v1"],
+  { revalidate: 300 }
+);
 
 export const metadata: Metadata = SITE_EM_MANUTENCAO
   ? {
@@ -52,7 +60,7 @@ export default async function Home() {
         "somente_retirada",
         "detalhes_essencias",
       ]),
-    obterProdutosMaisVendidosDaSemana(),
+    obterRankingVitrine(),
   ]);
 
   const configuracao = new Map(
@@ -119,6 +127,7 @@ export default async function Home() {
             alt="Guetto Delivery"
             width={220}
             height={220}
+            sizes="(max-width: 640px) 56px, 64px"
             priority
             className="h-14 w-14 shrink-0 object-contain sm:h-16 sm:w-16"
           />

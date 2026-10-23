@@ -1,5 +1,7 @@
 "use client";
 
+import { armazenamentoLocal } from "@/lib/armazenamento-local";
+
 import { selecionarVitrineInicial } from "@/lib/vitrine-inicial";
 import { ehCopinhoTrots } from "@/lib/copinhos-trots";
 import { ehComboSmirnoff, estoqueComboSmirnoff } from "@/lib/combo-smirnoff";
@@ -578,7 +580,7 @@ export default function Catalogo({
         return { itensAtualizados, foiAjustado };
       };
 
-      const salvo = window.localStorage.getItem("guetto_carrinho");
+      const salvo = armazenamentoLocal.getItem("guetto_carrinho");
       if (salvo) {
         const { itensAtualizados, foiAjustado: carrinhoFoiAjustado } =
           reconciliarItens(salvo);
@@ -590,7 +592,7 @@ export default function Catalogo({
         }
       }
 
-      const ultimoPedidoSalvo = window.localStorage.getItem(
+      const ultimoPedidoSalvo = armazenamentoLocal.getItem(
         "guetto_ultimo_pedido"
       );
       if (ultimoPedidoSalvo) {
@@ -600,18 +602,18 @@ export default function Catalogo({
         setUltimoPedidoFoiAjustado(foiAjustado);
       }
 
-      const ultimoPedidoIdSalvo = window.localStorage.getItem(
+      const ultimoPedidoIdSalvo = armazenamentoLocal.getItem(
         "guetto_ultimo_pedido_id"
       );
       if (ultimoPedidoIdSalvo) setUltimoPedidoId(ultimoPedidoIdSalvo);
 
-      if (window.localStorage.getItem("guetto_abrir_carrinho") === "1") {
+      if (armazenamentoLocal.getItem("guetto_abrir_carrinho") === "1") {
         setEtapaCheckout(1);
         setCarrinhoAberto(true);
-        window.localStorage.removeItem("guetto_abrir_carrinho");
+        armazenamentoLocal.removeItem("guetto_abrir_carrinho");
       }
     } catch {
-      window.localStorage.removeItem("guetto_carrinho");
+      armazenamentoLocal.removeItem("guetto_carrinho");
     } finally {
       setCarrinhoCarregado(true);
     }
@@ -619,16 +621,16 @@ export default function Catalogo({
 
   useEffect(() => {
     if (!carrinhoCarregado) return;
-    window.localStorage.setItem("guetto_carrinho", JSON.stringify(carrinho));
+    armazenamentoLocal.setItem("guetto_carrinho", JSON.stringify(carrinho));
   }, [carrinho, carrinhoCarregado]);
 
   useEffect(() => {
     try {
-      const dadosSalvos = window.localStorage.getItem(
+      const dadosSalvos = armazenamentoLocal.getItem(
         "guetto_dados_cliente"
       );
       if (!dadosSalvos) {
-        const cidadeSalva = window.localStorage.getItem("guetto_cidade");
+        const cidadeSalva = armazenamentoLocal.getItem("guetto_cidade");
         if (
           CIDADES_ENTREGA.some((cidade) => cidade.nome === cidadeSalva)
         ) {
@@ -659,7 +661,7 @@ export default function Catalogo({
       setDadosClienteRecuperados(true);
       setSalvarDadosNoAparelho(true);
     } catch {
-      window.localStorage.removeItem("guetto_dados_cliente");
+      armazenamentoLocal.removeItem("guetto_dados_cliente");
     } finally {
       setPreferenciasCarregadas(true);
     }
@@ -949,7 +951,7 @@ export default function Catalogo({
     setBairro((bairroAtual) =>
       ehBairroEntrega(cidade, bairroAtual) ? bairroAtual : ""
     );
-    window.localStorage.setItem("guetto_cidade", cidade);
+    armazenamentoLocal.setItem("guetto_cidade", cidade);
     setSeletorCidadeAberto(false);
     setErrosCheckout((erros) => ({ ...erros, geral: undefined }));
     if (abrirCheckoutAposCidade) {
@@ -1013,7 +1015,7 @@ export default function Catalogo({
       return;
     }
 
-    window.localStorage.setItem("guetto_ultimo_pedido_id", pedidoId);
+    armazenamentoLocal.setItem("guetto_ultimo_pedido_id", pedidoId);
     setUltimoPedidoId(pedidoId);
     window.location.assign(`/acompanhar/${pedidoId}`);
   }
@@ -1527,7 +1529,7 @@ export default function Catalogo({
       );
       try {
         const historicoSalvo = JSON.parse(
-          window.localStorage.getItem("guetto_historico_pedidos") ?? "[]"
+          armazenamentoLocal.getItem("guetto_historico_pedidos") ?? "[]"
         ) as PedidoHistorico[];
         const novoRegistro: PedidoHistorico = {
           id: pedidoId,
@@ -1549,7 +1551,7 @@ export default function Catalogo({
             ? historicoSalvo.filter((registro) => registro.id !== pedidoId)
             : []),
         ];
-        window.localStorage.setItem(
+        armazenamentoLocal.setItem(
           "guetto_historico_pedidos",
           JSON.stringify(historicoAtualizado)
         );
@@ -2029,7 +2031,10 @@ export default function Catalogo({
                       className={`object-contain p-2 sm:p-4 ${
                         semEstoque ? "grayscale opacity-60" : ""
                       }`}
-                      sizes="(max-width: 640px) calc((100vw - 3.25rem) / 2), (max-width: 1024px) 50vw, 33vw"
+                      quality={60}
+                      sizes={categoriaAtiva === "mais-vendidos" && !busca.trim()
+                        ? "(max-width: 639px) calc((100vw - 3.25rem) / 2), (max-width: 1023px) 50vw, (max-width: 1279px) 33vw, 360px"
+                        : "(max-width: 639px) calc(100vw - 2rem), (max-width: 1023px) 50vw, (max-width: 1279px) 33vw, 360px"}
                     />
                   ) : (
                     <div className="grid h-full place-items-center text-zinc-500">
@@ -2634,7 +2639,7 @@ export default function Catalogo({
                 const salvar = !salvarDadosNoAparelho;
                 setSalvarDadosNoAparelho(salvar);
                 if (!salvar) {
-                  window.localStorage.removeItem("guetto_dados_cliente");
+                  armazenamentoLocal.removeItem("guetto_dados_cliente");
                   setDadosClienteRecuperados(false);
                 }
               }}
