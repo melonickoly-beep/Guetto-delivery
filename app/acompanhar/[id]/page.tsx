@@ -1,3 +1,4 @@
+import PwaRegistro from "@/components/PwaRegistro";
 import Link from "next/link";
 import { Check, ChefHat, Clock3, PackageCheck, Truck } from "lucide-react";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -138,6 +139,7 @@ export default async function AcompanharPedido({
             </p>
           </div>
         </section>
+        {!cancelado && <PwaRegistro convitePermitido />}
       </div>
     </main>
   );

@@ -40,3 +40,17 @@ os produtos, preços e estoque no servidor e registra o pedido diretamente no
 painel. Em seguida, o site abre o WhatsApp com o pedido completo para o cliente
 enviar obrigatoriamente à loja. O painel permite acompanhar e alterar o status
 dos pedidos.
+
+### Diagnóstico de falhas no celular
+
+Os eventos do navegador chegam a `POST /api/erros-cliente` e aparecem nos logs
+privados da função do Next.js na Netlify. Procure por `"evento":"erro_cliente"`.
+O registro informa etapa/tipo, página normalizada, família do navegador e sistema,
+status HTTP e, quando disponível, arquivo JavaScript/posição ou digest do Next.js.
+Não inclui mensagens completas, dados do pedido, código de acompanhamento ou
+identificadores persistentes do cliente. Há deduplicação e limite de cinco eventos
+por carregamento, além de limite de tamanho e de eventos por instância no servidor.
+
+A coleta é de melhor esforço: não detecta falhas anteriores ao carregamento do
+JavaScript e pode não chegar ao servidor sem internet. Os logs seguem a retenção
+do plano da hospedagem; esta implementação não envia alertas automáticos.

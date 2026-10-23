@@ -1,3 +1,4 @@
+import MonitorErros from "@/components/MonitorErros";
 import type { Metadata } from "next";
 import type { Viewport } from "next";
 import PwaRegistro from "@/components/PwaRegistro";
@@ -63,6 +64,7 @@ export default function RootLayout({
       <body>
         {children}
         <PwaRegistro />
+        <MonitorErros />
       </body>
     </html>
   );

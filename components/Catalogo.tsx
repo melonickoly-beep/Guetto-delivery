@@ -1,5 +1,6 @@
 "use client";
 
+import { registrarErroCliente } from "@/lib/erros-cliente";
 import { armazenamentoLocal } from "@/lib/armazenamento-local";
 
 import { selecionarVitrineInicial } from "@/lib/vitrine-inicial";
@@ -1011,7 +1012,7 @@ export default function Catalogo({
       /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i
     )?.[0];
     if (!pedidoId) {
-      alert("Link de acompanhamento inválido.");
+      alert("Não conseguimos abrir esse pedido. Confira o link recebido pelo WhatsApp.");
       return;
     }
 
@@ -1245,12 +1246,12 @@ export default function Catalogo({
       return false;
     }
     if (carrinho.length === 0) {
-      exibirErrosCheckout({ geral: "Seu carrinho está vazio." });
+      exibirErrosCheckout({ geral: "Escolha um produto e toque em Adicionar antes de continuar." });
       return false;
     }
 
     if (!cidadeEntrega) {
-      exibirErrosCheckout({ geral: "ESCOLHA A CIDADE DA ENTREGA." });
+      exibirErrosCheckout({ geral: "Escolha a cidade onde vamos entregar." });
       setAbrirCheckoutAposCidade(false);
       setSeletorCidadeAberto(true);
       return false;
@@ -1258,20 +1259,20 @@ export default function Catalogo({
 
     const erros: ErrosCheckout = {};
     if (nomeCompleto.trim().split(/\s+/).length < 2) {
-      erros.nomeCompleto = "DIGITE SEU NOME E SOBRENOME.";
+      erros.nomeCompleto = "Escreva seu nome e sobrenome. Exemplo: Maria Silva.";
     }
     const telefoneNumeros = telefone.replace(/\D/g, "");
     if (telefoneNumeros.length < 10 || telefoneNumeros.length > 11) {
-      erros.telefone = "DIGITE UM WHATSAPP COM DDD.";
+      erros.telefone = "Coloque seu WhatsApp com o DDD. Exemplo: 44 99999-9999.";
     }
     if (endereco.trim().length < 3) {
-      erros.endereco = "DIGITE O NOME DA RUA.";
+      erros.endereco = "Falta colocar o nome da sua rua.";
     }
     if (!numeroEnderecoValido(numeroEndereco)) {
-      erros.numeroEndereco = "DIGITE O NÚMERO DA CASA.";
+      erros.numeroEndereco = "Coloque o número da sua casa. Exemplo: 123.";
     }
     if (!bairro || !ehBairroEntrega(cidadeEntrega, bairro)) {
-      erros.bairro = "ESCOLHA O BAIRRO.";
+      erros.bairro = "Toque na lista e escolha seu bairro.";
     }
     if (Object.keys(erros).length > 0) {
       exibirErrosCheckout(erros);
@@ -1304,7 +1305,7 @@ export default function Catalogo({
 
     if (quantidadeGarrafas300 > 0 && !vasilhameConfirmado) {
       exibirErrosCheckout({
-        geral: "CONFIRME QUE VOCÊ VAI LEVAR O VASILHAME.",
+        geral: "Marque a opção para confirmar que você tem as garrafas vazias para trocar.",
       });
       return false;
     }
@@ -1319,8 +1320,8 @@ export default function Catalogo({
     if (pagamentos.some((pagamento) => !pagamento.forma)) {
       setErroPagamento(
         cartaoEmEscolha
-          ? "ESCOLHA CRÉDITO OU DÉBITO."
-          : "ESCOLHA COMO VAI PAGAR."
+          ? "Escolha se vai pagar no crédito ou no débito."
+          : "Escolha como você quer pagar: Pix, dinheiro ou cartão."
       );
       return false;
     }
@@ -1329,19 +1330,19 @@ export default function Catalogo({
       const soma = pagamentos.reduce((total, pagamento) => total + valorNumerico(pagamento.valor), 0);
       if (pagamentos.some((pagamento) => !pagamento.valor || valorNumerico(pagamento.valor) <= 0) || Math.abs(soma - valorTotal) > 0.01) {
         setErroPagamento(
-          `OS VALORES PRECISAM SOMAR ${formatarPreco(valorTotal)}.`
+          `Confira os valores de cada pagamento. Juntos, eles precisam dar ${formatarPreco(valorTotal)}.`
         );
         return false;
       }
     }
 
     if (pagamentos.some((pagamento) => pagamento.forma === "dinheiro" && pagamento.precisaTroco === null)) {
-      setErroPagamento("DIGA SE PRECISA DE TROCO.");
+      setErroPagamento("Vai pagar em dinheiro? Toque em Sim ou Não para o troco.");
       return false;
     }
 
     if (pagamentos.some((pagamento) => pagamento.forma === "dinheiro" && pagamento.precisaTroco && valorNumerico(pagamento.trocoPara) <= 0)) {
-      setErroPagamento("DIGITE O VALOR PARA O TROCO.");
+      setErroPagamento("Coloque o valor em dinheiro que vai entregar. Exemplo: 50 para uma nota de R$ 50.");
       return false;
     }
 
@@ -1376,7 +1377,7 @@ export default function Catalogo({
     }
 
     if (!maiorDeIdadeConfirmado) {
-      setErroRevisao("CONFIRME QUE VOCÊ TEM 18 ANOS OU MAIS.");
+      setErroRevisao("Marque a opção que confirma que você tem 18 anos ou mais.");
       return;
     }
 
@@ -1483,9 +1484,10 @@ export default function Catalogo({
       });
 
       if (!respostaPedido.ok) {
+        registrarErroCliente("pedido_http", undefined, respostaPedido.status);
         const erro = await respostaPedido.json().catch(() => null);
         setErroRevisao(
-          erro?.error ?? "NÃO FOI POSSÍVEL CONFIRMAR. TENTE NOVAMENTE."
+          erro?.error ?? "Não conseguimos confirmar agora. Aguarde um pouco e toque em Confirmar pedido novamente."
         );
         return;
       }
@@ -1582,9 +1584,10 @@ export default function Catalogo({
       }
 
       window.location.assign(linkWhatsApp);
-    } catch {
+    } catch (erro) {
+      registrarErroCliente("pedido_rede", erro);
       setErroRevisao(
-        "NÃO FOI POSSÍVEL CONFIRMAR. VERIFIQUE SUA INTERNET E TENTE DE NOVO."
+        "Não conseguimos confirmar agora. Confira sua internet e toque em Confirmar pedido novamente."
       );
     } finally {
       envioPedidoRef.current = false;
@@ -2299,7 +2302,7 @@ export default function Catalogo({
             <div className="grid h-full place-items-center text-center text-sm text-zinc-400">
               <div>
                 <ShoppingBag className="mx-auto mb-3 text-zinc-600" size={38} />
-                <p>Seu carrinho está vazio.</p>
+                <p>Escolha um produto e toque em Adicionar antes de continuar.</p>
                 <p className="mt-1 text-xs">Adicione produtos para ver o total.</p>
               </div>
             </div>
@@ -2811,7 +2814,7 @@ export default function Catalogo({
             </ol>
             <div ref={conteudoCheckoutRef} className="flex-1 overflow-y-auto py-5">
               {etapaCheckout === 1 && (carrinho.length === 0 ? (
-                <p className="text-center text-zinc-400">Seu carrinho está vazio.</p>
+                <p className="text-center text-zinc-400">Escolha um produto e toque em Adicionar antes de continuar.</p>
               ) : (
                 <details className="rounded-xl border border-zinc-800 bg-zinc-900/70">
                   <summary className="cursor-pointer px-4 py-3 text-sm font-bold text-zinc-200">

@@ -14,7 +14,7 @@ interface BeforeInstallPromptEvent extends Event {
 const DISPENSADO_EM = "guetto-pwa-dispensado-em";
 const ESPERA_PARA_REEXIBIR = 14 * 24 * 60 * 60 * 1000;
 
-export default function PwaRegistro() {
+export default function PwaRegistro({ convitePermitido = false }: { convitePermitido?: boolean }) {
   const pathname = usePathname();
   const [promptInstalacao, setPromptInstalacao] =
     useState<BeforeInstallPromptEvent | null>(null);
@@ -23,7 +23,7 @@ export default function PwaRegistro() {
   const [visivel, setVisivel] = useState(false);
 
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
+    if (!convitePermitido && "serviceWorker" in navigator) {
       navigator.serviceWorker
         .register("/sw.js", { scope: "/", updateViaCache: "none" })
         .then((registro) => registro.update())
@@ -41,13 +41,16 @@ export default function PwaRegistro() {
     setPlataforma(ios ? "ios" : android ? "android" : null);
 
     const dispensadoEm = Number(armazenamentoLocal.getItem(DISPENSADO_EM) ?? 0);
-    if (!android && Date.now() - dispensadoEm < ESPERA_PARA_REEXIBIR) return;
+    if (Date.now() - dispensadoEm < ESPERA_PARA_REEXIBIR) return;
+
+    const podeConvidar = convitePermitido && pathname.startsWith("/acompanhar/");
+    setVisivel(false);
 
     const aoSolicitarInstalacao = (event: Event) => {
       event.preventDefault();
       setPromptInstalacao(event as BeforeInstallPromptEvent);
       setMostrarAjudaManual(false);
-      setVisivel(true);
+      setVisivel(podeConvidar);
     };
 
     const aoInstalar = () => {
@@ -59,11 +62,11 @@ export default function PwaRegistro() {
     window.addEventListener("appinstalled", aoInstalar);
 
     if (android) {
-      setVisivel(true);
+      setVisivel(podeConvidar);
     }
 
     if (ios) {
-      const timer = window.setTimeout(() => setVisivel(true), 1800);
+      const timer = window.setTimeout(() => setVisivel(podeConvidar), 1800);
       return () => {
         window.clearTimeout(timer);
         window.removeEventListener("beforeinstallprompt", aoSolicitarInstalacao);
@@ -75,7 +78,7 @@ export default function PwaRegistro() {
       window.removeEventListener("beforeinstallprompt", aoSolicitarInstalacao);
       window.removeEventListener("appinstalled", aoInstalar);
     };
-  }, []);
+  }, [pathname, convitePermitido]);
 
   function fechar() {
     armazenamentoLocal.setItem(DISPENSADO_EM, String(Date.now()));
@@ -97,7 +100,7 @@ export default function PwaRegistro() {
     setPromptInstalacao(null);
   }
 
-  if (!visivel || pathname.startsWith("/admin") || pathname.startsWith("/login")) {
+  if (!convitePermitido || !visivel || !pathname.startsWith("/acompanhar/")) {
     return null;
   }
 

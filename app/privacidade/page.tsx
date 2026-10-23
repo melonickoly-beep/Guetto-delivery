@@ -24,9 +24,10 @@ export default function PrivacidadePage() {
         <h1 className="mt-2 text-3xl font-black">
           Privacidade e dados armazenados
         </h1>
-        <p className="mt-3 text-zinc-400">Última atualização: 06/08/2026.</p>
+        <p className="mt-3 text-zinc-400">Última atualização: 23/10/2026.</p>
 
         <div className="mt-8 space-y-8 leading-7 text-zinc-300">
+          <section><h2 className="text-xl font-black text-white">Falhas técnicas</h2><p className="mt-2">Para corrigir problemas do site, registramos nos logs da hospedagem o tipo de erro, a tela, a família do navegador e do sistema e códigos técnicos. Esses registros de diagnóstico não incluem os campos do pedido, mensagens de erro completas ou o código de acompanhamento. Não criamos identificadores de rastreamento para esse diagnóstico.</p></section>
           <section>
             <h2 className="text-xl font-black text-white">
               Dados usados no pedido
