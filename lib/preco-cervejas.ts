@@ -28,8 +28,24 @@ export function dividirCervejaEmEmbalagens<T extends ProdutoPreco>(
   categoria: string
 ): Array<{ produto: T; quantidade: number }> {
   const nome = produto.nome.toLowerCase();
-  // A Ultra mantém as embalagens escolhidas: o desconto agrupa o carrinho.
-  if (ehImperioUltra(produto)) return [{ produto, quantidade }];
+  // Cada par de packs Ultra sai como uma caixa fechada para a entrega.
+  // O desconto continua sendo calculado sobre o total físico do carrinho.
+  if (ehImperioUltra(produto)) {
+    if (categoria.trim().toLowerCase() === "cervejas" &&
+        produto.unidades_por_venda === 6 && quantidade >= 2) {
+      const caixa = produtos.find(candidato =>
+        candidato.categoria_id === produto.categoria_id &&
+        candidato.grupo_estoque === produto.grupo_estoque &&
+        candidato.unidades_por_venda === 12 &&
+        candidato.tipo_venda === "caixa" && candidato.disponivel !== false);
+      if (caixa) {
+        const partes = [{ produto: caixa, quantidade: Math.floor(quantidade / 2) }];
+        if (quantidade % 2) partes.push({ produto, quantidade: 1 });
+        return partes;
+      }
+    }
+    return [{ produto, quantidade }];
+  }
   const tamanho = /long\s*neck/.test(nome) ? 6 : /\blata\b/.test(nome) ? 12 : 0;
   if (
     categoria.trim().toLowerCase() !== "cervejas" ||
