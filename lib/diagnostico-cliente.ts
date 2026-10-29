@@ -1,4 +1,4 @@
-export const TIPOS_ERRO = ["javascript", "promessa", "tela", "pedido_http", "pedido_rede", "recurso"] as const;
+export const TIPOS_ERRO = ["javascript", "promessa", "tela", "pedido_http", "pedido_rede", "recurso", "catalogo", "painel"] as const;
 export type TipoErro = typeof TIPOS_ERRO[number];
 export function normalizarDiagnostico(valor: unknown) {
   if (!valor || typeof valor !== "object") return null;

@@ -1,3 +1,4 @@
+import { alertarErroCritico } from "@/lib/alertas";
 import PwaRegistro from "@/components/PwaRegistro";
 import Link from "next/link";
 import { Check, ChefHat, Clock3, PackageCheck, Truck } from "lucide-react";
@@ -17,27 +18,27 @@ const etapas = [
   { valor: "concluido", rotulo: "Entregue", icone: PackageCheck },
 ];
 
-function PedidoCancelado() {
+function AvisoPedido({ titulo, mensagem }: { titulo: string; mensagem: string }) {
   return (
     <main className="grid min-h-screen place-items-center px-5 py-10 text-white">
-      <section className="w-full max-w-xl rounded-3xl border border-red-500/40 bg-zinc-950/95 p-7 text-center shadow-2xl sm:p-10">
+      <section className="w-full max-w-xl rounded-3xl border border-yellow-400/40 bg-zinc-950/95 p-7 text-center shadow-2xl sm:p-10">
         <p className="text-sm font-bold tracking-[0.2em] text-yellow-400">
           GUETTO DELIVERY
         </p>
-        <div className="mx-auto mt-6 grid h-20 w-20 place-items-center rounded-full bg-red-600/20 text-4xl">
-          ×
+        <div className="mx-auto mt-6 grid h-20 w-20 place-items-center rounded-full bg-yellow-400/20 text-4xl">
+          •
         </div>
-        <h1 className="mt-5 text-3xl font-black text-red-300">
-          Pedido cancelado
+        <h1 className="mt-5 text-3xl font-black text-yellow-300">
+          {titulo}
         </h1>
         <p className="mt-3 text-zinc-300">
-          Este pedido foi cancelado e não está mais em andamento.
+          {mensagem}
         </p>
         <Link
           href="/"
           className="mt-7 inline-flex rounded-xl bg-yellow-400 px-6 py-3 font-black text-black transition hover:bg-yellow-300"
         >
-          Fazer outro pedido
+          Voltar ao catálogo
         </Link>
       </section>
     </main>
@@ -50,13 +51,24 @@ export default async function AcompanharPedido({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { data: pedido } = await supabaseAdmin
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return <AvisoPedido titulo="Link inválido" mensagem="Confira o link de acompanhamento." />;
+  const { data: pedido, error } = await supabaseAdmin
     .from("pedidos")
     .select("id, created_at, itens, total, status")
     .eq("id", id)
     .maybeSingle();
 
-  if (!pedido) return <PedidoCancelado />;
+  if (error) {
+    alertarErroCritico("acompanhamento_consulta");
+    throw new Error("Não foi possível consultar o pedido. Tente novamente.");
+  }
+  if (!pedido) {
+    const { data: final, error: erroFinal } = await supabaseAdmin.from("pedidos_situacao_final").select("status").eq("pedido_id", id).maybeSingle();
+    if (erroFinal) { alertarErroCritico("acompanhamento_final"); throw new Error("Consulta indisponível. Tente novamente."); }
+    if (final?.status === "concluido") return <AvisoPedido titulo="Pedido entregue" mensagem="Este pedido foi concluído. Obrigado pela preferência!" />;
+    if (final?.status === "cancelado") return <AvisoPedido titulo="Pedido cancelado" mensagem="Este pedido foi cancelado. Entre em contato com a loja se precisar de ajuda." />;
+    return <AvisoPedido titulo="Pedido não localizado" mensagem="O link pode estar incorreto ou o histórico já ter sido removido. Isso não significa que o pedido foi cancelado." />;
+  }
 
   const indiceAtual = etapas.findIndex((etapa) => etapa.valor === pedido.status);
   const cancelado = pedido.status === "cancelado";

@@ -1,3 +1,4 @@
+import { fetchComTimeout } from "./rede";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -7,6 +8,7 @@ export const supabaseAdmin = createClient(
   supabaseUrl,
   supabaseServiceRoleKey,
   {
+    global: { fetch: fetchComTimeout },
     auth: {
       autoRefreshToken: false,
       persistSession: false,

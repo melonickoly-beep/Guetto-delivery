@@ -4,6 +4,8 @@ import { ehCopinhoTrots } from "@/lib/copinhos-trots";
 import { COMPONENTES_COMBO_SMIRNOFF, ehComboSmirnoff, estoqueComboSmirnoff } from "@/lib/combo-smirnoff";
 import { COPOS_COM_CANUDO_ID, ehComboComEstoqueCompartilhado } from "@/lib/estoque-combos";
 
+import { fetchComTimeout } from "@/lib/rede";
+import { registrarErroCliente } from "@/lib/erros-cliente";
 import { useEffect, useRef, useState, ChangeEvent, ClipboardEvent, FormEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -116,6 +118,14 @@ export default function AdminPage() {
   const [validandoAcesso, setValidandoAcesso] = useState(false);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [erroPedidos, setErroPedidos] = useState("");
+  const [erroResumo, setErroResumo] = useState("");
+  const [erroTempoReal, setErroTempoReal] = useState(false);
+  const [ultimaAtualizacao, setUltimaAtualizacao] = useState<string | null>(null);
+  const buscandoPedidos = useRef(false);
+  const falhasPedidos = useRef(0);
+  const ultimaConsultaOk = useRef(Date.now());
+  const buscandoResumo = useRef(false);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [resumoPedidosHoje, setResumoPedidosHoje] =
     useState<ResumoPedidosHoje | null>(null);
@@ -211,10 +221,20 @@ export default function AdminPage() {
     carregarPedidos();
     carregarResumoPedidos();
 
-    const intervaloPedidos = window.setInterval(() => {
-      carregarPedidos();
-      carregarResumoPedidos();
-    }, 10_000);
+    let encerrado = false;
+    let intervaloPedidos: number;
+    const consultar = async () => {
+      await carregarPainelPedidos();
+      if (!encerrado) intervaloPedidos = window.setTimeout(consultar, Math.min(60_000, 10_000 * 2 ** Math.min(falhasPedidos.current, 3)));
+    };
+    intervaloPedidos = window.setTimeout(consultar, 10_000);
+    const vigiarAtualizacao = window.setInterval(() => {
+      if (Date.now() - ultimaConsultaOk.current >= 45_000) {
+        setErroPedidos("Painel sem atualização há mais de 45 segundos. Confira a conexão e os pedidos pelo WhatsApp.");
+        registrarErroCliente("painel");
+        void tocarAlertaSonoro();
+      }
+    }, 30_000);
     const atualizarAoVoltar = () => {
       if (document.visibilityState === "visible") {
         void carregarPainelPedidos();
@@ -224,18 +244,28 @@ export default function AdminPage() {
       .channel("pedidos-admin")
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "pedidos" },
+        { event: "*", schema: "public", table: "pedidos" },
         () => {
           void carregarPedidos();
           void carregarResumoPedidos();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        setErroTempoReal(status !== "SUBSCRIBED");
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") registrarErroCliente("painel");
+      });
+    const offline = () => setErroPedidos("Sem conexão. Os pedidos exibidos podem estar desatualizados.");
+    window.addEventListener("offline", offline);
+    window.addEventListener("online", atualizarAoVoltar);
     document.addEventListener("visibilitychange", atualizarAoVoltar);
     window.addEventListener("focus", atualizarAoVoltar);
 
     return () => {
-      window.clearInterval(intervaloPedidos);
+      encerrado = true;
+      window.clearTimeout(intervaloPedidos);
+      window.clearInterval(vigiarAtualizacao);
+      window.removeEventListener("offline", offline);
+      window.removeEventListener("online", atualizarAoVoltar);
       document.removeEventListener("visibilitychange", atualizarAoVoltar);
       window.removeEventListener("focus", atualizarAoVoltar);
       void supabase.removeChannel(canalPedidos);
@@ -424,7 +454,7 @@ export default function AdminPage() {
     setProdutosSalvando((atuais) => new Set(atuais).add(id));
 
     try {
-      const resposta = await fetch("/api/produtos", {
+      const resposta = await fetchComTimeout("/api/produtos", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, alteracoes }),
@@ -771,73 +801,91 @@ export default function AdminPage() {
   }
 
   async function carregarPedidos() {
-    const { data, error } = await supabase
-      .from("pedidos")
-      .select("id, created_at, cliente_nome, telefone, endereco, referencia, itens, total, pagamento, observacao, status")
-      .order("created_at", { ascending: false })
-      .limit(100);
+    if (buscandoPedidos.current) return;
+    buscandoPedidos.current = true;
+    try {
+      const { data, error } = await supabase
+        .from("pedidos")
+        .select("id, created_at, cliente_nome, telefone, endereco, referencia, itens, total, pagamento, observacao, status")
+        .order("created_at", { ascending: false })
+        .limit(100);
 
-    if (error) return;
+      if (error) throw error;
 
-    const lista = data ?? [];
-    let recebeuPedidoNovo = false;
-    if (idsPedidosConhecidos.current === null) {
-      idsPedidosConhecidos.current = new Set(
-        lista.map((pedido) => pedido.id)
-      );
-      const pedidosAguardando = lista.filter(
-        (pedido) => pedido.status === "novo"
-      );
-      if (pedidosAguardando.length > 0) {
-        recebeuPedidoNovo = true;
-        void exibirNotificacao(
-          "Pedido aguardando na Guetto Delivery",
-          pedidosAguardando.length === 1
-            ? `Pedido de ${pedidosAguardando[0].cliente_nome} aguardando atendimento.`
-            : `${pedidosAguardando.length} pedidos aguardando atendimento.`,
-          "pedidos-aguardando"
+      const lista = data ?? [];
+      let recebeuPedidoNovo = false;
+      if (idsPedidosConhecidos.current === null) {
+        idsPedidosConhecidos.current = new Set(
+          lista.map((pedido) => pedido.id)
         );
-      }
-    } else {
-      for (const pedido of lista) {
-        if (
-          pedido.status === "novo" &&
-          !idsPedidosConhecidos.current.has(pedido.id)
-        ) {
+        const pedidosAguardando = lista.filter(
+          (pedido) => pedido.status === "novo"
+        );
+        if (pedidosAguardando.length > 0) {
           recebeuPedidoNovo = true;
-          idsPedidosConhecidos.current.add(pedido.id);
           void exibirNotificacao(
-            "Novo pedido na Guetto Delivery",
-            `Pedido de ${pedido.cliente_nome} no valor de ${new Intl.NumberFormat(
-              "pt-BR",
-              { style: "currency", currency: "BRL" }
-            ).format(Number(pedido.total))}.`,
-            `pedido-${pedido.id}`
+            "Pedido aguardando na Guetto Delivery",
+            pedidosAguardando.length === 1
+              ? `Pedido de ${pedidosAguardando[0].cliente_nome} aguardando atendimento.`
+              : `${pedidosAguardando.length} pedidos aguardando atendimento.`,
+            "pedidos-aguardando"
           );
+        }
+      } else {
+        for (const pedido of lista) {
+          if (
+            pedido.status === "novo" &&
+            !idsPedidosConhecidos.current.has(pedido.id)
+          ) {
+            recebeuPedidoNovo = true;
+            idsPedidosConhecidos.current.add(pedido.id);
+            void exibirNotificacao(
+              "Novo pedido na Guetto Delivery",
+              `Pedido de ${pedido.cliente_nome} no valor de ${new Intl.NumberFormat(
+                "pt-BR",
+                { style: "currency", currency: "BRL" }
+              ).format(Number(pedido.total))}.`,
+              `pedido-${pedido.id}`
+            );
+          }
+        }
+
+        for (const pedido of lista) {
+          idsPedidosConhecidos.current.add(pedido.id);
         }
       }
 
-      for (const pedido of lista) {
-        idsPedidosConhecidos.current.add(pedido.id);
+      if (recebeuPedidoNovo) {
+        void tocarAlertaSonoro();
       }
-    }
 
-    if (recebeuPedidoNovo) {
-      void tocarAlertaSonoro();
-    }
-
-    setPedidos(lista);
+      setPedidos(lista);
+      setErroPedidos("");
+      falhasPedidos.current = 0;
+      ultimaConsultaOk.current = Date.now();
+      setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR"));
+    } catch (erro) {
+      falhasPedidos.current += 1;
+      setErroPedidos("Não foi possível atualizar os pedidos. Os dados exibidos podem estar desatualizados.");
+      registrarErroCliente("painel", erro);
+    } finally { buscandoPedidos.current = false; }
   }
 
   async function carregarResumoPedidos() {
-    const resposta = await fetch("/api/admin/pedidos/resumo", {
-      cache: "no-store",
-    });
+    if (buscandoResumo.current) return;
+    buscandoResumo.current = true;
+    try {
+      const resposta = await fetchComTimeout("/api/admin/pedidos/resumo", {
+        cache: "no-store",
+      });
 
-    if (!resposta.ok) return;
+      if (!resposta.ok) throw new Error("Resumo indisponível");
 
-    const resumo = (await resposta.json()) as ResumoPedidosHoje;
-    setResumoPedidosHoje(resumo);
+      const resumo = (await resposta.json()) as ResumoPedidosHoje;
+      setResumoPedidosHoje(resumo);
+      setErroResumo("");
+    } catch (erro) { setErroResumo("Contagem indisponível ou desatualizada."); registrarErroCliente("painel", erro); }
+    finally { buscandoResumo.current = false; }
   }
 
   async function carregarPainelPedidos() {
@@ -854,32 +902,39 @@ export default function AdminPage() {
       return false;
     }
 
-    const resposta = await fetch(`/api/admin/pedidos/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
+    try {
+      const resposta = await fetchComTimeout(`/api/admin/pedidos/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
 
-    if (!resposta.ok) {
-      const erro = await resposta.json().catch(() => null);
-      alert(erro?.error ?? "Não foi possível atualizar o pedido.");
+      if (!resposta.ok) {
+        const erro = await resposta.json().catch(() => null);
+        alert(erro?.error ?? "Não foi possível atualizar o pedido.");
+        return false;
+      }
+
+      if (status === "concluido") {
+        setPedidos((atuais) =>
+          atuais.filter((pedidoAtual) => pedidoAtual.id !== id)
+        );
+        await carregarResumoPedidos();
+      } else {
+        setPedidos((atuais) =>
+          atuais.map((pedido) =>
+            pedido.id === id ? { ...pedido, status } : pedido
+          )
+        );
+      }
+
+      return true;
+    } catch (erro) {
+      setErroPedidos("Não foi possível confirmar a alteração. Atualize o painel antes de tentar novamente.");
+      registrarErroCliente("painel", erro);
+      alert("A conexão falhou. A alteração pode ter sido salva; confira o painel antes de repetir.");
       return false;
     }
-
-    if (status === "concluido") {
-      setPedidos((atuais) =>
-        atuais.filter((pedidoAtual) => pedidoAtual.id !== id)
-      );
-      await carregarResumoPedidos();
-    } else {
-      setPedidos((atuais) =>
-        atuais.map((pedido) =>
-          pedido.id === id ? { ...pedido, status } : pedido
-        )
-      );
-    }
-
-    return true;
   }
 
   async function excluirPedidoCancelado(pedido: Pedido) {
@@ -891,20 +946,27 @@ export default function AdminPage() {
       return;
     }
 
-    const resposta = await fetch(`/api/admin/pedidos/${pedido.id}`, {
-      method: "DELETE",
-    });
+    try {
+      const resposta = await fetchComTimeout(`/api/admin/pedidos/${pedido.id}`, {
+        method: "DELETE",
+      });
 
-    if (!resposta.ok) {
-      const erro = await resposta.json().catch(() => null);
-      alert(erro?.error ?? "Não foi possível excluir o pedido.");
-      return;
+      if (!resposta.ok) {
+        const erro = await resposta.json().catch(() => null);
+        alert(erro?.error ?? "Não foi possível excluir o pedido.");
+        return;
+      }
+
+      setPedidos((atuais) =>
+        atuais.filter((pedidoAtual) => pedidoAtual.id !== pedido.id)
+      );
+      await carregarResumoPedidos();
+    } catch (erro) {
+      setErroPedidos("Não foi possível confirmar a alteração. Atualize o painel antes de tentar novamente.");
+      registrarErroCliente("painel", erro);
+      alert("A conexão falhou. A alteração pode ter sido salva; confira o painel antes de repetir.");
+      return false;
     }
-
-    setPedidos((atuais) =>
-      atuais.filter((pedidoAtual) => pedidoAtual.id !== pedido.id)
-    );
-    await carregarResumoPedidos();
   }
 
   function textoSeguro(valor: unknown) {
@@ -1800,6 +1862,12 @@ export default function AdminPage() {
   return (
     <main className="min-h-screen text-white">
       <div className="max-w-7xl mx-auto p-8">
+        {!paginaEstoque && <div role="status" className="mb-4 rounded-xl border border-yellow-400/40 p-4">
+          <p>{erroPedidos || (ultimaAtualizacao ? "Pedidos atualizados às " + ultimaAtualizacao : "Carregando pedidos…")}</p>
+          {erroResumo && <p>{erroResumo}</p>}
+          {erroTempoReal && <p>Conexão em tempo real indisponível. As consultas automáticas continuam, com intervalo de até 60 segundos em caso de falha.</p>}
+          {(erroPedidos || erroResumo) && <button className="mt-2 underline" onClick={() => void carregarPainelPedidos()}>Tentar atualizar agora</button>}
+        </div>}
 
         <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>

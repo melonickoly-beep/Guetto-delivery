@@ -1,3 +1,4 @@
+import { administradorAutorizado } from "./admin-autorizado";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
@@ -35,7 +36,7 @@ export async function obterAdministrador() {
   if (!user) return null;
 
   const emailPermitido = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-  if (emailPermitido && user.email?.toLowerCase() !== emailPermitido) return null;
+  if (!administradorAutorizado(user, process.env.ADMIN_USER_ID, emailPermitido)) return null;
 
   return user;
 }

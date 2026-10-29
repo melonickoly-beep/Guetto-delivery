@@ -13,9 +13,9 @@ export async function obterTentativaPedido(
   try {
     if (!salva && storage) salva = JSON.parse(storage.getItem(CHAVE_STORAGE) ?? "null");
   } catch { /* Navegação sem armazenamento continua protegida em memória. */ }
-  const tentativa = salva?.assinatura === assinatura && typeof salva.chave === "string"
-    ? salva
-    : { chave: crypto.randomUUID(), assinatura };
+  // A chave identifica o ciclo de compra. Correções após erro mantêm a chave:
+  // se o servidor já gravou outra versão, ele recusa a alteração sem duplicar.
+  const tentativa = { chave: typeof salva?.chave === "string" ? salva.chave : crypto.randomUUID(), assinatura };
   try { storage?.setItem(CHAVE_STORAGE, JSON.stringify(tentativa)); } catch { /* Usar memória. */ }
   return tentativa;
 }

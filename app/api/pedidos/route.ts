@@ -1,3 +1,4 @@
+import { alertarErroCritico } from "@/lib/alertas";
 import { dividirCervejaEmEmbalagens, subtotalCerveja } from "@/lib/preco-cervejas";
 import { ehSedaZomoPromocional, subtotalSedaZomo } from "@/lib/preco-sedas";
 import { subtotalChocolateBis } from "@/lib/preco-bis";
@@ -46,7 +47,7 @@ const separarEnderecoLegado = (endereco: string) => {
 const numeroEnderecoValido = (numero: string) =>
   /^\d[\dA-Za-z\s/-]{0,19}$/.test(numero.trim());
 
-export async function POST(request: Request) {
+async function executarPOST(request: Request) {
   const body = await request.json().catch(() => null);
   const chave = request.headers.get("Idempotency-Key") ?? "";
   if (!body || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chave)) {
@@ -54,15 +55,15 @@ export async function POST(request: Request) {
   }
   const assinatura = createHash("sha256").update(JSON.stringify(body)).digest("hex");
   const { data: tentativaAnterior, error: erroTentativa } = await supabaseAdmin
-    .from("pedidos_idempotencia").select("pedido_id,assinatura").eq("chave", chave).maybeSingle();
+    .from("pedidos_idempotencia").select("pedido_id,assinatura,resposta").eq("chave", chave).maybeSingle();
   if (erroTentativa) {
     return NextResponse.json({ error: "Não foi possível verificar o envio. Tente novamente." }, { status: 503 });
   }
   if (tentativaAnterior) {
     if (tentativaAnterior.assinatura !== assinatura) {
-      return NextResponse.json({ error: "Esta tentativa pertence a outro pedido. Atualize a página." }, { status: 409 });
+      return NextResponse.json({ error: "Esta compra já foi registrada. Use Recuperar pedido antes de iniciar uma nova compra." }, { status: 409 });
     }
-    return NextResponse.json({ id: tentativaAnterior.pedido_id }, { status: 200 });
+    return NextResponse.json(tentativaAnterior.resposta ?? { id: tentativaAnterior.pedido_id, arquivado: true }, { status: 200 });
   }
   if (siteEmManutencao()) {
     return NextResponse.json(
@@ -555,7 +556,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const { data: pedidoId, error } = await supabaseAdmin.rpc("criar_pedido_idempotente", {
+  const totalServidor = itensValidados.reduce((soma, item) => soma + item.subtotal, 0);
+  if (typeof body.total_esperado !== "number" || !Number.isFinite(body.total_esperado) ||
+      Math.round(body.total_esperado * 100) !== Math.round(totalServidor * 100)) {
+    return NextResponse.json({ error: "Os preços mudaram. Atualize o catálogo e revise o pedido." }, { status: 409 });
+  }
+  const { data: pedidoConferido, error } = await supabaseAdmin.rpc("criar_pedido_conferido", {
+    p_total: body.total_esperado,
     p_chave: chave,
     p_assinatura: assinatura,
     p_cliente_nome: body.cliente_nome,
@@ -575,7 +582,7 @@ export async function POST(request: Request) {
   });
 
   if (error) {
-    const conflito = /estoque insuficiente|produto indisponível|tentativa já pertence/i.test(error.message);
+    const conflito = /estoque insuficiente|produto indisponível|tentativa já pertence|preços mudaram/i.test(error.message);
     return NextResponse.json(
       { error: conflito ? error.message : "Não foi possível registrar o pedido." },
       { status: conflito ? 409 : 500 }
@@ -583,10 +590,37 @@ export async function POST(request: Request) {
   }
 
   try {
-    await registrarPedidoNoResumo(String(pedidoId));
+    await registrarPedidoNoResumo(String(pedidoConferido.id));
   } catch (erroResumo) {
-    console.error("Pedido criado, mas não entrou no resumo do sorteio:", erroResumo);
+    alertarErroCritico("pedido_resumo");
+    console.error("Falha no resumo:", erroResumo instanceof Error ? erroResumo.name : "erro");
   }
 
-  return NextResponse.json({ id: pedidoId }, { status: 201 });
+  return NextResponse.json(pedidoConferido, { status: 201 });
+}
+
+export async function POST(...args: Parameters<typeof executarPOST>) {
+  try {
+    const resposta = await executarPOST(...args);
+    if (resposta.status >= 500) alertarErroCritico("pedido_post", resposta.status);
+    return resposta;
+  } catch {
+    alertarErroCritico("pedido_post_excecao");
+    return NextResponse.json({ error: "Não foi possível confirmar a operação. Atualize ou tente novamente com os mesmos dados." }, { status: 503 });
+  }
+}
+
+// A chave aleatória funciona como capacidade de recuperação; nunca retorna dados pessoais.
+export async function GET(request: Request) {
+  const chave = request.headers.get("Idempotency-Key") ?? "";
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chave)) return NextResponse.json({ error: "Chave inválida" }, { status: 400 });
+  try {
+    const { data, error } = await supabaseAdmin.from("pedidos_idempotencia").select("pedido_id,resposta").eq("chave", chave).maybeSingle();
+    if (error) throw error;
+    if (!data) return NextResponse.json({ error: "Ainda não localizamos a confirmação. Tente confirmar novamente: a mesma chave será mantida." }, { status: 404, headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json(data.resposta ?? { id: data.pedido_id, arquivado: true }, { headers: { "Cache-Control": "no-store" } });
+  } catch {
+    alertarErroCritico("pedido_recuperacao");
+    return NextResponse.json({ error: "Consulta indisponível. Tente novamente." }, { status: 503 });
+  }
 }
