@@ -684,6 +684,9 @@ export default function Catalogo({
   const categoriaCervejasId = categorias.find(
     (categoria) => normalizarTexto(categoria.nome) === "cervejas"
   )?.id;
+  const categoriaSemAlcoolId = categorias.find(
+    (categoria) => normalizarTexto(categoria.nome) === "sem alcool"
+  )?.id;
   const nomeCategoriaPorId = new Map(
     categorias.map((categoria) => [categoria.id, categoria.nome])
   );
@@ -712,7 +715,11 @@ export default function Catalogo({
           termo.length > 0 ||
           (categoriaAtiva === "mais-vendidos"
             ? produto.destaque || produto.mais_vendido
-            : produto.categoria_id === categoriaAtiva);
+            : produto.categoria_id === categoriaAtiva ||
+              (Boolean(categoriaSemAlcoolId) &&
+                categoriaAtiva === categoriaSemAlcoolId &&
+                produto.categoria_id === categoriaCervejasId &&
+                /\b(?:0|zero|sem)\s+alcool\b|\b0[.,]0\b/.test(normalizarTexto(produto.nome))));
         const textoProduto = normalizarTexto(
           `${produto.nome} ${produto.descricao ?? ""} ${Object.keys(produto.estoque_opcoes ?? {}).join(" ")} ${nomeCategoriaPorId.get(produto.categoria_id) ?? ""}`
         );
