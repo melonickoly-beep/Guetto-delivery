@@ -1,3 +1,4 @@
+import { alertarErroCritico } from "@/lib/alertas";
 import type { Metadata } from "next";
 import { unstable_cache } from "next/cache";
 import Image from "next/image";
@@ -37,9 +38,9 @@ export default async function Home() {
   }
 
   const [
-    { data: categorias },
-    { data: produtos },
-    { data: configuracoes },
+    { data: categorias, error: erroCategorias },
+    { data: produtos, error: erroProdutos },
+    { data: configuracoes, error: erroConfiguracoes },
     produtosMaisVendidos,
   ] = await Promise.all([
     supabase.from("categorias").select("id,nome,icone").order("nome"),
@@ -60,9 +61,13 @@ export default async function Home() {
         "somente_retirada",
         "detalhes_essencias",
       ]),
-    obterRankingVitrine(),
+    obterRankingVitrine().catch(() => { alertarErroCritico("catalogo_ranking"); return []; }),
   ]);
 
+  if (erroCategorias || erroProdutos || erroConfiguracoes) {
+    alertarErroCritico("catalogo_carregamento");
+    throw new Error("Não foi possível carregar os produtos. Tente novamente.");
+  }
   const configuracao = new Map(
     (configuracoes ?? []).map((item) => [item.chave, item.valor])
   );

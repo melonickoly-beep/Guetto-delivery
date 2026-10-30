@@ -1,9 +1,10 @@
+import { alertarErroCritico } from "@/lib/alertas";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { obterAdministrador } from "@/lib/supabase-server";
 import { ehComboComEstoqueCompartilhado } from "@/lib/estoque-combos";
 
-export async function GET() {
+async function executarGET() {
   const { data, error } = await supabaseAdmin
     .from("produtos")
     .select("*")
@@ -19,8 +20,9 @@ export async function GET() {
   return NextResponse.json(data);
 }
 
-export async function PATCH(request: Request) {
+async function executarPATCH(request: Request) {
   if (!(await obterAdministrador())) {
+    alertarErroCritico("admin_acesso_negado", 401);
     return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
   }
 
@@ -284,8 +286,9 @@ export async function PATCH(request: Request) {
   return NextResponse.json({ produto: data, produtos_relacionados: relacionados });
 }
 
-export async function POST(request: Request) {
+async function executarPOST(request: Request) {
   if (!(await obterAdministrador())) {
+    alertarErroCritico("admin_acesso_negado", 401);
     return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
   }
 
@@ -330,4 +333,37 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json(data);
+}
+
+export async function GET(...args: Parameters<typeof executarGET>) {
+  try {
+    const resposta = await executarGET(...args);
+    if (resposta.status >= 500) alertarErroCritico("catalogo_get", resposta.status);
+    return resposta;
+  } catch {
+    alertarErroCritico("catalogo_get_excecao");
+    return NextResponse.json({ error: "Não foi possível confirmar a operação. Atualize ou tente novamente com os mesmos dados." }, { status: 503 });
+  }
+}
+
+export async function PATCH(...args: Parameters<typeof executarPATCH>) {
+  try {
+    const resposta = await executarPATCH(...args);
+    if (resposta.status >= 500) alertarErroCritico("catalogo_patch", resposta.status);
+    return resposta;
+  } catch {
+    alertarErroCritico("catalogo_patch_excecao");
+    return NextResponse.json({ error: "Não foi possível confirmar a operação. Atualize ou tente novamente com os mesmos dados." }, { status: 503 });
+  }
+}
+
+export async function POST(...args: Parameters<typeof executarPOST>) {
+  try {
+    const resposta = await executarPOST(...args);
+    if (resposta.status >= 500) alertarErroCritico("catalogo_post", resposta.status);
+    return resposta;
+  } catch {
+    alertarErroCritico("catalogo_post_excecao");
+    return NextResponse.json({ error: "Não foi possível confirmar a operação. Atualize ou tente novamente com os mesmos dados." }, { status: 503 });
+  }
 }

@@ -1,3 +1,4 @@
+import { alertarErroCritico } from "@/lib/alertas";
 import { normalizarDiagnostico } from "@/lib/diagnostico-cliente";
 let inicio = 0;
 let recebidos = 0;
@@ -23,6 +24,7 @@ export async function POST(request: Request) {
     texto += decoder.decode();
     const dados = normalizarDiagnostico(JSON.parse(texto));
     if (!dados) return new Response(null, { status: 400 });
+    alertarErroCritico("cliente_" + dados.tipo, dados.status ?? 500);
     console.error(JSON.stringify({ evento: "erro_cliente", horario: new Date().toISOString(), ...dados }));
     return new Response(null, { status: 204 });
   } catch { return new Response(null, { status: 400 }); }

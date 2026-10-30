@@ -54,6 +54,7 @@ export default function PrivacidadePage() {
               pelo administrador após o encerramento da ação.
             </p>
             <p className="mt-2">
+              Mantemos também o código e a situação final (entregue ou cancelado), sem dados pessoais, para o acompanhamento.
               Isso não apaga os dados que o cliente escolheu salvar no próprio
               aparelho para preencher pedidos futuros.
             </p>
@@ -74,6 +75,13 @@ export default function PrivacidadePage() {
               navegador. O histórico guarda data, itens, total e código de
               acompanhamento para permitir consultar ou repetir uma compra.
               Esses dados não incluem senha, endereço ou informação de cartão.
+            </p>
+            <p className="mt-2">
+              Para recuperar o envio ao WhatsApp após fechar a página, a mensagem
+              do último pedido pode ficar neste aparelho, incluindo os dados de
+              entrega informados. Ela deixa de ser usada e é removida na próxima
+              abertura após 24 horas, ou ao iniciar uma nova compra. Você também
+              pode apagá-la limpando os dados deste site no navegador.
             </p>
           </section>
 

@@ -1,3 +1,4 @@
+import { administradorAutorizado } from "./lib/admin-autorizado";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -26,8 +27,7 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
   const emailPermitido = process.env.ADMIN_EMAIL?.trim().toLowerCase();
   const autorizado =
-    Boolean(user) &&
-    (!emailPermitido || user?.email?.toLowerCase() === emailPermitido);
+    administradorAutorizado(user, process.env.ADMIN_USER_ID, emailPermitido);
 
   if (request.nextUrl.pathname.startsWith("/admin") && !autorizado) {
     const loginUrl = request.nextUrl.clone();

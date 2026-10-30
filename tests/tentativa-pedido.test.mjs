@@ -19,11 +19,12 @@ test("repetição após falha e recarga preserva a tentativa sem guardar dados p
   assert.deepEqual(await obterTentativaPedido(corpo, null, local), primeira);
   assert.ok(!local.getItem("guetto_tentativa_pedido").includes("Cliente de teste"));
 });
-test("uma compra alterada recebe outra chave", async () => {
+test("alterar dados após uma falha mantém a chave e impede duplicação", async () => {
   const local = storage();
   const primeira = await obterTentativaPedido('{"quantidade":1}', null, local);
   const alterada = await obterTentativaPedido('{"quantidade":2}', primeira, local);
-  assert.notEqual(primeira.chave, alterada.chave);
+  assert.equal(primeira.chave, alterada.chave);
+  assert.notEqual(primeira.assinatura, alterada.assinatura);
 });
 test("armazenamento bloqueado mantém proteção em memória", async () => {
   const bloqueado = { getItem() { throw Error("Bloqueado"); }, setItem() { throw Error("Bloqueado"); } };

@@ -1,3 +1,4 @@
+import { alertarErroCritico } from "@/lib/alertas";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { obterAdministrador } from "@/lib/supabase-server";
@@ -11,11 +12,12 @@ const STATUS_VALIDOS = [
   "cancelado",
 ] as const;
 
-export async function PATCH(
+async function executarPATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!(await obterAdministrador())) {
+    alertarErroCritico("admin_acesso_negado", 401);
     return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
   }
 
@@ -51,11 +53,12 @@ export async function PATCH(
   return NextResponse.json({ sucesso: true });
 }
 
-export async function DELETE(
+async function executarDELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!(await obterAdministrador())) {
+    alertarErroCritico("admin_acesso_negado", 401);
     return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
   }
 
@@ -108,4 +111,26 @@ export async function DELETE(
   }
 
   return NextResponse.json({ sucesso: true });
+}
+
+export async function PATCH(...args: Parameters<typeof executarPATCH>) {
+  try {
+    const resposta = await executarPATCH(...args);
+    if (resposta.status >= 500) alertarErroCritico("painel_patch", resposta.status);
+    return resposta;
+  } catch {
+    alertarErroCritico("painel_patch_excecao");
+    return NextResponse.json({ error: "Não foi possível confirmar a operação. Atualize ou tente novamente com os mesmos dados." }, { status: 503 });
+  }
+}
+
+export async function DELETE(...args: Parameters<typeof executarDELETE>) {
+  try {
+    const resposta = await executarDELETE(...args);
+    if (resposta.status >= 500) alertarErroCritico("painel_delete", resposta.status);
+    return resposta;
+  } catch {
+    alertarErroCritico("painel_delete_excecao");
+    return NextResponse.json({ error: "Não foi possível confirmar a operação. Atualize ou tente novamente com os mesmos dados." }, { status: 503 });
+  }
 }

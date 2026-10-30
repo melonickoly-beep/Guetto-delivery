@@ -1,0 +1,26 @@
+name: Monitoramento da loja
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: monitoramento-loja
+  cancel-in-progress: false
+jobs:
+  verificar:
+    # Ativação somente após aprovação e configuração do ambiente.
+    if: vars.GUETTO_MONITOR_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/monitorar.mjs
+        env:
+          MONITOR_BASE_URL: ${{ vars.MONITOR_BASE_URL }}
+          MONITOR_TOKEN: ${{ secrets.MONITOR_TOKEN }}
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}

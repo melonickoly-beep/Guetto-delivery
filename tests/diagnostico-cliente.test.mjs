@@ -19,7 +19,7 @@ test('diagnóstico conserva localização técnica sem parâmetros nem mensagens
  assert.equal(result.local,'/_next/static/chunks/app/page-ab12.js:1:234');assert.equal(result.codigo,'12345');assert.equal(result.status,500);
 });
 test('coletor aceita evento sanitizado e rejeita origem externa, excesso e JSON inválido',async()=>{
- let source=readFileSync(new URL('../app/api/erros-cliente/route.ts',import.meta.url),'utf8').replace('@/lib/diagnostico-cliente',url);
+ let source=readFileSync(new URL('../app/api/erros-cliente/route.ts',import.meta.url),'utf8').replace('@/lib/diagnostico-cliente',url).replace('import { alertarErroCritico } from "@/lib/alertas";', 'const alertarErroCritico = () => {};');
  const {outputText}=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}});
  const {POST}=await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
  const request=(body,origin='https://guettodelivery.com.br')=>new Request('https://guettodelivery.com.br/api/erros-cliente',{method:'POST',headers:{origin,'content-type':'application/json'},body});
