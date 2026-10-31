@@ -6,11 +6,27 @@ import ts from "typescript";
 const { outputText } = ts.transpileModule(readFileSync(new URL("../lib/tentativa-pedido.ts", import.meta.url), "utf8"), {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 });
-const { obterTentativaPedido, limparTentativaPedido } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+const { obterTentativaPedido, limparTentativaPedido, iniciarTentativaNovaCompra } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 const storage = () => {
   const valores = new Map();
   return { getItem: chave => valores.get(chave) ?? null, setItem: (chave, valor) => valores.set(chave, valor), removeItem: chave => valores.delete(chave) };
 };
+
+test("refazer compra idêntica abandona confirmação antiga e preserva retries da nova compra", async () => {
+  const local = storage();
+  const corpo = JSON.stringify({ itens: [{ id: "produto", quantidade: 2 }] });
+  const antiga = await obterTentativaPedido(corpo, null, local);
+  local.setItem("guetto_mensagem_pendente", "confirmacao-antiga");
+  local.setItem("guetto_historico_pedidos", "historico-preservado");
+  const nova = iniciarTentativaNovaCompra(local);
+  assert.notEqual(nova.chave, antiga.chave);
+  assert.equal(local.getItem("guetto_mensagem_pendente"), null);
+  assert.equal(local.getItem("guetto_historico_pedidos"), "historico-preservado");
+  const envio = await obterTentativaPedido(corpo, null, local);
+  assert.equal(envio.chave, nova.chave);
+  assert.equal((await obterTentativaPedido(corpo, envio, local)).chave, nova.chave);
+  assert.equal((await obterTentativaPedido(corpo, null, local)).chave, nova.chave);
+});
 
 test("repetição após falha e recarga preserva a tentativa sem guardar dados pessoais", async () => {
   const local = storage();

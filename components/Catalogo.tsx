@@ -9,7 +9,7 @@ import { ehComboSmirnoff, estoqueComboSmirnoff } from "@/lib/combo-smirnoff";
 import { COPOS_COM_CANUDO_ID, COPOS_POR_COMBO } from "@/lib/estoque-combos";
 import { criarConfirmacao, recuperarConfirmacao, type PedidoConfirmado } from "@/lib/confirmacao-pedido";
 import { fetchComTimeout } from "@/lib/rede";
-import { obterTentativaPedido, type TentativaPedido } from "@/lib/tentativa-pedido";
+import { obterTentativaPedido, iniciarTentativaNovaCompra, type TentativaPedido } from "@/lib/tentativa-pedido";
 
 import Image from "next/image";
 import { ehImperioUltra, subtotalCerveja } from "@/lib/preco-cervejas";
@@ -980,6 +980,7 @@ export default function Catalogo({
   }
 
   function repetirUltimoPedido() {
+    if (envioPedidoRef.current) return;
     if (somenteRetiradaHoje) return;
     if (ultimoPedido.length === 0) return;
     if (
@@ -991,6 +992,9 @@ export default function Catalogo({
       return;
     }
 
+    tentativaPedidoRef.current = iniciarTentativaNovaCompra(armazenamentoLocal);
+    setPedidoConfirmado(null);
+    setUltimoPedidoId("");
     setCarrinho(ultimoPedido);
     abrirCarrinhoParaPedido();
     if (ultimoPedidoFoiAjustado) {
@@ -1379,9 +1383,8 @@ export default function Catalogo({
 
   function iniciarNovaCompra() {
     if (envioPedidoRef.current || !confirm("Iniciar outra compra? Use Recuperar mensagem se deseja apenas reenviar o pedido já registrado.")) return;
-    armazenamentoLocal.removeItem("guetto_tentativa_pedido");
-    tentativaPedidoRef.current = null;
-    armazenamentoLocal.removeItem("guetto_mensagem_pendente");
+    tentativaPedidoRef.current = iniciarTentativaNovaCompra(armazenamentoLocal);
+    setPedidoConfirmado(null);
     setUltimoPedidoId("");
   }
 
