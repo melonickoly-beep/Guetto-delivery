@@ -27,6 +27,8 @@ test('coletor aceita evento sanitizado e rejeita origem externa, excesso e JSON 
  try {
   assert.equal((await POST(request(JSON.stringify({tipo:'tela',nome:'Maria'})))).status,204);
   assert.equal(logs.length,1);assert.ok(!logs[0].includes('Maria'));
+  const proxy = new Request('http://localhost:3000/api/erros-cliente', {method:'POST',headers:{origin:'https://guettodelivery.com.br','content-type':'application/json'},body:JSON.stringify({tipo:'tela'})});
+  assert.equal((await POST(proxy)).status,204);
   assert.equal((await POST(request('{}','https://externo.test'))).status,403);
   assert.equal((await POST(request('x'.repeat(2049)))).status,413);
   assert.equal((await POST(request('invalid'))).status,400);

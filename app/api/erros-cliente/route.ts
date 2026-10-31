@@ -4,7 +4,15 @@ let inicio = 0;
 let recebidos = 0;
 export async function POST(request: Request) {
   const origem = request.headers.get("origin");
-  if (!origem || origem !== new URL(request.url).origin) return new Response(null, { status: 403 });
+  // A hospedagem pode reconstruir request.url com a origem interna do proxy.
+  // Aceitar apenas os domínios públicos conhecidos, sem confiar em forwarded-host.
+  const origensPermitidas = new Set([
+    new URL(request.url).origin,
+    "https://guettodelivery.com.br",
+    "https://www.guettodelivery.com.br",
+    "https://dainty-marigold-a0b8fc.netlify.app",
+  ]);
+  if (!origem || !origensPermitidas.has(origem)) return new Response(null, { status: 403 });
   if (Date.now() - inicio > 60_000) { inicio = Date.now(); recebidos = 0; }
   if (++recebidos > 100) return new Response(null, { status: 429 });
   if (!request.headers.get("content-type")?.startsWith("application/json")) return new Response(null, { status: 415 });
