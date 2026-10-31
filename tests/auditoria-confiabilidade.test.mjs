@@ -46,7 +46,9 @@ test("timeout cobre corpo lento e mantém resposta de conflito sem repetir", asy
 });
 test("alerta é sanitizado, deduplicado e falha do webhook não afeta a operação", async () => {
   const tarefas = []; globalThis.__tarefasAlertas = tarefas;
-  const { alertarErroCritico } = await modulo("../lib/alertas.ts", s => s.replace('import { after } from "next/server";', 'const after = tarefa => globalThis.__tarefasAlertas.push(tarefa);'));
+  const { alertarErroCritico } = await modulo("../lib/alertas.ts", s => s
+    .replace('import { after } from "next/server";', 'const after = tarefa => globalThis.__tarefasAlertas.push(tarefa);')
+    .replace('"./enviar-alerta.mjs"', JSON.stringify(new URL('../lib/enviar-alerta.mjs', import.meta.url).href)));
   const originalFetch = globalThis.fetch; const originalConsole = console.error;
   const originalUrl = process.env.ALERT_WEBHOOK_URL; const logs = []; const enviados = [];
   console.error = v => logs.push(v);

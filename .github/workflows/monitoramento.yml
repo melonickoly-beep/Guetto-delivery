@@ -24,3 +24,6 @@ jobs:
           MONITOR_BASE_URL: ${{ vars.MONITOR_BASE_URL }}
           MONITOR_TOKEN: ${{ secrets.MONITOR_TOKEN }}
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+          ALERT_EMAIL_FROM: ${{ secrets.ALERT_EMAIL_FROM }}
