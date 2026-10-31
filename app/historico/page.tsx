@@ -1,4 +1,5 @@
 "use client";
+import { iniciarTentativaNovaCompra } from "@/lib/tentativa-pedido";
 
 import Link from "next/link";
 import { Clock3, History, RotateCcw, ShoppingBag, Trash2 } from "lucide-react";
@@ -155,6 +156,7 @@ export default function HistoricoPage() {
       return;
     }
 
+    iniciarTentativaNovaCompra(window.localStorage);
     window.localStorage.setItem("guetto_carrinho", JSON.stringify(pedido.itens));
     window.localStorage.setItem("guetto_abrir_carrinho", "1");
     window.location.assign("/");

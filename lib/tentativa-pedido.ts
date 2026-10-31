@@ -2,6 +2,14 @@ export type TentativaPedido = { chave: string; assinatura: string };
 
 const CHAVE_STORAGE = "guetto_tentativa_pedido";
 
+// Somente para uma nova compra explicitamente solicitada, nunca para retry.
+export function iniciarTentativaNovaCompra(storage: Pick<Storage, "setItem" | "removeItem">): TentativaPedido {
+  const tentativa = { chave: crypto.randomUUID(), assinatura: "" };
+  storage.setItem(CHAVE_STORAGE, JSON.stringify(tentativa));
+  storage.removeItem("guetto_mensagem_pendente");
+  return tentativa;
+}
+
 export async function obterTentativaPedido(
   corpo: string,
   anterior: TentativaPedido | null,
