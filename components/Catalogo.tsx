@@ -7,9 +7,9 @@ import { selecionarVitrineInicial } from "@/lib/vitrine-inicial";
 import { ehCopinhoTrots } from "@/lib/copinhos-trots";
 import { ehComboSmirnoff, estoqueComboSmirnoff } from "@/lib/combo-smirnoff";
 import { COPOS_COM_CANUDO_ID, COPOS_POR_COMBO } from "@/lib/estoque-combos";
-import { criarConfirmacao, recuperarConfirmacao, type PedidoConfirmado } from "@/lib/confirmacao-pedido";
+import { criarConfirmacao, recuperarConfirmacao, mensagemRecuperada, type PedidoConfirmado } from "@/lib/confirmacao-pedido";
 import { fetchComTimeout } from "@/lib/rede";
-import { obterTentativaPedido, iniciarTentativaNovaCompra, type TentativaPedido } from "@/lib/tentativa-pedido";
+import { obterTentativaPedido, iniciarTentativaNovaCompra, confirmarTentativaPedido, type TentativaPedido } from "@/lib/tentativa-pedido";
 
 import Image from "next/image";
 import { ehImperioUltra, subtotalCerveja } from "@/lib/preco-cervejas";
@@ -1370,15 +1370,14 @@ export default function Catalogo({
   }
 
   useEffect(() => {
+    // A confirmação antiga fica disponível para consulta, sem abrir por cima
+    // de uma nova compra nem se apresentar automaticamente como pedido novo.
     const salvo = recuperarConfirmacao(armazenamentoLocal.getItem("guetto_mensagem_pendente"), window.location.origin, WHATSAPP_GUETTO);
-    if (salvo) setPedidoConfirmado(salvo);
-    else armazenamentoLocal.removeItem("guetto_mensagem_pendente");
+    if (!salvo) armazenamentoLocal.removeItem("guetto_mensagem_pendente");
   }, []);
 
   function recuperarMensagemSalva() {
-    const salvo = recuperarConfirmacao(armazenamentoLocal.getItem("guetto_mensagem_pendente"), window.location.origin, WHATSAPP_GUETTO);
-    if (salvo) setPedidoConfirmado(salvo);
-    else void recuperarTentativaAnterior();
+    void recuperarTentativaAnterior();
   }
 
   function iniciarNovaCompra() {
@@ -1397,10 +1396,19 @@ export default function Catalogo({
       const resposta = await fetchComTimeout("/api/pedidos", { headers: { "Idempotency-Key": tentativa.chave }, cache: "no-store" });
       const dados = await resposta.json();
       if (!resposta.ok) { setErroRevisao(dados.error); alert(dados.error); return; }
-      const linkAcompanhamento = window.location.origin + "/acompanhar/" + encodeURIComponent(dados.id);
-      const mensagem = "Olá! Quero conferir meu pedido já registrado nº " + dados.id + (dados.total != null ? "\nTotal: " + formatarPreco(Number(dados.total)) : "") + "\nAcompanhe: " + linkAcompanhamento;
+      if (dados.arquivado) {
+        setPedidoConfirmado(null);
+        armazenamentoLocal.removeItem("guetto_mensagem_pendente");
+        const aviso = "Esse pedido anterior já foi encerrado. Para comprar novamente, toque em Repetir último pedido e confirme a nova compra.";
+        setErroRevisao(aviso);
+        alert(aviso);
+        return;
+      }
+      const salvo = recuperarConfirmacao(armazenamentoLocal.getItem("guetto_mensagem_pendente"), window.location.origin, WHATSAPP_GUETTO);
+      const mensagem = salvo && salvo.id === dados.id && !salvo.mensagem.startsWith("Olá! Quero conferir") ? salvo.mensagem : mensagemRecuperada(dados, window.location.origin);
       const confirmacao = criarConfirmacao(dados.id, mensagem, window.location.origin, WHATSAPP_GUETTO);
       armazenamentoLocal.setItem("guetto_mensagem_pendente", JSON.stringify({ ...confirmacao, salvoEm: Date.now() }));
+      tentativaPedidoRef.current = confirmarTentativaPedido(tentativa, armazenamentoLocal);
       setUltimoPedidoId(dados.id);
       setPedidoConfirmado(confirmacao);
       setRevisaoAberta(false);
@@ -1633,8 +1641,9 @@ export default function Catalogo({
       const confirmacao = criarConfirmacao(pedidoId, pedidoFinal, window.location.origin, WHATSAPP_GUETTO);
       salvarLocal("guetto_mensagem_pendente", JSON.stringify({ ...confirmacao, salvoEm: Date.now() }));
       setPedidoConfirmado(confirmacao);
-      // Mantém a chave: reenvio após recarga nunca cria outra compra igual.
-      // Uma nova compra igual precisa ser iniciada explicitamente pelo cliente.
+      // A resposta confirmou o registro. Outra compra recebe nova chave;
+      // recuperar a mensagem continua consultando a chave desta compra.
+      tentativaPedidoRef.current = confirmarTentativaPedido(tentativa, armazenamento);
 
       // Abrir WhatsApp exige ação explícita e não confirma envio da mensagem.
     } catch (erro) {

@@ -1,4 +1,4 @@
-export type TentativaPedido = { chave: string; assinatura: string };
+export type TentativaPedido = { chave: string; assinatura: string; confirmado?: boolean };
 
 const CHAVE_STORAGE = "guetto_tentativa_pedido";
 
@@ -23,9 +23,15 @@ export async function obterTentativaPedido(
   } catch { /* Navegação sem armazenamento continua protegida em memória. */ }
   // A chave identifica o ciclo de compra. Correções após erro mantêm a chave:
   // se o servidor já gravou outra versão, ele recusa a alteração sem duplicar.
-  const tentativa = { chave: typeof salva?.chave === "string" ? salva.chave : crypto.randomUUID(), assinatura };
+  const tentativa = { chave: typeof salva?.chave === "string" && !salva.confirmado ? salva.chave : crypto.randomUUID(), assinatura };
   try { storage?.setItem(CHAVE_STORAGE, JSON.stringify(tentativa)); } catch { /* Usar memória. */ }
   return tentativa;
+}
+
+export function confirmarTentativaPedido(tentativa: TentativaPedido, storage: Pick<Storage, "setItem"> | null): TentativaPedido {
+  const confirmada = { ...tentativa, confirmado: true };
+  try { storage?.setItem(CHAVE_STORAGE, JSON.stringify(confirmada)); } catch { /* A confirmação também fica em memória. */ }
+  return confirmada;
 }
 
 export function limparTentativaPedido(chave: string, storage: Pick<Storage, "getItem" | "removeItem"> | null) {
