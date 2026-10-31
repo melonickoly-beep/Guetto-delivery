@@ -70,12 +70,28 @@ test('terça-feira continua bloqueando novos pedidos na API',async()=>{
 test('API recupera total e itens sem registrar uma segunda compra e rejeita outro conteúdo',async()=>{
  const body={teste:true}; const assinatura=createHash('sha256').update(JSON.stringify(body)).digest('hex');
  const anterior={pedido_id:id,assinatura,resposta:{id,total:10,itens:[{nome:'Teste',quantidade:1,preco_unitario:10}]}};
- const {POST,GET}=rota({pedidos_idempotencia:{data:anterior}});
+ const {POST,GET}=rota({pedidos_idempotencia:{data:anterior},pedidos:{data:{status:'novo'}}});
  assert.deepEqual(await (await POST(request(body))).json(),anterior.resposta);
  assert.equal((await POST(request({teste:false}))).status,409);
  const recuperada=await GET(new Request('https://loja.test/api/pedidos',{headers:{'Idempotency-Key':id}}));
  assert.equal(recuperada.headers.get('cache-control'),'no-store');
  assert.deepEqual(await recuperada.json(),anterior.resposta);
+});
+
+test('recuperação e reenvio de pedido encerrado não reapresentam confirmação antiga',async()=>{
+ const body={teste:true}; const assinatura=createHash('sha256').update(JSON.stringify(body)).digest('hex');
+ const anterior={pedido_id:id,assinatura,resposta:{id,total:86.5,itens:[{nome:'Combo',quantidade:1,preco_unitario:86.5}]}};
+ for (const data of [null,{status:'concluido'},{status:'cancelado'}]) {
+  const {POST,GET}=rota({pedidos_idempotencia:{data:anterior},pedidos:{data}});
+  assert.equal((await (await POST(request(body))).json()).arquivado,true);
+  assert.equal((await (await GET(new Request('https://loja.test/api/pedidos',{headers:{'Idempotency-Key':id}}))).json()).arquivado,true);
+ }
+});
+
+test('mensagem recuperada inclui itens, quantidades, opções e total confirmado',()=>{
+ const {mensagemRecuperada}=carregar('lib/confirmacao-pedido.ts');
+ const mensagem=mensagemRecuperada({id,total:86.5,itens:[{nome:'Combo',quantidade:1,subtotal:55,preco_unitario:55,escolhas_combo:{gelos:['Coco','Morango']}},{nome:'Carvão',quantidade:15,subtotal:15,preco_unitario:1}]},'https://loja.test');
+ assert.match(mensagem,/1x Combo/); assert.match(mensagem,/15x Carvão/); assert.match(mensagem,/Coco, Morango/); assert.match(mensagem,/86,50/); assert.match(mensagem,new RegExp(id));
 });
 test('falha do registro é 503 e dispara alerta sem expor dados do erro',async()=>{
  const {POST}=rota({pedidos_idempotencia:{error:{message:'dado privado'}}});

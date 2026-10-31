@@ -6,7 +6,7 @@ import ts from "typescript";
 const { outputText } = ts.transpileModule(readFileSync(new URL("../lib/tentativa-pedido.ts", import.meta.url), "utf8"), {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 });
-const { obterTentativaPedido, limparTentativaPedido, iniciarTentativaNovaCompra } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
+const { obterTentativaPedido, limparTentativaPedido, iniciarTentativaNovaCompra, confirmarTentativaPedido } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 const storage = () => {
   const valores = new Map();
   return { getItem: chave => valores.get(chave) ?? null, setItem: (chave, valor) => valores.set(chave, valor), removeItem: chave => valores.delete(chave) };
@@ -26,6 +26,18 @@ test("refazer compra idêntica abandona confirmação antiga e preserva retries 
   assert.equal(envio.chave, nova.chave);
   assert.equal((await obterTentativaPedido(corpo, envio, local)).chave, nova.chave);
   assert.equal((await obterTentativaPedido(corpo, null, local)).chave, nova.chave);
+});
+
+test("compra confirmada permite próxima compra igual ou alterada com outra chave após recarga", async () => {
+  for (const corpo of ['mesmos itens', 'itens alterados']) {
+    const local = storage();
+    const antiga = await obterTentativaPedido('mesmos itens', null, local);
+    const confirmada = confirmarTentativaPedido(antiga, local);
+    assert.equal(confirmada.confirmado, true);
+    const nova = await obterTentativaPedido(corpo, null, local);
+    assert.notEqual(nova.chave, antiga.chave);
+    assert.equal((await obterTentativaPedido(corpo, nova, local)).chave, nova.chave);
+  }
 });
 
 test("repetição após falha e recarga preserva a tentativa sem guardar dados pessoais", async () => {

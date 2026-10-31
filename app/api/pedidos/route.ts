@@ -47,6 +47,15 @@ const separarEnderecoLegado = (endereco: string) => {
 const numeroEnderecoValido = (numero: string) =>
   /^\d[\dA-Za-z\s/-]{0,19}$/.test(numero.trim());
 
+async function recuperarRegistro(pedidoId: string, resposta: Record<string, unknown> | null) {
+  const { data, error } = await supabaseAdmin.from("pedidos").select("status").eq("id", pedidoId).maybeSingle();
+  if (error) throw error;
+  if (!data || ["concluido", "entregue", "cancelado"].includes(data.status)) {
+    return { id: pedidoId, arquivado: true };
+  }
+  return resposta ?? { id: pedidoId, arquivado: true };
+}
+
 async function executarPOST(request: Request) {
   const body = await request.json().catch(() => null);
   const chave = request.headers.get("Idempotency-Key") ?? "";
@@ -63,7 +72,7 @@ async function executarPOST(request: Request) {
     if (tentativaAnterior.assinatura !== assinatura) {
       return NextResponse.json({ error: "Esta compra já foi registrada. Use Recuperar pedido antes de iniciar uma nova compra." }, { status: 409 });
     }
-    return NextResponse.json(tentativaAnterior.resposta ?? { id: tentativaAnterior.pedido_id, arquivado: true }, { status: 200 });
+    return NextResponse.json(await recuperarRegistro(tentativaAnterior.pedido_id, tentativaAnterior.resposta), { status: 200 });
   }
   if (siteEmManutencao()) {
     return NextResponse.json(
@@ -618,7 +627,7 @@ export async function GET(request: Request) {
     const { data, error } = await supabaseAdmin.from("pedidos_idempotencia").select("pedido_id,resposta").eq("chave", chave).maybeSingle();
     if (error) throw error;
     if (!data) return NextResponse.json({ error: "Ainda não localizamos a confirmação. Tente confirmar novamente: a mesma chave será mantida." }, { status: 404, headers: { "Cache-Control": "no-store" } });
-    return NextResponse.json(data.resposta ?? { id: data.pedido_id, arquivado: true }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json(await recuperarRegistro(data.pedido_id, data.resposta), { headers: { "Cache-Control": "no-store" } });
   } catch {
     alertarErroCritico("pedido_recuperacao");
     return NextResponse.json({ error: "Consulta indisponível. Tente novamente." }, { status: 503 });
