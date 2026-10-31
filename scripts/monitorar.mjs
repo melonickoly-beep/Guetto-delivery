@@ -1,6 +1,7 @@
 // Execução externa, somente leitura. Não cria pedidos nem modifica o banco.
-const { MONITOR_BASE_URL, MONITOR_TOKEN, ALERT_WEBHOOK_URL } = process.env;
-if (!MONITOR_BASE_URL?.startsWith("https://") || !MONITOR_TOKEN || !ALERT_WEBHOOK_URL?.startsWith("https://")) throw new Error("Configure as três variáveis do monitor.");
+import { alertaConfigurado, enviarAlerta } from '../lib/enviar-alerta.mjs';
+const { MONITOR_BASE_URL, MONITOR_TOKEN } = process.env;
+if (!MONITOR_BASE_URL?.startsWith("https://") || !MONITOR_TOKEN || !alertaConfigurado()) throw new Error("Configure o endereço, token e destino de alertas do monitor.");
 async function verificar() {
   const saude = await fetch(new URL("/api/saude", MONITOR_BASE_URL), { headers: { Authorization: "Bearer " + MONITOR_TOKEN }, signal: AbortSignal.timeout(25_000) });
   if (!saude.ok) throw new Error("saude_indisponivel");
@@ -11,8 +12,7 @@ async function verificar() {
   return dados;
 }
 async function alertar(evento) {
-  const resposta = await fetch(ALERT_WEBHOOK_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "Guetto Delivery: " + evento }), signal: AbortSignal.timeout(5_000), redirect: "error" });
-  if (!resposta.ok) throw new Error("Entrega do alerta falhou");
+  await enviarAlerta(evento);
 }
 let dados;
 try { dados = await verificar(); } catch {
