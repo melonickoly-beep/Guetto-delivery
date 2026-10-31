@@ -13,6 +13,8 @@ test('Resend recebe somente código operacional, com chave protegida e deduplica
     const payload = JSON.parse(options.body);
     assert.deepEqual(payload.to, ['admin@example.com']);
     assert.equal(payload.from, 'alertas@example.com');
+    assert.equal(payload.subject, 'Guetto Delivery — Problema na confirmação de pedido');
+    assert.match(payload.text, /Confira no painel se ele foi registrado/);
     assert.ok(!options.body.includes(env.RESEND_API_KEY));
     return new Response('{}');
   });
