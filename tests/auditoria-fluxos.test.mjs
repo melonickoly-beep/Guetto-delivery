@@ -72,7 +72,12 @@ test('API recupera total e itens sem registrar uma segunda compra e rejeita outr
  const anterior={pedido_id:id,assinatura,resposta:{id,total:10,itens:[{nome:'Teste',quantidade:1,preco_unitario:10}]}};
  const {POST,GET}=rota({pedidos_idempotencia:{data:anterior},pedidos:{data:{status:'novo'}}});
  assert.deepEqual(await (await POST(request(body))).json(),anterior.resposta);
- assert.equal((await POST(request({teste:false}))).status,409);
+ const conflito=await POST(request({teste:false}));
+ assert.equal(conflito.status,409);
+ assert.equal(conflito.headers.get('cache-control'),'no-store');
+ const recuperacao=await conflito.json();
+ assert.equal(recuperacao.codigo,'PEDIDO_JA_REGISTRADO');
+ assert.deepEqual(recuperacao.pedido,anterior.resposta);
  const recuperada=await GET(new Request('https://loja.test/api/pedidos',{headers:{'Idempotency-Key':id}}));
  assert.equal(recuperada.headers.get('cache-control'),'no-store');
  assert.deepEqual(await recuperada.json(),anterior.resposta);
@@ -84,6 +89,9 @@ test('recuperação e reenvio de pedido encerrado não reapresentam confirmaçã
  for (const data of [null,{status:'concluido'},{status:'cancelado'}]) {
   const {POST,GET}=rota({pedidos_idempotencia:{data:anterior},pedidos:{data}});
   assert.equal((await (await POST(request(body))).json()).arquivado,true);
+  const conflito=await POST(request({teste:false}));
+  assert.equal(conflito.status,409);
+  assert.equal((await conflito.json()).pedido.arquivado,true);
   assert.equal((await (await GET(new Request('https://loja.test/api/pedidos',{headers:{'Idempotency-Key':id}}))).json()).arquivado,true);
  }
 });

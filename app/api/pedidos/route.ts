@@ -70,7 +70,11 @@ async function executarPOST(request: Request) {
   }
   if (tentativaAnterior) {
     if (tentativaAnterior.assinatura !== assinatura) {
-      return NextResponse.json({ error: "Esta compra já foi registrada. Use Recuperar pedido antes de iniciar uma nova compra." }, { status: 409 });
+      return NextResponse.json({
+        codigo: "PEDIDO_JA_REGISTRADO",
+        error: "Esta compra já foi registrada. Confira o pedido original antes de enviá-lo pelo WhatsApp.",
+        pedido: await recuperarRegistro(tentativaAnterior.pedido_id, tentativaAnterior.resposta),
+      }, { status: 409, headers: { "Cache-Control": "no-store" } });
     }
     return NextResponse.json(await recuperarRegistro(tentativaAnterior.pedido_id, tentativaAnterior.resposta), { status: 200 });
   }

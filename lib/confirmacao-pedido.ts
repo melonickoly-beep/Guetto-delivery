@@ -1,4 +1,4 @@
-export type PedidoConfirmado = { id: string; mensagem: string; linkAcompanhamento: string; linkWhatsApp: string };
+export type PedidoConfirmado = { id: string; mensagem: string; linkAcompanhamento: string; linkWhatsApp: string; aviso?: string };
 type ItemConfirmado = { nome: string; quantidade: number; subtotal?: number; preco_unitario: number; escolhas_combo?: Record<string, unknown> | null };
 export function mensagemRecuperada(dados: { id: string; total: number; itens: ItemConfirmado[] }, origem: string): string {
   if (!Array.isArray(dados.itens) || !dados.itens.length || !Number.isFinite(Number(dados.total))) throw new Error("Confirmação incompleta");
