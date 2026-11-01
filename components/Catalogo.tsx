@@ -30,7 +30,6 @@ import {
   Store,
   History,
   Check,
-  CheckCircle2,
   CreditCard,
   Banknote,
   QrCode,
@@ -1376,15 +1375,10 @@ export default function Catalogo({
     if (!salvo) armazenamentoLocal.removeItem("guetto_mensagem_pendente");
   }, []);
 
-  function recuperarMensagemSalva() {
-    void recuperarTentativaAnterior();
-  }
-
-  function iniciarNovaCompra() {
-    if (envioPedidoRef.current || !confirm("Iniciar outra compra? Use Recuperar mensagem se deseja apenas reenviar o pedido já registrado.")) return;
-    tentativaPedidoRef.current = iniciarTentativaNovaCompra(armazenamentoLocal);
-    setPedidoConfirmado(null);
-    setUltimoPedidoId("");
+  function abrirWhatsApp(confirmacao: PedidoConfirmado) {
+    setPedidoConfirmado(confirmacao);
+    try { window.location.assign(confirmacao.linkWhatsApp); }
+    catch { /* O link direto permanece disponível se o navegador bloquear a abertura. */ }
   }
 
   function apresentarPedidoRecuperado(dados: { id: string; arquivado?: boolean; total: number; itens: Parameters<typeof mensagemRecuperada>[0]["itens"] }, tentativa: TentativaPedido, conflito = false) {
@@ -1392,36 +1386,25 @@ export default function Catalogo({
       setPedidoConfirmado(null);
       tentativaPedidoRef.current = confirmarTentativaPedido(tentativa, armazenamentoLocal);
       armazenamentoLocal.removeItem("guetto_mensagem_pendente");
-      const aviso = "O pedido anterior já foi encerrado. Seu carrinho foi mantido. Confira os dados e toque em Confirmar para registrar uma nova compra.";
+      const aviso = "Confira os dados e toque em Confirmar para enviar seu pedido pelo WhatsApp.";
       setErroRevisao(aviso);
-      alert(aviso);
       return;
     }
     const salvo = conflito ? null : recuperarConfirmacao(armazenamentoLocal.getItem("guetto_mensagem_pendente"), window.location.origin, WHATSAPP_GUETTO);
     const mensagem = salvo && salvo.id === dados.id && !salvo.mensagem.startsWith("Olá! Quero conferir") ? salvo.mensagem : mensagemRecuperada(dados, window.location.origin);
     const confirmacao = criarConfirmacao(dados.id, mensagem, window.location.origin, WHATSAPP_GUETTO);
-    if (conflito) confirmacao.aviso = "Recuperamos o pedido original, sem criar outro. Alterações feitas depois da primeira tentativa não foram aplicadas. Confira a mensagem; para alterar esse pedido, fale com a loja pelo WhatsApp.";
+    if (conflito) confirmacao.aviso = "Para alterar os itens do pedido em andamento, fale com a loja pelo WhatsApp.";
     armazenamentoLocal.setItem("guetto_mensagem_pendente", JSON.stringify({ ...confirmacao, salvoEm: Date.now() }));
     tentativaPedidoRef.current = confirmarTentativaPedido(tentativa, armazenamentoLocal);
     setUltimoPedidoId(dados.id);
-    setPedidoConfirmado(confirmacao);
     setErroRevisao("");
     setRevisaoAberta(false);
     setCarrinhoAberto(false);
-  }
-
-  async function recuperarTentativaAnterior() {
-    if (envioPedidoRef.current) return;
-    envioPedidoRef.current = true;
-    try {
-      const tentativa = tentativaPedidoRef.current ?? JSON.parse(armazenamentoLocal.getItem("guetto_tentativa_pedido") ?? "null");
-      if (!tentativa?.chave) { setErroRevisao("Nenhuma tentativa anterior encontrada neste aparelho."); return; }
-      const resposta = await fetchComTimeout("/api/pedidos", { headers: { "Idempotency-Key": tentativa.chave }, cache: "no-store" });
-      const dados = await resposta.json();
-      if (!resposta.ok) { setErroRevisao(dados.error); alert(dados.error); return; }
-      apresentarPedidoRecuperado(dados, tentativa);
-    } catch (erro) { registrarErroCliente("pedido_rede", erro); setErroRevisao("Não foi possível recuperar agora. Tente novamente sem criar outra compra."); }
-    finally { envioPedidoRef.current = false; }
+    armazenamentoLocal.setItem("guetto_carrinho", "[]");
+    setCarrinho([]);
+    setEtapaCheckout(1);
+    setMaiorDeIdadeConfirmado(false);
+    abrirWhatsApp(confirmacao);
   }
 
   async function finalizarPedido(confirmado = false) {
@@ -1538,13 +1521,28 @@ export default function Catalogo({
         });
       let armazenamento: Storage | null = null;
       try { armazenamento = window.localStorage; } catch { /* Usar memória. */ }
-      const tentativa = await obterTentativaPedido(corpoPedido, tentativaPedidoRef.current, armazenamento);
+      let tentativa = await obterTentativaPedido(corpoPedido, tentativaPedidoRef.current, armazenamento);
       tentativaPedidoRef.current = tentativa;
-      const respostaPedido = await fetchComTimeout("/api/pedidos", {
+      let respostaPedido = await fetchComTimeout("/api/pedidos", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Idempotency-Key": tentativa.chave },
         body: corpoPedido,
       });
+
+      // Uma compra encerrada não pode ser reenviada. A confirmação atual inicia
+      // outra tentativa automaticamente, uma única vez, sem pedir recuperação.
+      const anterior = await respostaPedido.clone().json().catch(() => null);
+      if ((respostaPedido.ok && anterior?.arquivado) ||
+          (respostaPedido.status === 409 && anterior?.codigo === "PEDIDO_JA_REGISTRADO" && anterior.pedido?.arquivado)) {
+        tentativaPedidoRef.current = confirmarTentativaPedido(tentativa, armazenamento);
+        tentativa = await obterTentativaPedido(corpoPedido, tentativaPedidoRef.current, armazenamento);
+        tentativaPedidoRef.current = tentativa;
+        respostaPedido = await fetchComTimeout("/api/pedidos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Idempotency-Key": tentativa.chave },
+          body: corpoPedido,
+        });
+      }
 
       if (!respostaPedido.ok) {
         const erro = await respostaPedido.json().catch(() => null);
@@ -1567,7 +1565,7 @@ export default function Catalogo({
         return;
       }
       if (!Number.isFinite(Number(pedidoRegistrado.total)) || Math.round(Number(pedidoRegistrado.total) * 100) !== Math.round(valorTotal * 100)) {
-        setErroRevisao("O pedido foi registrado, mas os valores precisam ser conferidos. Consulte o acompanhamento; não faça outro pedido.");
+        setErroRevisao("Precisamos conferir o valor do seu pedido. Consulte o acompanhamento ou fale com a loja.");
         setUltimoPedidoId(pedidoId);
         return;
       }
@@ -1577,7 +1575,7 @@ export default function Catalogo({
         `${item.quantidade}x ${item.nome} — ${formatarPreco(Number(item.subtotal ?? item.preco_unitario * item.quantidade))}${item.escolhas_combo ? "\n   Escolhas: " + Object.entries(item.escolhas_combo).map(([nome, valor]) => nome + ": " + (Array.isArray(valor) ? valor.join(", ") : String(valor))).join(" | ") : ""}`
       );
       const pedidoConferido = pedido.replace(linhas.join("\n"), linhasConfirmadas.join("\n"));
-      const pedidoFinal = `${pedidoConferido}\n\nPedido registrado nº ${pedidoId}\nAcompanhe seu pedido:\n${linkAcompanhamento}`;
+      const pedidoFinal = `${pedidoConferido}\n\nPedido nº ${pedidoId}\nAcompanhe seu pedido:\n${linkAcompanhamento}`;
 
       const dadosCliente: DadosClienteSalvos = {
         nomeCompleto: nomeCompleto.trim(),
@@ -1651,16 +1649,17 @@ export default function Catalogo({
       setErroRevisao("");
       const confirmacao = criarConfirmacao(pedidoId, pedidoFinal, window.location.origin, WHATSAPP_GUETTO);
       salvarLocal("guetto_mensagem_pendente", JSON.stringify({ ...confirmacao, salvoEm: Date.now() }));
-      setPedidoConfirmado(confirmacao);
+
       // A resposta confirmou o registro. Outra compra recebe nova chave;
       // recuperar a mensagem continua consultando a chave desta compra.
       tentativaPedidoRef.current = confirmarTentativaPedido(tentativa, armazenamento);
 
-      // Abrir WhatsApp exige ação explícita e não confirma envio da mensagem.
+      // Navegação na mesma aba: não depende de pop-up após o pedido assíncrono.
+      abrirWhatsApp(confirmacao);
     } catch (erro) {
       registrarErroCliente("pedido_rede", erro);
       setErroRevisao(
-        "A conexão demorou ou caiu. O pedido pode ter sido registrado. Tente novamente com os mesmos dados para recuperar a confirmação sem duplicar."
+        "A conexão demorou. Confira sua internet e toque em Confirmar novamente."
       );
     } finally {
       envioPedidoRef.current = false;
@@ -2755,8 +2754,7 @@ export default function Catalogo({
                 <strong className="block text-base text-white">
                   ENVIO PELO WHATSAPP É OBRIGATÓRIO
                 </strong>
-                Depois de confirmar, abra o WhatsApp pelo botão e toque em
-                enviar para concluir o pedido.
+                Ao confirmar, o WhatsApp será aberto com seu pedido. Toque em enviar no WhatsApp para concluir.
               </p>
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -2783,71 +2781,18 @@ export default function Catalogo({
                     ? "CONFIRMAR E ENVIAR NO WHATSAPP"
                     : "CONFIRME SUA IDADE"}
               </button>
-              <button type="button" onClick={() => void recuperarTentativaAnterior()} className="mt-3 w-full p-3 underline">Recuperar pedido já registrado</button>
             </div>
           </div>
         </div>
       )}
 
-      {pedidoConfirmado && (
-        <div
-          className="fixed inset-0 z-[95] flex items-center justify-center bg-black/90 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="titulo-pedido-confirmado"
-        >
-          <div className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-3xl border-2 border-green-400 bg-zinc-950 p-6 text-center shadow-2xl sm:p-8">
-            <CheckCircle2 className="mx-auto text-green-400" size={68} />
-            <h2
-              id="titulo-pedido-confirmado"
-              className="mt-4 text-3xl font-black text-white"
-            >
-              PEDIDO REGISTRADO
-            </h2>
-            <p className="mt-2 text-lg font-bold text-yellow-300">
-              Confira abaixo os dados do pedido registrado no site antes de enviar.
-            </p>
-            {pedidoConfirmado.aviso && <p className="mt-3 rounded-xl border border-yellow-400 p-3 text-sm text-yellow-200" role="status">{pedidoConfirmado.aviso}</p>}
-            <p className="mt-4 rounded-xl border-2 border-green-500 bg-green-500/15 p-4 font-black text-green-200">
-              Abra o WhatsApp e toque em enviar. O site não consegue confirmar o envio da mensagem.
-            </p>
-            <p className="mt-4 text-sm text-zinc-400">
-              Pedido nº {pedidoConfirmado.id.slice(0, 8).toUpperCase()}
-            </p>
-            <div className="mt-5 grid gap-3">
-              <a
-                href={pedidoConfirmado.linkWhatsApp}
-                className="rounded-xl bg-green-500 px-4 py-4 text-lg font-black text-black hover:bg-green-400"
-              >
-                ABRIR WHATSAPP
-              </a>
-              <textarea readOnly aria-label="Mensagem do pedido para copiar" value={pedidoConfirmado.mensagem} className="h-28 w-full rounded-lg bg-zinc-900 p-3 text-sm text-white" />
-              <button type="button" className="rounded-xl border border-white/30 p-3" onClick={() => {
-                void navigator.clipboard?.writeText(pedidoConfirmado.mensagem).catch(() => alert("Selecione e copie a mensagem no campo acima."));
-              }}>Copiar mensagem</button>
-              <a
-                href={pedidoConfirmado.linkAcompanhamento}
-                className="rounded-xl border border-yellow-400 px-4 py-3 font-bold text-yellow-300 hover:bg-yellow-400/10"
-              >
-                ACOMPANHAR PEDIDO
-              </a>
-              <button
-                type="button"
-                onClick={() => setPedidoConfirmado(null)}
-                className="rounded-xl px-4 py-3 font-bold text-zinc-300 underline underline-offset-4"
-              >
-                CONTINUAR NO CARDÁPIO
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {!pedidoConfirmado && !somenteRetiradaHoje && ultimoPedidoId && (
-        <div className="fixed bottom-2 left-2 z-40 flex gap-2 rounded-xl bg-zinc-950 p-2 text-xs text-white">
-          <button onClick={recuperarMensagemSalva}>Recuperar mensagem / pedido</button>
-          <button onClick={iniciarNovaCompra}>Nova compra</button>
-        </div>
+      {pedidoConfirmado && !revisaoAberta && !carrinhoAberto && (
+        <aside className="fixed bottom-4 left-4 right-4 z-40 mx-auto max-w-md rounded-2xl border border-green-500 bg-zinc-950 p-4 shadow-xl" aria-label="Enviar pedido no WhatsApp">
+          <button type="button" onClick={() => setPedidoConfirmado(null)} aria-label="Fechar aviso do WhatsApp" className="float-right p-1 text-zinc-400"><X size={20} /></button>
+          <p className="pr-6 text-sm text-white">No WhatsApp, toque em enviar para concluir.</p>
+          {pedidoConfirmado.aviso && <p className="mt-2 text-xs text-yellow-200">{pedidoConfirmado.aviso}</p>}
+          <a href={pedidoConfirmado.linkWhatsApp} className="mt-3 block rounded-xl bg-green-500 p-3 text-center font-bold text-black">CONTINUAR NO WHATSAPP</a>
+        </aside>
       )}
       {!somenteRetiradaHoje && carrinhoAberto && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/70" onClick={() => setCarrinhoAberto(false)}>
