@@ -27,7 +27,7 @@ test('coletor aceita evento sanitizado e rejeita origem externa, excesso e JSON 
  try {
   assert.equal((await POST(request(JSON.stringify({tipo:'tela',nome:'Maria'})))).status,204);
   assert.equal(logs.length,1);assert.ok(!logs[0].includes('Maria'));
-  assert.deepEqual(alertas, [['cliente_tela', 500]]);
+  assert.deepEqual(alertas, [['cliente_tela', null]]);
   alertas.length = 0;
   // Repetição, navegador antigo e status informado não promovem o diagnóstico
   // genérico do painel a incidente confirmado; todos permanecem nos logs.
@@ -40,6 +40,13 @@ test('coletor aceita evento sanitizado e rejeita origem externa, excesso e JSON 
   assert.equal(JSON.parse(logs[4]).status, 503);
   assert.equal((await POST(request(JSON.stringify({tipo:'pedido_http',status:503})))).status,204);
   assert.deepEqual(alertas, [['cliente_pedido_http', 503]]);
+  alertas.length = 0;
+  assert.equal((await POST(request(JSON.stringify({tipo:'recurso'})))).status,204);
+  assert.equal(alertas.length,0);
+  assert.equal(JSON.parse(logs.at(-1)).tipo,'recurso');
+  assert.equal(JSON.parse(logs.at(-1)).status,null);
+  assert.equal((await POST(request(JSON.stringify({tipo:'recurso_critico'})))).status,204);
+  assert.deepEqual(alertas,[['cliente_recurso_critico',null]]);
   const proxy = new Request('http://localhost:3000/api/erros-cliente', {method:'POST',headers:{origin:'https://guettodelivery.com.br','content-type':'application/json'},body:JSON.stringify({tipo:'tela'})});
   assert.equal((await POST(proxy)).status,204);
   assert.equal((await POST(request('{}','https://externo.test'))).status,403);

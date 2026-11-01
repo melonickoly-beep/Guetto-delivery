@@ -35,8 +35,10 @@ export async function POST(request: Request) {
     // O painel também relata timeout do Realtime, aba suspensa e conexão local.
     // Esses eventos não comprovam erro HTTP 500. Preservar o diagnóstico abaixo;
     // falhas das operações continuam alertadas nas próprias rotas do servidor.
-    if (dados.tipo !== "painel") {
-      alertarErroCritico("cliente_" + dados.tipo, dados.status ?? 500);
+    // Imagens e recursos genéricos de abas antigas permanecem nos logs.
+    // Scripts e CSS essenciais recebem um tipo próprio no monitor atualizado.
+    if (dados.tipo !== "painel" && dados.tipo !== "recurso") {
+      alertarErroCritico("cliente_" + dados.tipo, dados.status);
     }
     console.error(JSON.stringify({ evento: "erro_cliente", horario: new Date().toISOString(), ...dados }));
     return new Response(null, { status: 204 });

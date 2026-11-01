@@ -5,7 +5,12 @@ export default function MonitorErros() {
   useEffect(() => {
     const erro = (e: Event) => {
       if (e instanceof ErrorEvent) registrarErroCliente("javascript", e.error);
-      else registrarErroCliente("recurso");
+      else {
+        const alvo = e.target;
+        const essencial = alvo instanceof HTMLScriptElement ||
+          (alvo instanceof HTMLLinkElement && alvo.relList.contains("stylesheet"));
+        registrarErroCliente(essencial ? "recurso_critico" : "recurso");
+      }
     };
     const promessa = (e: PromiseRejectionEvent) => registrarErroCliente("promessa", e.reason);
     window.addEventListener("error", erro, true);
