@@ -9,3 +9,15 @@ Se as três variáveis estiverem preenchidas, Resend tem prioridade. Caso contr�
 Para o monitor independente, configure as mesmas três variáveis nos secrets do GitHub, além de MONITOR_TOKEN. Defina MONITOR_BASE_URL nas variables e habilite GUETTO_MONITOR_ENABLED apenas depois do teste de envio. A chave e o token não são exibidos nos logs.
 
 Referência: https://resend.com/docs/api-reference/emails/send-email
+
+## Diagnósticos automáticos do painel
+
+Eventos `cliente_painel` ficam somente nos logs privados (`evento: erro_cliente`,
+`tipo: painel`) e nos avisos do próprio painel. Timeout do Realtime, conexão local
+interrompida e aba suspensa podem gerá-los sem ação do administrador. Ausência de
+status permanece `null` no log: não comprova uma resposta HTTP 500.
+
+O coletor aplica esse filtro no servidor, inclusive para abas antigas já abertas.
+Falhas confirmadas nas rotas de pedidos/produtos (`painel_patch`, `painel_delete`,
+`painel_get`, `pedido_post`, `catalogo_patch` etc.) continuam enviando alertas.
+Os demais diagnósticos do cliente e o monitor independente também permanecem ativos.
