@@ -2,7 +2,7 @@ import { after } from "next/server";
 import { alertaConfigurado, enviarAlerta } from "./enviar-alerta.mjs";
 const ultimos = new Map<string, number>();
 // Somente códigos e status: nunca envia nomes, telefones, endereço ou mensagens de erro.
-export function alertarErroCritico(evento: string, status = 500) {
+export function alertarErroCritico(evento: string, status: number | null = 500) {
   const codigo = evento.replace(/[^a-z0-9_]/gi, "").slice(0, 80);
   console.error(JSON.stringify({ evento: codigo, status, horario: new Date().toISOString() }));
   if (!alertaConfigurado()) return;

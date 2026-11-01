@@ -36,3 +36,13 @@ test('falha do provedor é detectada sem expor resposta nem repetir envio', asyn
   }), { message: 'Falha na entrega do alerta' });
   assert.equal(chamadas, 1);
 });
+
+test('alerta sem status HTTP não inventa erro 500', async () => {
+ await enviarAlerta('cliente_recurso_critico', null, env, async (_url, options) => {
+  const body=JSON.parse(options.body);
+  assert.match(body.subject,/arquivo essencial/);
+  assert.match(body.text,/status HTTP não informado/);
+  assert.doesNotMatch(body.text,/status 500/);
+  return new Response('{}');
+ });
+});

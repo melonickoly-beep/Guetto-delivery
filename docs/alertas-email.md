@@ -21,3 +21,12 @@ O coletor aplica esse filtro no servidor, inclusive para abas antigas já aberta
 Falhas confirmadas nas rotas de pedidos/produtos (`painel_patch`, `painel_delete`,
 `painel_get`, `pedido_post`, `catalogo_patch` etc.) continuam enviando alertas.
 Os demais diagnósticos do cliente e o monitor independente também permanecem ativos.
+
+## Falhas de recursos no navegador
+
+Imagens e eventos genéricos `recurso` permanecem nos logs, sem e-mail (inclusive
+os enviados por abas antigas, que não distinguem o arquivo). O monitor atualizado
+classifica falhas de scripts e folhas de estilo como `recurso_critico` e mantém
+os alertas desses arquivos essenciais. Nenhuma URL de recurso é coletada.
+Diagnósticos do navegador sem status HTTP agora informam isso explicitamente,
+em vez de presumir 500. Falhas de pedidos e do servidor continuam alertadas.

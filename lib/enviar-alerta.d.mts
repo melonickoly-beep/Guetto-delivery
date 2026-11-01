@@ -1,2 +1,2 @@
 export function alertaConfigurado(env?: NodeJS.ProcessEnv): boolean;
-export function enviarAlerta(evento: string, status?: number, env?: NodeJS.ProcessEnv, requisitar?: typeof fetch): Promise<void>;
+export function enviarAlerta(evento: string, status?: number | null, env?: NodeJS.ProcessEnv, requisitar?: typeof fetch): Promise<void>;
