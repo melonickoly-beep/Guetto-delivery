@@ -1,5 +1,6 @@
 import { alertarErroCritico } from "@/lib/alertas";
 import PwaRegistro from "@/components/PwaRegistro";
+import AtualizarAcompanhamento from "@/components/AtualizarAcompanhamento";
 import Link from "next/link";
 import { Check, ChefHat, Clock3, PackageCheck, Truck } from "lucide-react";
 import { supabaseAdmin } from "@/lib/supabase-admin";
@@ -84,6 +85,7 @@ export default async function AcompanharPedido({
         <section className="mt-5 rounded-3xl border border-white/10 bg-zinc-950/90 p-6 shadow-2xl sm:p-8">
           <p className="text-sm font-bold tracking-[0.2em] text-yellow-400">GUETTO DELIVERY</p>
           <h1 className="mt-2 text-3xl font-black">Acompanhe seu pedido</h1>
+          {!cancelado && pedido.status !== "concluido" && <AtualizarAcompanhamento />}
           <p className="mt-2 text-zinc-400">
             Pedido feito em{" "}
             {new Intl.DateTimeFormat("pt-BR", {

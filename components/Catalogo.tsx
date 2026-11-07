@@ -1369,10 +1369,10 @@ export default function Catalogo({
   }
 
   useEffect(() => {
-    // A confirmação antiga fica disponível para consulta, sem abrir por cima
-    // de uma nova compra nem se apresentar automaticamente como pedido novo.
+    // Restaurar somente o atalho: nunca registrar outro pedido ou abrir o app sozinho.
     const salvo = recuperarConfirmacao(armazenamentoLocal.getItem("guetto_mensagem_pendente"), window.location.origin, WHATSAPP_GUETTO);
-    if (!salvo) armazenamentoLocal.removeItem("guetto_mensagem_pendente");
+    if (salvo) setPedidoConfirmado(salvo);
+    else armazenamentoLocal.removeItem("guetto_mensagem_pendente");
   }, []);
 
   function abrirWhatsApp(confirmacao: PedidoConfirmado) {
@@ -2789,7 +2789,8 @@ export default function Catalogo({
       {pedidoConfirmado && !revisaoAberta && !carrinhoAberto && (
         <aside className="fixed bottom-4 left-4 right-4 z-40 mx-auto max-w-md rounded-2xl border border-green-500 bg-zinc-950 p-4 shadow-xl" aria-label="Enviar pedido no WhatsApp">
           <button type="button" onClick={() => setPedidoConfirmado(null)} aria-label="Fechar aviso do WhatsApp" className="float-right p-1 text-zinc-400"><X size={20} /></button>
-          <p className="pr-6 text-sm text-white">No WhatsApp, toque em enviar para concluir.</p>
+          <p className="pr-6 text-sm text-white">Seu pedido já foi registrado. Se ainda não enviou a mensagem, continue no WhatsApp. Abrir o aplicativo não confirma o envio.</p>
+          <a href={pedidoConfirmado.linkAcompanhamento} className="mt-2 block text-sm text-yellow-400 underline">Acompanhar este pedido</a>
           {pedidoConfirmado.aviso && <p className="mt-2 text-xs text-yellow-200">{pedidoConfirmado.aviso}</p>}
           <a href={pedidoConfirmado.linkWhatsApp} className="mt-3 block rounded-xl bg-green-500 p-3 text-center font-bold text-black">CONTINUAR NO WHATSAPP</a>
         </aside>
