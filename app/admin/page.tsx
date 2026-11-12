@@ -108,6 +108,13 @@ const statusPedido = [
   { valor: "cancelado", rotulo: "Cancelado" },
 ];
 
+const acoesStatusPedido = [
+  { valor: "em_preparo", rotulo: "Em preparo", cor: "bg-yellow-400 text-black hover:bg-yellow-300" },
+  { valor: "saiu_para_entrega", rotulo: "Saiu para entrega", cor: "bg-blue-600 text-white hover:bg-blue-500" },
+  { valor: "concluido", rotulo: "Concluir e excluir", cor: "bg-green-700 text-white hover:bg-green-600" },
+  { valor: "cancelado", rotulo: "Cancelado", cor: "bg-red-700 text-white hover:bg-red-600" },
+];
+
 export default function AdminPage() {
   const paginaEstoque = usePathname() === "/admin/estoque";
   const [painelDesbloqueado, setPainelDesbloqueado] = useState(false);
@@ -127,6 +134,8 @@ export default function AdminPage() {
   const ultimaConsultaOk = useRef(Date.now());
   const buscandoResumo = useRef(false);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
+  const alteracoesEmAndamento = useRef(new Set<string>());
+  const [pedidosAtualizando, setPedidosAtualizando] = useState<string[]>([]);
   const [resumoPedidosHoje, setResumoPedidosHoje] =
     useState<ResumoPedidosHoje | null>(null);
   const [notificacoesAtivadas, setNotificacoesAtivadas] = useState(false);
@@ -893,6 +902,7 @@ export default function AdminPage() {
   }
 
   async function atualizarStatusPedido(id: string, status: string) {
+    if (alteracoesEmAndamento.current.has(id)) return false;
     if (
       status === "concluido" &&
       !confirm(
@@ -902,6 +912,8 @@ export default function AdminPage() {
       return false;
     }
 
+    alteracoesEmAndamento.current.add(id);
+    setPedidosAtualizando(Array.from(alteracoesEmAndamento.current));
     try {
       const resposta = await fetchComTimeout(`/api/admin/pedidos/${id}`, {
         method: "PATCH",
@@ -934,6 +946,9 @@ export default function AdminPage() {
       registrarErroCliente("painel", erro);
       alert("A conexão falhou. A alteração pode ter sido salva; confira o painel antes de repetir.");
       return false;
+    } finally {
+      alteracoesEmAndamento.current.delete(id);
+      setPedidosAtualizando(Array.from(alteracoesEmAndamento.current));
     }
   }
 
@@ -1978,6 +1993,7 @@ export default function AdminPage() {
                     </p>
                     <select
                       value={pedido.status}
+                      disabled={pedidosAtualizando.includes(pedido.id)}
                       onChange={(event) =>
                         void atualizarStatusPedido(
                           pedido.id,
@@ -2062,6 +2078,21 @@ export default function AdminPage() {
                   >
                     Avisar cliente no WhatsApp
                   </button>
+                  {acoesStatusPedido
+                    .filter((acao) => pedido.endereco !== "Retirada na loja" || acao.valor !== "saiu_para_entrega")
+                    .map((acao) => (
+                      <button
+                        key={acao.valor}
+                        type="button"
+                        onClick={() => void atualizarStatusPedido(pedido.id, acao.valor)}
+                        disabled={pedidosAtualizando.includes(pedido.id) || pedido.status === acao.valor}
+                        aria-pressed={pedido.status === acao.valor}
+                        className={`rounded-lg px-3 py-2 text-sm font-bold disabled:cursor-default disabled:opacity-60 ${acao.cor} ${pedido.status === acao.valor ? "ring-2 ring-white ring-offset-2 ring-offset-zinc-950" : ""}`}
+                      >
+                        {acao.rotulo}
+                      </button>
+                    ))}
+                  {pedidosAtualizando.includes(pedido.id) && <span role="status" className="self-center text-sm text-zinc-400">Atualizando status…</span>}
                   {pedido.status === "cancelado" && (
                     <button
                       type="button"
