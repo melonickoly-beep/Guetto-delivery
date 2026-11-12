@@ -4,6 +4,7 @@ import { registrarErroCliente } from "@/lib/erros-cliente";
 import { armazenamentoLocal } from "@/lib/armazenamento-local";
 
 import { selecionarVitrineInicial } from "@/lib/vitrine-inicial";
+import { ordenarCatalogo, esgotadosNoFinal } from "@/lib/ordem-catalogo";
 import { ehCopinhoTrots } from "@/lib/copinhos-trots";
 import { ehComboSmirnoff, estoqueComboSmirnoff } from "@/lib/combo-smirnoff";
 import { COPOS_COM_CANUDO_ID, COPOS_POR_COMBO } from "@/lib/estoque-combos";
@@ -671,6 +672,7 @@ export default function Catalogo({
   }
 
   function estoqueDisponivel(produto: Produto) {
+    if (ehEssencia(produto) && produto.estoque_opcoes && !Object.values(produto.estoque_opcoes).some(estoque => estoque > 0)) return 0;
     return normalizarTexto(produto.nome).startsWith("combo ")
       ? estoqueDisponivelCombo(produto)
       : estoqueProdutoIndividual(produto);
@@ -686,20 +688,7 @@ export default function Catalogo({
     categorias.map((categoria) => [categoria.id, categoria.nome])
   );
 
-  function prioridadeCervejaNaBusca(produto: Produto) {
-    if (produto.categoria_id !== categoriaCervejasId) return 3;
-    if (produto.tipo_venda === "caixa") {
-      return estoqueDisponivel(produto) > 0 ? 0 : 1;
-    }
-    return 2;
-  }
-
-  const produtosVitrine = produtos.filter((produto) => {
-    if (!ehEssencia(produto)) return true;
-    if (estoqueDisponivel(produto) <= 0) return false;
-    return !produto.estoque_opcoes ||
-      Object.values(produto.estoque_opcoes).some((estoque) => estoque > 0);
-  });
+  const produtosVitrine = produtos;
   const produtosFiltrados = (() => {
       const termo = normalizarTexto(busca);
       if (categoriaAtiva === "mais-vendidos" && !termo) {
@@ -721,22 +710,14 @@ export default function Catalogo({
         return correspondeCategoria && (!termo || textoProduto.includes(termo));
       });
 
-      if (termo) {
-        return [...filtrados].sort(
-          (produtoA, produtoB) =>
-            prioridadeCervejaNaBusca(produtoA) -
-            prioridadeCervejaNaBusca(produtoB)
-        );
-      }
-
-      return [...filtrados].sort((a, b) => prioridadeCervejaNaBusca(a) - prioridadeCervejaNaBusca(b));
+      return ordenarCatalogo(filtrados, estoqueDisponivel, categoriaCervejasId);
   })();
   const categoriaTabacariaId = categorias.find(
     (categoria) => normalizarTexto(categoria.nome) === "tabacaria"
   )?.id;
   const exibirSubsecoesTabacaria =
     !busca.trim() && categoriaAtiva === categoriaTabacariaId;
-  const secoesProdutos = exibirSubsecoesTabacaria
+  const secoesProdutos = esgotadosNoFinal(exibirSubsecoesTabacaria
     ? [
         {
           id: "essencias",
@@ -774,7 +755,7 @@ export default function Catalogo({
           descricao: "",
           produtos: produtosFiltrados,
         },
-      ];
+      ], estoqueDisponivel);
 
   const quantidadeTotal = carrinho.reduce(
     (total, item) => total + item.quantidade,
